@@ -1,0 +1,17 @@
+{
+  "name": "Steady Start Money Plan",
+  "short_name": "Steady Start",
+  "description": "A gentle money app for protecting cash, avoiding bad debt, saving first, and investing small safe amounts.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f3fbf7",
+  "theme_color": "#276a4b",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

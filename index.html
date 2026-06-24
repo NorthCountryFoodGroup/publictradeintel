@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#276a4b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Steady Start" />
+    <title>Steady Start Money Plan</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Steady Start</p>
+          <h1>Can I afford to invest this week?</h1>
+          <p class="hero-copy">
+            A beginner-first money check that protects cash, avoids bad debt,
+            builds emergency savings, and only invests what is truly safe.
+          </p>
+        </div>
+        <div class="comfort-note">
+          <span>No shame meter</span>
+          <strong>You are building from where you are.</strong>
+          <a href="admin.html">Admin</a>
+        </div>
+      </section>
+
+      <section class="calculator-grid" aria-label="Weekly affordability calculator">
+        <form class="money-form" id="moneyForm">
+          <div class="form-header">
+            <p class="eyebrow">Main check</p>
+            <h2>This week's numbers</h2>
+          </div>
+
+          <label>
+            <span>Cash on hand</span>
+            <input type="number" min="0" step="1" id="cashOnHand" value="125" />
+          </label>
+
+          <label>
+            <span>Bills due before next payday</span>
+            <input type="number" min="0" step="1" id="billsDue" value="40" />
+          </label>
+
+          <label>
+            <span>Food and gas needs</span>
+            <input type="number" min="0" step="1" id="foodGas" value="45" />
+          </label>
+
+          <label>
+            <span>Debt payments due</span>
+            <input type="number" min="0" step="1" id="debtPayments" value="20" />
+          </label>
+
+          <label>
+            <span>Emergency fund balance</span>
+            <input type="number" min="0" step="1" id="emergencyFund" value="60" />
+          </label>
+
+          <label>
+            <span>Expected income before next payday</span>
+            <input type="number" min="0" step="1" id="expectedIncome" value="0" />
+          </label>
+
+          <label>
+            <span>Minimum cash cushion</span>
+            <input type="number" min="0" step="1" id="minimumCushion" value="25" />
+          </label>
+
+          <label>
+            <span>High-interest debt balance</span>
+            <input type="number" min="0" step="1" id="debtBalance" value="150" />
+          </label>
+
+          <div class="optional-group">
+            <p class="eyebrow">Optional progress tracker</p>
+            <label>
+              <span>Amount already invested</span>
+              <input type="number" min="0" step="1" id="alreadyInvested" value="35" />
+            </label>
+            <label>
+              <span>Dividends earned so far</span>
+              <input type="number" min="0" step="1" id="dividendsEarned" value="0" />
+            </label>
+            <label>
+              <span>Net worth increase so far</span>
+              <input type="number" min="0" step="1" id="netWorthIncrease" value="0" />
+            </label>
+          </div>
+
+          <button type="button" id="resetDemo">Reset example</button>
+        </form>
+
+        <aside class="result-panel" aria-live="polite">
+          <div class="status-chip" id="statusChip">Checking safely</div>
+          <h2 id="recommendationTitle">Hold cash this week</h2>
+          <p id="recommendationText">
+            Enter your numbers to see the safest next step.
+          </p>
+
+          <div class="amount-grid">
+            <div>
+              <span>Invest this amount</span>
+              <strong id="investAmount">$0</strong>
+            </div>
+            <div>
+              <span>Save this amount</span>
+              <strong id="saveAmount">$0</strong>
+            </div>
+            <div>
+              <span>Hold cash</span>
+              <strong id="holdAmount">$0</strong>
+            </div>
+            <div>
+              <span>Pay down debt</span>
+              <strong id="debtAmount">$0</strong>
+            </div>
+          </div>
+
+          <div class="safety-stack">
+            <h3>Priority order</h3>
+            <ol>
+              <li>Keep cash for bills, food, gas, and cushion.</li>
+              <li>Build emergency cash before chasing returns.</li>
+              <li>Attack high-interest debt when cash is protected.</li>
+              <li>Invest small automatic amounts when it is safe.</li>
+              <li>Increase slowly when your cushion grows.</li>
+            </ol>
+          </div>
+        </aside>
+      </section>
+
+      <section class="progress-section">
+        <div class="section-heading">
+          <p class="eyebrow">Progress counts early</p>
+          <h2>Micro-goals</h2>
+        </div>
+        <div class="goals-grid" id="goalsGrid"></div>
+      </section>
+
+      <section class="paths-section">
+        <div class="section-heading">
+          <p class="eyebrow">Beginner investment paths</p>
+          <h2>Choose the smallest amount that stays boring and repeatable</h2>
+        </div>
+        <div class="paths-grid" id="pathsGrid"></div>
+      </section>
+
+      <section class="stock-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Stock ideas</p>
+            <h2>AI-assisted watchlist from public-market signals</h2>
+          </div>
+        </div>
+
+        <div class="stock-controls">
+          <label>
+            <span>Risk comfort</span>
+            <select id="riskProfile">
+              <option value="cautious">Cautious</option>
+              <option value="balanced" selected>Balanced</option>
+              <option value="growth">Growth</option>
+            </select>
+          </label>
+          <label>
+            <span>Preferred holding time</span>
+            <select id="timeHorizon">
+              <option value="short">Weeks to months</option>
+              <option value="medium" selected>1 to 3 years</option>
+              <option value="long">3+ years</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="disclaimer-box">
+          These are educational stock ideas based on transparent signals, not guarantees or personalized financial advice.
+          Aggressive mode prioritizes opportunity signals, momentum, and public-market catalysts.
+        </div>
+
+        <div class="stock-grid" id="stockGrid"></div>
+      </section>
+
+      <section class="best-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Fastest growth buy recommendations</p>
+            <h2>Ranked from congressional buying, catalysts, and momentum</h2>
+          </div>
+        </div>
+
+        <div class="disclaimer-box">
+          This aggressive ranking weighs tracked congressional purchases, post-disclosure growth, press/catalysts,
+          committee relevance, market momentum, and quality. It is designed to surface fastest-growth candidates.
+        </div>
+
+        <div class="stock-grid" id="bestStocksGrid"></div>
+      </section>
+
+      <section class="daytrade-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Buy today / sell today</p>
+            <h2>Same-day trade candidates from momentum, catalysts, and congressional patterns</h2>
+          </div>
+        </div>
+
+        <div class="disclaimer-box">
+          This section is built for aggressive same-day ideas. It favors volatility, momentum, fresh catalysts,
+          and congressional trade patterns that resemble short-window opportunity signals.
+        </div>
+
+        <div class="stock-grid" id="dayTradeGrid"></div>
+      </section>
+
+      <section class="alerts-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Congress trade alerts</p>
+            <h2>Recent buy and sell disclosures</h2>
+          </div>
+        </div>
+
+        <div class="alerts-list" id="alertsList"></div>
+      </section>
+
+      <section class="policy-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Policy catalyst monitor</p>
+            <h2>Hourly scan of congressional and government signals</h2>
+          </div>
+        </div>
+
+        <div class="disclaimer-box">
+          Signals are generated from configured public sources. The strategy level weighs policy language,
+          committee relevance, press catalysts, and whether the language appears positive, negative, or mixed.
+        </div>
+
+        <div class="member-summary" id="policySummary"></div>
+        <div class="stock-grid" id="policySignalsGrid"></div>
+      </section>
+
+      <section class="congress-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Congress trade tracker</p>
+            <h2>Look up disclosed stock trades by member</h2>
+          </div>
+        </div>
+
+        <div class="disclaimer-box">
+          This tracker summarizes public disclosure reports. It can highlight timing, sector overlap, and repeat patterns,
+          but it does not claim wrongdoing. Growth/decline is estimated when filings provide ranges instead of exact fill prices.
+        </div>
+
+        <div class="stock-controls">
+          <label>
+            <span>Member of Congress</span>
+            <input id="memberSearch" list="memberOptions" placeholder="Type a name, e.g. Nancy Pelosi" />
+            <datalist id="memberOptions"></datalist>
+          </label>
+          <label>
+            <span>Trade type</span>
+            <select id="memberTradeFilter">
+              <option value="all">All disclosed trades</option>
+              <option value="Buy">Buys only</option>
+              <option value="Sell">Sells only</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="member-summary" id="memberSummary"></div>
+        <div class="congress-grid" id="congressGrid"></div>
+      </section>
+
+      <section class="learn-section">
+        <div>
+          <p class="eyebrow">Learning without overwhelm</p>
+          <h2>What this app will be careful about</h2>
+        </div>
+        <ul>
+          <li>No pretending a prediction is certain.</li>
+          <li>No pressure to invest money needed for bills.</li>
+          <li>No "you are behind" language.</li>
+          <li>No buy idea without a risk note and plain-English reason.</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

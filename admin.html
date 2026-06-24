@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#276a4b" />
+    <title>Steady Start Admin</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell admin-shell">
+      <section class="hero admin-hero">
+        <div>
+          <p class="eyebrow">Admin backend</p>
+          <h1>Manage the beginner money app</h1>
+          <p class="hero-copy">
+            Update weekly paths, milestone goals, and safety thresholds without touching the app code.
+          </p>
+        </div>
+        <div class="comfort-note">
+          <span>App view</span>
+          <strong>Preview the public calculator anytime.</strong>
+          <a href="index.html">Open app</a>
+        </div>
+      </section>
+
+      <section class="calculator-grid admin-grid">
+        <form class="money-form" id="adminLogin">
+          <div class="form-header">
+            <p class="eyebrow">Access</p>
+            <h2>Admin PIN</h2>
+            <p class="muted-copy">Default local PIN is <strong>1234</strong>. Change it with the ADMIN_PIN environment variable before deployment.</p>
+          </div>
+          <label>
+            <span>PIN</span>
+            <input type="password" id="adminPin" autocomplete="current-password" value="1234" />
+          </label>
+          <button type="submit">Load admin</button>
+          <p class="form-message" id="loginMessage"></p>
+        </form>
+
+        <aside class="result-panel">
+          <div class="status-chip">Recent activity</div>
+          <h2 id="adminSummaryTitle">Waiting for admin access</h2>
+          <div class="amount-grid compact-amounts">
+            <div>
+              <span>Total checks</span>
+              <strong id="totalChecks">0</strong>
+            </div>
+            <div>
+              <span>Invest</span>
+              <strong id="investChecks">0</strong>
+            </div>
+            <div>
+              <span>Save</span>
+              <strong id="saveChecks">0</strong>
+            </div>
+            <div>
+              <span>Hold/debt</span>
+              <strong id="protectChecks">0</strong>
+            </div>
+          </div>
+          <p class="muted-copy">
+            The backend stores only recommendation totals, not personal user inputs.
+          </p>
+        </aside>
+      </section>
+
+      <section class="admin-panel" id="adminPanel" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Settings</p>
+            <h2>Safety rules and content</h2>
+          </div>
+          <button type="button" id="saveConfig">Save changes</button>
+        </div>
+
+        <div class="admin-editor">
+          <label>
+            <span>First emergency layer target</span>
+            <input type="number" min="0" step="1" id="firstEmergencyTarget" />
+          </label>
+          <label>
+            <span>Full emergency starter target</span>
+            <input type="number" min="0" step="1" id="fullEmergencyTarget" />
+          </label>
+          <label>
+            <span>Tiny investing cap while debt exists</span>
+            <input type="number" min="0" step="1" id="debtInvestCap" />
+          </label>
+        </div>
+
+        <div class="section-heading editor-heading">
+          <h2>Starter paths</h2>
+        </div>
+        <div class="admin-list" id="plansEditor"></div>
+
+        <div class="section-heading editor-heading">
+          <h2>Micro-goals</h2>
+        </div>
+        <div class="admin-list" id="goalsEditor"></div>
+
+        <div class="section-heading editor-heading">
+          <div>
+            <h2>Stock idea watchlist</h2>
+            <p class="muted-copy">Use public information to maintain signal scores from 0 to 100. The public app ranks these against the user's safe invest amount.</p>
+          </div>
+          <button type="button" id="refreshMarket">Refresh market data</button>
+        </div>
+        <p class="form-message" id="marketMessage"></p>
+        <div class="admin-list" id="stocksEditor"></div>
+
+        <div class="section-heading editor-heading">
+          <div>
+            <h2>Policy catalyst monitor</h2>
+            <p class="muted-copy">The server scans configured public sources hourly. Use this button to refresh immediately.</p>
+          </div>
+          <button type="button" id="refreshPolicy">Refresh policy signals</button>
+        </div>
+        <p class="form-message" id="policyMessage"></p>
+
+        <div class="section-heading editor-heading">
+          <div>
+            <h2>Congress trade tracker</h2>
+            <p class="muted-copy">Track public STOCK Act disclosures. Use source links back to the official House or Senate disclosure search when possible.</p>
+          </div>
+        </div>
+        <div class="import-panel">
+          <label>
+            <span>Bulk import trades as JSON</span>
+            <textarea id="congressImport" rows="8" spellcheck="false">[
+  {
+    "representative": "Nancy Pelosi",
+    "state": "CA",
+    "party": "D",
+    "ticker": "NVDA",
+    "company": "NVIDIA",
+    "transaction": "Buy",
+    "reportedRange": "$1,001 - $15,000",
+    "reportedDate": "2026-01-15",
+    "entryPrice": 125.50,
+    "entryPriceSource": "Estimated close price on reported date",
+    "sourceUrl": "https://disclosures-clerk.house.gov/FinancialDisclosure",
+    "watchReason": "Imported public disclosure. Review the filing before using as a signal.",
+    "signalScore": 50,
+    "conflictRisk": "Imported watch"
+  }
+]</textarea>
+          </label>
+          <div class="button-row">
+            <button type="button" id="appendCongress">Append imports</button>
+            <button type="button" id="replaceCongress">Replace tracker</button>
+          </div>
+          <p class="form-message" id="importMessage"></p>
+        </div>
+        <div class="admin-list" id="congressEditor"></div>
+
+        <p class="form-message" id="saveMessage"></p>
+      </section>
+    </main>
+
+    <script src="admin.js"></script>
+  </body>
+</html>

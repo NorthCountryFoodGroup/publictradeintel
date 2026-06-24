@@ -1,0 +1,202 @@
+{
+  "thresholds": {
+    "firstEmergencyTarget": 100,
+    "fullEmergencyTarget": 500,
+    "debtInvestCap": 10
+  },
+  "plans": [
+    {
+      "name": "$5/week starter plan",
+      "weekly": 5,
+      "tone": "Start tiny, prove the habit, and let consistency do the first job."
+    },
+    {
+      "name": "$10/week starter plan",
+      "weekly": 10,
+      "tone": "A gentle automatic amount once bills and emergency cash are covered."
+    },
+    {
+      "name": "$25/week momentum plan",
+      "weekly": 25,
+      "tone": "A steady step when your cushion is growing and debt is not crowding you."
+    },
+    {
+      "name": "$50/week wealth builder plan",
+      "weekly": 50,
+      "tone": "A stronger habit for weeks when your cash buffer has real breathing room."
+    }
+  ],
+  "goals": [
+    {
+      "name": "First $100 saved",
+      "target": 100,
+      "source": "emergency"
+    },
+    {
+      "name": "First $500 emergency fund",
+      "target": 500,
+      "source": "emergency"
+    },
+    {
+      "name": "First $100 invested",
+      "target": 100,
+      "source": "invested"
+    },
+    {
+      "name": "First dividend earned",
+      "target": 1,
+      "source": "dividend"
+    },
+    {
+      "name": "First $1,000 net worth increase",
+      "target": 1000,
+      "source": "netWorth"
+    }
+  ],
+  "stockIdeas": [
+    {
+      "ticker": "VOO",
+      "name": "Vanguard S&P 500 ETF",
+      "type": "ETF",
+      "risk": "balanced",
+      "minimumWeekly": 5,
+      "valuationScore": 72,
+      "momentumScore": 68,
+      "qualityScore": 86,
+      "volatilityScore": 74,
+      "pressScore": 55,
+      "pressNotes": "Broad market ETF; no single-company press catalyst.",
+      "committeeScore": 30,
+      "committeeNotes": "Low single-policy exposure because it tracks a broad index.",
+      "aiOutlook": "Broad U.S. market exposure can fit a beginner habit when cash is protected and the holding period is long.",
+      "riskNote": "Market-wide drawdowns can still happen, so this is not for emergency money."
+    },
+    {
+      "ticker": "SCHD",
+      "name": "Schwab U.S. Dividend Equity ETF",
+      "type": "ETF",
+      "risk": "cautious",
+      "minimumWeekly": 5,
+      "valuationScore": 70,
+      "momentumScore": 57,
+      "qualityScore": 82,
+      "volatilityScore": 80,
+      "pressScore": 50,
+      "pressNotes": "Dividend and quality factor exposure; catalyst is slower income consistency.",
+      "committeeScore": 25,
+      "committeeNotes": "Low single-company committee exposure because it is diversified.",
+      "aiOutlook": "Dividend-focused exposure may appeal to beginners who want slower, steadier market participation.",
+      "riskNote": "Dividend funds can lag fast-growth markets and dividends are never guaranteed."
+    },
+    {
+      "ticker": "MSFT",
+      "name": "Microsoft",
+      "type": "Stock",
+      "risk": "growth",
+      "minimumWeekly": 10,
+      "valuationScore": 58,
+      "momentumScore": 73,
+      "qualityScore": 91,
+      "volatilityScore": 66,
+      "pressScore": 78,
+      "pressNotes": "AI, cloud, and enterprise software remain recurring public-market catalysts.",
+      "committeeScore": 74,
+      "committeeNotes": "Technology, AI, cybersecurity, and federal cloud discussions may affect large software firms.",
+      "aiOutlook": "Large, profitable technology companies may benefit from cloud and AI demand, but price matters.",
+      "riskNote": "Single-stock concentration can fall sharply even when the company is strong."
+    },
+    {
+      "ticker": "NVDA",
+      "name": "NVIDIA",
+      "type": "Stock",
+      "risk": "growth",
+      "minimumWeekly": 10,
+      "valuationScore": 48,
+      "momentumScore": 88,
+      "qualityScore": 87,
+      "volatilityScore": 45,
+      "pressScore": 90,
+      "pressNotes": "AI chip demand and data center growth are major public catalysts.",
+      "committeeScore": 82,
+      "committeeNotes": "AI infrastructure, export controls, semiconductor policy, and defense technology discussions can affect the stock.",
+      "aiOutlook": "High-growth AI infrastructure leader with strong momentum, but valuation and volatility risk are elevated.",
+      "riskNote": "This can move sharply in both directions and should be sized carefully."
+    }
+  ],
+  "congressTrades": [
+    {
+      "representative": "Nancy Pelosi",
+      "state": "CA",
+      "party": "D",
+      "ticker": "NVDA",
+      "company": "NVIDIA",
+      "transaction": "Buy",
+      "reportedRange": "$1,000,001 - $5,000,000",
+      "reportedDate": "2024-07-03",
+      "entryPrice": 123.54,
+      "entryPriceSource": "Estimated market close near report date",
+      "sourceUrl": "https://disclosures-clerk.house.gov/FinancialDisclosure",
+      "watchReason": "Large technology exposure by a high-profile member household. Watch for timing around policy, chip demand, and market momentum.",
+      "signalScore": 88,
+      "conflictRisk": "High visibility"
+    },
+    {
+      "representative": "Nancy Pelosi",
+      "state": "CA",
+      "party": "D",
+      "ticker": "MSFT",
+      "company": "Microsoft",
+      "transaction": "Buy",
+      "reportedRange": "$500,001 - $1,000,000",
+      "reportedDate": "2023-06-15",
+      "entryPrice": 337.2,
+      "entryPriceSource": "Estimated market close near report date",
+      "sourceUrl": "https://disclosures-clerk.house.gov/FinancialDisclosure",
+      "watchReason": "Large-cap AI and cloud exposure. Compare against broader tech watchlist before treating this as a standalone signal.",
+      "signalScore": 74,
+      "conflictRisk": "Medium visibility"
+    },
+    {
+      "representative": "Dan Crenshaw",
+      "state": "TX",
+      "party": "R",
+      "ticker": "AAPL",
+      "company": "Apple",
+      "transaction": "Buy",
+      "reportedRange": "$15,001 - $50,000",
+      "reportedDate": "2024-01-18",
+      "entryPrice": 188.63,
+      "entryPriceSource": "Estimated market close near report date",
+      "sourceUrl": "https://disclosures-clerk.house.gov/FinancialDisclosure",
+      "watchReason": "Consumer technology exposure by a member often discussed in congressional trading datasets.",
+      "signalScore": 61,
+      "conflictRisk": "Moderate"
+    }
+  ],
+  "policySources": [
+    {
+      "name": "Federal Register documents",
+      "url": "https://www.federalregister.gov/api/v1/documents.json?per_page=20&order=newest",
+      "type": "json",
+      "enabled": true
+    },
+    {
+      "name": "Congressional Record",
+      "url": "https://www.congress.gov/congressional-record",
+      "type": "html",
+      "enabled": true
+    },
+    {
+      "name": "House Financial Services Committee",
+      "url": "https://financialservices.house.gov/news/",
+      "type": "html",
+      "enabled": true
+    },
+    {
+      "name": "Senate Commerce Committee",
+      "url": "https://www.commerce.senate.gov/newsroom",
+      "type": "html",
+      "enabled": true
+    }
+  ]
+}
