@@ -10,7 +10,7 @@ const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");
 const POLICY_FILE = path.join(DATA_DIR, "policySignals.json");
 const CONGRESS_FEED_STATUS_FILE = path.join(DATA_DIR, "congressFeedStatus.json");
-const MARKET_API_KEY = process.env.ALPHA_VANTAGE_API_KEY || "";
+const MARKET_API_KEY = String(process.env.ALPHA_VANTAGE_API_KEY || "").trim();
 const POLICY_REFRESH_MS = Number(process.env.POLICY_REFRESH_MS || 60 * 60 * 1000);
 const CONGRESS_TRADES_FEED_URL = process.env.CONGRESS_TRADES_FEED_URL || "";
 const CONGRESS_TRADES_API_KEY = process.env.CONGRESS_TRADES_API_KEY || "";
@@ -337,7 +337,8 @@ async function fetchAlphaVantageQuote(ticker) {
   const data = await response.json();
   const quote = data["Global Quote"];
   if (!quote || !quote["05. price"]) {
-    throw new Error(`No quote returned for ${ticker}`);
+    const message = data.Note || data.Information || data["Error Message"] || `No quote returned for ${ticker}`;
+    throw new Error(message);
   }
 
   return {
@@ -350,13 +351,59 @@ async function fetchAlphaVantageQuote(ticker) {
   };
 }
 
+async function fetchYahooChartQuote(ticker) {
+  const symbol = String(ticker || "").toUpperCase().replace(/[^A-Z.-]/g, "").slice(0, 12);
+  const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
+  url.searchParams.set("range", "1d");
+  url.searchParams.set("interval", "1d");
+
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "PublicTradeIntelQuoteFallback/1.0",
+      Accept: "application/json,*/*",
+    },
+  });
+  if (!response.ok) throw new Error(`Fallback quote failed for ${symbol}`);
+
+  const data = await response.json();
+  const meta = data?.chart?.result?.[0]?.meta;
+  const price = Number(meta?.regularMarketPrice);
+  if (!price) throw new Error(`No fallback quote returned for ${symbol}`);
+
+  const previousClose = Number(meta.previousClose || meta.chartPreviousClose) || null;
+  const marketChange = previousClose ? price - previousClose : null;
+  const marketChangePercent = previousClose ? `${((marketChange / previousClose) * 100).toFixed(2)}%` : "";
+
+  return {
+    ticker: symbol,
+    marketPrice: price,
+    marketChange,
+    marketChangePercent,
+    marketUpdatedAt: new Date().toISOString(),
+    marketProvider: "Yahoo chart",
+  };
+}
+
+async function fetchMarketQuote(ticker) {
+  try {
+    return await fetchAlphaVantageQuote(ticker);
+  } catch (alphaError) {
+    const fallback = await fetchYahooChartQuote(ticker);
+    return {
+      ...fallback,
+      marketProvider: `${fallback.marketProvider} fallback`,
+      marketNote: alphaError.message,
+    };
+  }
+}
+
 async function refreshMarketData(config) {
   const quotes = [];
   const errors = [];
 
   for (const ticker of uniqueTickers(config)) {
     try {
-      const quote = await fetchAlphaVantageQuote(ticker);
+      const quote = await fetchMarketQuote(ticker);
       quotes.push(quote);
     } catch (error) {
       errors.push({ ticker, error: error.message });
@@ -550,7 +597,7 @@ async function handleApi(request, response, pathname) {
     }
 
     try {
-      sendJson(response, 200, await fetchAlphaVantageQuote(ticker));
+      sendJson(response, 200, await fetchMarketQuote(ticker));
     } catch (error) {
       const cached = findCachedQuote(ticker);
       if (cached) {
