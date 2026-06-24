@@ -183,7 +183,7 @@ function escapeHtml(value) {
 }
 
 function readMoney(id) {
-  return Number(fields[id].value) || 0;
+  return Number(fields[id]?.value) || 0;
 }
 
 function closestPlan(amount) {
@@ -194,100 +194,24 @@ function closestPlan(amount) {
 }
 
 function calculate() {
-  const cash = readMoney("cashOnHand");
-  const bills = readMoney("billsDue");
-  const foodGas = readMoney("foodGas");
-  const debtPayments = readMoney("debtPayments");
-  const emergencyFund = readMoney("emergencyFund");
-  const expectedIncome = readMoney("expectedIncome");
-  const cushion = readMoney("minimumCushion");
-  const debtBalance = readMoney("debtBalance");
-  const alreadyInvested = readMoney("alreadyInvested");
-  const dividendsEarned = readMoney("dividendsEarned");
-  const netWorthIncrease = readMoney("netWorthIncrease");
-
-  const requiredCash = bills + foodGas + debtPayments + cushion;
-  const availableAfterNeeds = cash + expectedIncome - requiredCash;
-  const safeSurplus = Math.max(0, Math.floor(availableAfterNeeds));
-  const emergencyGap = Math.max(0, settings.thresholds.fullEmergencyTarget - emergencyFund);
-
-  let recommendation = {
-    status: "Protect cash first",
-    title: "Hold cash this week",
-    text:
-      "Your safest move is to keep cash available for bills, food, gas, debt payments, and your minimum cushion. Holding steady is progress.",
-    invest: 0,
+  const totals = portfolioTotals();
+  const activeInvestAmount = Math.max(50, Math.round(totals.invested || 0));
+  const recommendation = {
+    status: "Portfolio HUD",
+    title: "Track current value",
+    text: "Your dashboard now focuses on positions you bought, their current value, and daily profit or loss.",
+    invest: activeInvestAmount,
     save: 0,
-    hold: Math.max(0, cash + expectedIncome),
+    hold: 0,
     debt: 0,
   };
 
-  if (safeSurplus > 0 && emergencyFund < settings.thresholds.firstEmergencyTarget) {
-    const save = Math.min(safeSurplus, emergencyGap);
-    recommendation = {
-      status: "Build the first safety layer",
-      title: `Save ${dollars(save)} this week`,
-      text:
-        "Before investing, get your first emergency cash layer started. Even a small transfer makes next week less fragile.",
-      invest: 0,
-      save,
-      hold: requiredCash,
-      debt: 0,
-    };
-  } else if (safeSurplus > 0 && debtBalance > 0 && emergencyFund < settings.thresholds.fullEmergencyTarget) {
-    const save = Math.min(Math.ceil(safeSurplus * 0.65), emergencyGap);
-    const debt = Math.max(0, safeSurplus - save);
-    recommendation = {
-      status: "Split safety and debt",
-      title: `Save ${dollars(save)} and pay ${dollars(debt)} to debt`,
-      text:
-        "Your cash cushion is protected, so this week can strengthen emergency savings while trimming high-interest debt.",
-      invest: 0,
-      save,
-      hold: requiredCash,
-      debt,
-    };
-  } else if (safeSurplus > 0 && debtBalance > 0) {
-    const invest = safeSurplus >= settings.thresholds.debtInvestCap ? Math.min(settings.thresholds.debtInvestCap, safeSurplus) : 0;
-    const debt = safeSurplus - invest;
-    recommendation = {
-      status: "Debt first, tiny investing allowed",
-      title: invest > 0 ? `Invest ${dollars(invest)} this week` : "Pay down debt instead",
-      text:
-        "Your emergency base is in place. Keep investing tiny and automatic only if it does not slow down urgent debt progress.",
-      invest,
-      save: 0,
-      hold: requiredCash,
-      debt,
-    };
-  } else if (safeSurplus >= 5) {
-    const plan = closestPlan(safeSurplus);
-    const invest = plan ? plan.weekly : 0;
-    const save = Math.max(0, safeSurplus - invest);
-    recommendation = {
-      status: "Safe to invest small",
-      title: `Invest ${dollars(invest)} this week`,
-      text:
-        "Your near-term cash is protected. Use a broad, diversified automatic investment habit and keep the rest as extra safety.",
-      invest,
-      save,
-      hold: requiredCash,
-      debt: 0,
-    };
-  }
-
-  renderRecommendation(recommendation);
   latestRecommendation = recommendation;
-  recordRecommendation(recommendation);
-  renderGoals({
-    emergency: emergencyFund + recommendation.save,
-    invested: alreadyInvested + recommendation.invest,
-    dividend: dividendsEarned,
-    netWorth: netWorthIncrease + recommendation.save + recommendation.invest + recommendation.debt,
-  });
-  renderPlans(recommendation.invest);
-  renderStockIdeas(recommendation.invest);
-  renderBestStocks(recommendation.invest);
+  renderRecommendation(recommendation);
+  renderGoals({ emergency: 0, invested: totals.invested, dividend: 0, netWorth: totals.totalGain });
+  renderPlans(activeInvestAmount);
+  renderStockIdeas(activeInvestAmount);
+  renderBestStocks(activeInvestAmount);
   renderDayTrades();
   renderCongressAlerts();
   renderPolicySignals();
@@ -297,16 +221,18 @@ function calculate() {
 }
 
 function renderRecommendation(recommendation) {
+  if (!output.statusChip || !output.title || !output.text) return;
   output.statusChip.textContent = recommendation.status;
   output.title.textContent = recommendation.title;
   output.text.textContent = recommendation.text;
-  output.invest.textContent = dollars(recommendation.invest);
-  output.save.textContent = dollars(recommendation.save);
-  output.hold.textContent = dollars(recommendation.hold);
-  output.debt.textContent = dollars(recommendation.debt);
+  if (output.invest) output.invest.textContent = dollars(recommendation.invest);
+  if (output.save) output.save.textContent = dollars(recommendation.save);
+  if (output.hold) output.hold.textContent = dollars(recommendation.hold);
+  if (output.debt) output.debt.textContent = dollars(recommendation.debt);
 }
 
 function renderGoals(progress) {
+  if (!output.goalsGrid) return;
   output.goalsGrid.innerHTML = settings.goals
     .map((goal) => {
       const current = Math.max(0, progress[goal.source] || 0);
@@ -327,6 +253,7 @@ function renderGoals(progress) {
 }
 
 function renderPlans(investAmount) {
+  if (!output.pathsGrid) return;
   output.pathsGrid.innerHTML = settings.plans
     .map((plan) => {
       const yearly = plan.weekly * 52;
@@ -1201,20 +1128,20 @@ function recordRecommendation(recommendation) {
   }).catch(() => {});
 }
 
-Object.values(fields).forEach((field) => {
+Object.values(fields).filter(Boolean).forEach((field) => {
   field.addEventListener("input", calculate);
 });
 
-document.querySelector("#riskProfile").addEventListener("change", () => {
+document.querySelector("#riskProfile")?.addEventListener("change", () => {
   renderStockIdeas(latestRecommendation?.invest || 0);
 });
 
-document.querySelector("#timeHorizon").addEventListener("change", () => {
+document.querySelector("#timeHorizon")?.addEventListener("change", () => {
   renderStockIdeas(latestRecommendation?.invest || 0);
 });
 
-document.querySelector("#memberSearch").addEventListener("input", renderCongressTrades);
-document.querySelector("#memberTradeFilter").addEventListener("change", renderCongressTrades);
+document.querySelector("#memberSearch")?.addEventListener("input", renderCongressTrades);
+document.querySelector("#memberTradeFilter")?.addEventListener("change", renderCongressTrades);
 output.tradeForm?.addEventListener("submit", addPortfolioPosition);
 output.refreshPortfolio?.addEventListener("click", refreshPortfolioPrices);
 output.portfolioList?.addEventListener("click", (event) => {
@@ -1225,9 +1152,9 @@ output.portfolioList?.addEventListener("click", (event) => {
   renderPortfolio();
 });
 
-document.querySelector("#resetDemo").addEventListener("click", () => {
+document.querySelector("#resetDemo")?.addEventListener("click", () => {
   Object.entries(demoValues).forEach(([id, value]) => {
-    fields[id].value = value;
+    if (fields[id]) fields[id].value = value;
   });
   calculate();
 });

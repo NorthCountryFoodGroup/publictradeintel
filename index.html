@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#276a4b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Steady Start" />
-    <title>Steady Start Money Plan</title>
+    <meta name="apple-mobile-web-app-title" content="PublicTradeIntel" />
+    <title>PublicTradeIntel Portfolio HUD</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -14,139 +14,55 @@
     <main class="app-shell">
       <section class="hero">
         <div>
-          <p class="eyebrow">Steady Start</p>
-          <h1>Can I afford to invest this week?</h1>
+          <p class="eyebrow">PublicTradeIntel</p>
+          <h1>Portfolio heads-up display</h1>
           <p class="hero-copy">
-            A beginner-first money check that protects cash, avoids bad debt,
-            builds emergency savings, and only invests what is truly safe.
+            Track the stocks and financial purchases you made, compare original buy value against current value,
+            and watch daily profit or loss from one phone-friendly dashboard.
           </p>
         </div>
         <div class="comfort-note">
-          <span>No shame meter</span>
-          <strong>You are building from where you are.</strong>
+          <span>Live market view</span>
+          <strong>Your buys, current value, daily move, and total gain/loss.</strong>
           <a href="admin.html">Admin</a>
         </div>
       </section>
 
-      <section class="calculator-grid" aria-label="Weekly affordability calculator">
-        <form class="money-form" id="moneyForm">
-          <div class="form-header">
-            <p class="eyebrow">Main check</p>
-            <h2>This week's numbers</h2>
+      <section class="portfolio-section portfolio-hud">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Portfolio HUD</p>
+            <h2>Your original buy vs current value</h2>
           </div>
+        </div>
 
+        <form class="trade-form" id="tradeForm">
           <label>
-            <span>Cash on hand</span>
-            <input type="number" min="0" step="1" id="cashOnHand" value="125" />
+            <span>Ticker bought</span>
+            <input id="tradeTicker" placeholder="NVDA" autocomplete="off" />
           </label>
-
           <label>
-            <span>Bills due before next payday</span>
-            <input type="number" min="0" step="1" id="billsDue" value="40" />
+            <span>Dollars invested</span>
+            <input type="number" min="0" step="0.01" id="tradeAmount" placeholder="50" />
           </label>
-
           <label>
-            <span>Food and gas needs</span>
-            <input type="number" min="0" step="1" id="foodGas" value="45" />
+            <span>Buy price per share</span>
+            <input type="number" min="0" step="0.01" id="tradeBuyPrice" placeholder="Use current price" />
           </label>
-
           <label>
-            <span>Debt payments due</span>
-            <input type="number" min="0" step="1" id="debtPayments" value="20" />
+            <span>Buy date</span>
+            <input type="date" id="tradeDate" />
           </label>
-
-          <label>
-            <span>Emergency fund balance</span>
-            <input type="number" min="0" step="1" id="emergencyFund" value="60" />
-          </label>
-
-          <label>
-            <span>Expected income before next payday</span>
-            <input type="number" min="0" step="1" id="expectedIncome" value="0" />
-          </label>
-
-          <label>
-            <span>Minimum cash cushion</span>
-            <input type="number" min="0" step="1" id="minimumCushion" value="25" />
-          </label>
-
-          <label>
-            <span>High-interest debt balance</span>
-            <input type="number" min="0" step="1" id="debtBalance" value="150" />
-          </label>
-
-          <div class="optional-group">
-            <p class="eyebrow">Optional progress tracker</p>
-            <label>
-              <span>Amount already invested</span>
-              <input type="number" min="0" step="1" id="alreadyInvested" value="35" />
-            </label>
-            <label>
-              <span>Dividends earned so far</span>
-              <input type="number" min="0" step="1" id="dividendsEarned" value="0" />
-            </label>
-            <label>
-              <span>Net worth increase so far</span>
-              <input type="number" min="0" step="1" id="netWorthIncrease" value="0" />
-            </label>
-          </div>
-
-          <button type="button" id="resetDemo">Reset example</button>
+          <button type="submit">Add buy</button>
         </form>
 
-        <aside class="result-panel" aria-live="polite">
-          <div class="status-chip" id="statusChip">Checking safely</div>
-          <h2 id="recommendationTitle">Hold cash this week</h2>
-          <p id="recommendationText">
-            Enter your numbers to see the safest next step.
-          </p>
-
-          <div class="amount-grid">
-            <div>
-              <span>Invest this amount</span>
-              <strong id="investAmount">$0</strong>
-            </div>
-            <div>
-              <span>Save this amount</span>
-              <strong id="saveAmount">$0</strong>
-            </div>
-            <div>
-              <span>Hold cash</span>
-              <strong id="holdAmount">$0</strong>
-            </div>
-            <div>
-              <span>Pay down debt</span>
-              <strong id="debtAmount">$0</strong>
-            </div>
-          </div>
-
-          <div class="safety-stack">
-            <h3>Priority order</h3>
-            <ol>
-              <li>Keep cash for bills, food, gas, and cushion.</li>
-              <li>Build emergency cash before chasing returns.</li>
-              <li>Attack high-interest debt when cash is protected.</li>
-              <li>Invest small automatic amounts when it is safe.</li>
-              <li>Increase slowly when your cushion grows.</li>
-            </ol>
-          </div>
-        </aside>
-      </section>
-
-      <section class="progress-section">
-        <div class="section-heading">
-          <p class="eyebrow">Progress counts early</p>
-          <h2>Micro-goals</h2>
+        <div class="portfolio-actions">
+          <button type="button" id="refreshPortfolio">Refresh prices</button>
+          <span id="portfolioMessage">Your portfolio is saved privately in this browser.</span>
         </div>
-        <div class="goals-grid" id="goalsGrid"></div>
-      </section>
 
-      <section class="paths-section">
-        <div class="section-heading">
-          <p class="eyebrow">Beginner investment paths</p>
-          <h2>Choose the smallest amount that stays boring and repeatable</h2>
-        </div>
-        <div class="paths-grid" id="pathsGrid"></div>
+        <div class="member-summary portfolio-summary" id="portfolioSummary"></div>
+        <div class="portfolio-list" id="portfolioList"></div>
       </section>
 
       <section class="stock-section">
@@ -216,43 +132,6 @@
         <div class="stock-grid" id="dayTradeGrid"></div>
       </section>
 
-      <section class="portfolio-section">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Recent activity</p>
-            <h2>Track the stocks you bought and your daily gain or loss</h2>
-          </div>
-        </div>
-
-        <form class="trade-form" id="tradeForm">
-          <label>
-            <span>Ticker bought</span>
-            <input id="tradeTicker" placeholder="NVDA" autocomplete="off" />
-          </label>
-          <label>
-            <span>Dollars invested</span>
-            <input type="number" min="0" step="0.01" id="tradeAmount" placeholder="50" />
-          </label>
-          <label>
-            <span>Buy price per share</span>
-            <input type="number" min="0" step="0.01" id="tradeBuyPrice" placeholder="Use current price" />
-          </label>
-          <label>
-            <span>Buy date</span>
-            <input type="date" id="tradeDate" />
-          </label>
-          <button type="submit">Add buy</button>
-        </form>
-
-        <div class="portfolio-actions">
-          <button type="button" id="refreshPortfolio">Refresh prices</button>
-          <span id="portfolioMessage">Your trades are saved privately in this browser.</span>
-        </div>
-
-        <div class="member-summary portfolio-summary" id="portfolioSummary"></div>
-        <div class="portfolio-list" id="portfolioList"></div>
-      </section>
-
       <section class="alerts-section">
         <div class="section-heading">
           <div>
@@ -316,14 +195,14 @@
 
       <section class="learn-section">
         <div>
-          <p class="eyebrow">Learning without overwhelm</p>
-          <h2>What this app will be careful about</h2>
+          <p class="eyebrow">Trading intelligence</p>
+          <h2>What this app keeps visible</h2>
         </div>
         <ul>
-          <li>No pretending a prediction is certain.</li>
-          <li>No pressure to invest money needed for bills.</li>
-          <li>No "you are behind" language.</li>
-          <li>No buy idea without a risk note and plain-English reason.</li>
+          <li>Your original cost beside your current value.</li>
+          <li>Daily profit/loss snapshots for each tracked position.</li>
+          <li>Congressional trade alerts and policy catalyst signals.</li>
+          <li>Plain-English reasons, scores, and risk notes for buy ideas.</li>
         </ul>
       </section>
     </main>

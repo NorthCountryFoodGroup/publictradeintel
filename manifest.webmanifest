@@ -1,7 +1,7 @@
 {
-  "name": "Steady Start Money Plan",
-  "short_name": "Steady Start",
-  "description": "A gentle money app for protecting cash, avoiding bad debt, saving first, and investing small safe amounts.",
+  "name": "PublicTradeIntel Portfolio HUD",
+  "short_name": "TradeIntel",
+  "description": "A portfolio heads-up display for tracking buys, current value, daily moves, congressional trades, and market signals.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f3fbf7",
