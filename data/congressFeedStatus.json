@@ -1,0 +1,7 @@
+{
+  "updatedAt": "2026-06-24T16:16:46.476Z",
+  "imported": 0,
+  "totalTrades": 3,
+  "source": null,
+  "error": "Set CONGRESS_TRADES_FEED_URL to a JSON or CSV congressional trading feed."
+}

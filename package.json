@@ -1,0 +1,9 @@
+{
+  "name": "publictradeintel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PublicTradeIntel market, congressional trade, and policy catalyst intelligence app.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
