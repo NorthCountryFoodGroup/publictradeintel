@@ -35,21 +35,15 @@ Start Command: node server.js
 ```text
 ADMIN_PIN=your-private-admin-pin
 POLICY_REFRESH_MS=3600000
-<<<<<<< HEAD
 CONGRESS_REFRESH_MS=3600000
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 ```
 
 Optional:
 
 ```text
 ALPHA_VANTAGE_API_KEY=your-market-data-key
-<<<<<<< HEAD
 CONGRESS_TRADES_FEED_URL=your-json-or-csv-congressional-trading-feed
 CONGRESS_TRADES_API_KEY=your-provider-key-if-needed
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 ```
 
 ## 3. Add the domain in Render

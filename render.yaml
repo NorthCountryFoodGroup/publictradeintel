@@ -3,21 +3,18 @@ services:
     name: publictradeintel
     runtime: node
     plan: starter
-    buildCommand: ""
+    buildCommand: "npm install"
     startCommand: "node server.js"
     envVars:
       - key: ADMIN_PIN
         sync: false
       - key: ALPHA_VANTAGE_API_KEY
         sync: false
-<<<<<<< HEAD
       - key: CONGRESS_TRADES_FEED_URL
         sync: false
       - key: CONGRESS_TRADES_API_KEY
         sync: false
       - key: CONGRESS_REFRESH_MS
         value: "3600000"
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
       - key: POLICY_REFRESH_MS
         value: "3600000"

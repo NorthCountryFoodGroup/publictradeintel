@@ -25,7 +25,6 @@ const output = {
   stockGrid: document.querySelector("#stockGrid"),
   bestStocksGrid: document.querySelector("#bestStocksGrid"),
   dayTradeGrid: document.querySelector("#dayTradeGrid"),
-<<<<<<< HEAD
   tradeForm: document.querySelector("#tradeForm"),
   tradeTicker: document.querySelector("#tradeTicker"),
   tradeAmount: document.querySelector("#tradeAmount"),
@@ -35,8 +34,6 @@ const output = {
   portfolioMessage: document.querySelector("#portfolioMessage"),
   portfolioSummary: document.querySelector("#portfolioSummary"),
   portfolioList: document.querySelector("#portfolioList"),
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
   alertsList: document.querySelector("#alertsList"),
   policySummary: document.querySelector("#policySummary"),
   policySignalsGrid: document.querySelector("#policySignalsGrid"),
@@ -144,11 +141,8 @@ const settings = {
 let lastEventKey = "";
 let latestRecommendation = null;
 let policySignals = { updatedAt: null, signals: [], errors: [] };
-<<<<<<< HEAD
 let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null };
 let portfolio = [];
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 
 function dollars(value) {
   return new Intl.NumberFormat("en-US", {
@@ -158,7 +152,6 @@ function dollars(value) {
   }).format(Math.max(0, Math.floor(value)));
 }
 
-<<<<<<< HEAD
 function dollarsPrecise(value) {
   const sign = value < 0 ? "-" : "";
   return `${sign}${new Intl.NumberFormat("en-US", {
@@ -169,22 +162,17 @@ function dollarsPrecise(value) {
   }).format(Math.abs(Number(value) || 0))}`;
 }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 function percent(value) {
   if (!Number.isFinite(value)) return "n/a";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
 }
 
-<<<<<<< HEAD
 function parsePercent(value) {
   const parsed = Number(String(value || "").replace("%", "").trim());
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -303,10 +291,7 @@ function calculate() {
   renderDayTrades();
   renderCongressAlerts();
   renderPolicySignals();
-<<<<<<< HEAD
   renderPortfolio();
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
   renderMemberOptions();
   renderCongressTrades();
 }
@@ -637,7 +622,6 @@ function renderDayTrades() {
     .join("");
 }
 
-<<<<<<< HEAD
 function loadPortfolio() {
   try {
     const saved = JSON.parse(localStorage.getItem("publicTradeIntelPortfolio") || "[]");
@@ -924,8 +908,6 @@ async function addPortfolioPosition(event) {
   renderPortfolio();
 }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 function renderCongressAlerts() {
   if (!output.alertsList) return;
 
@@ -944,7 +926,6 @@ function renderCongressAlerts() {
     return;
   }
 
-<<<<<<< HEAD
   const statusCard = `
     <article class="alert-card">
       <div>
@@ -955,8 +936,6 @@ function renderCongressAlerts() {
     </article>
   `;
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
   output.alertsList.innerHTML = alerts
     .map((trade) => {
       const isBuy = trade.transaction === "Buy";
@@ -976,11 +955,7 @@ function renderCongressAlerts() {
         </article>
       `;
     })
-<<<<<<< HEAD
     .join("") + statusCard;
-=======
-    .join("");
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 }
 
 function renderPolicySignals() {
@@ -1189,7 +1164,6 @@ async function loadPolicySignals() {
   }
 }
 
-<<<<<<< HEAD
 async function loadCongressFeedStatus() {
   try {
     const response = await fetch("api/congress-feed-status", { cache: "no-store" });
@@ -1200,8 +1174,6 @@ async function loadCongressFeedStatus() {
   }
 }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 function recommendationAction(recommendation) {
   if (recommendation.invest > 0) return "invest";
   if (recommendation.save > 0) return "save";
@@ -1243,7 +1215,6 @@ document.querySelector("#timeHorizon").addEventListener("change", () => {
 
 document.querySelector("#memberSearch").addEventListener("input", renderCongressTrades);
 document.querySelector("#memberTradeFilter").addEventListener("change", renderCongressTrades);
-<<<<<<< HEAD
 output.tradeForm?.addEventListener("submit", addPortfolioPosition);
 output.refreshPortfolio?.addEventListener("click", refreshPortfolioPrices);
 output.portfolioList?.addEventListener("click", (event) => {
@@ -1253,8 +1224,6 @@ output.portfolioList?.addEventListener("click", (event) => {
   savePortfolio();
   renderPortfolio();
 });
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 
 document.querySelector("#resetDemo").addEventListener("click", () => {
   Object.entries(demoValues).forEach(([id, value]) => {
@@ -1267,10 +1236,6 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
-<<<<<<< HEAD
 loadPortfolio();
 if (output.tradeDate) output.tradeDate.value = new Date().toISOString().slice(0, 10);
 Promise.all([loadSettings(), loadPolicySignals(), loadCongressFeedStatus()]).then(calculate);
-=======
-Promise.all([loadSettings(), loadPolicySignals()]).then(calculate);
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a

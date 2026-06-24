@@ -9,10 +9,7 @@ const saveMessage = document.querySelector("#saveMessage");
 const marketMessage = document.querySelector("#marketMessage");
 const policyMessage = document.querySelector("#policyMessage");
 const importMessage = document.querySelector("#importMessage");
-<<<<<<< HEAD
 const congressFeedMessage = document.querySelector("#congressFeedMessage");
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 const adminPanel = document.querySelector("#adminPanel");
 const plansEditor = document.querySelector("#plansEditor");
 const goalsEditor = document.querySelector("#goalsEditor");
@@ -378,7 +375,6 @@ document.querySelector("#refreshPolicy").addEventListener("click", async () => {
   }
 });
 
-<<<<<<< HEAD
 document.querySelector("#refreshCongressFeed").addEventListener("click", async () => {
   congressFeedMessage.textContent = "Refreshing congressional trade feed...";
   try {
@@ -396,8 +392,6 @@ document.querySelector("#refreshCongressFeed").addEventListener("click", async (
   }
 });
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 async function importCongress(mode) {
   importMessage.textContent = "Importing...";
   try {

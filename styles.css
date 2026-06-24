@@ -353,10 +353,7 @@ li {
 .stock-section,
 .best-section,
 .daytrade-section,
-<<<<<<< HEAD
 .portfolio-section,
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 .alerts-section,
 .policy-section,
 .congress-section {
@@ -658,7 +655,6 @@ li {
   gap: 10px;
 }
 
-<<<<<<< HEAD
 .trade-form {
   display: grid;
   grid-template-columns: 1.1fr repeat(3, minmax(0, 1fr)) auto;
@@ -805,8 +801,6 @@ li {
   font-size: 0.9rem;
 }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 @media (max-width: 960px) {
   .hero,
   .calculator-grid,
@@ -819,10 +813,7 @@ li {
   .paths-grid,
   .stock-grid,
   .congress-grid,
-<<<<<<< HEAD
   .portfolio-list,
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
   .member-summary,
   .admin-editor,
   .editor-row {
@@ -836,13 +827,10 @@ li {
   .amount-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-<<<<<<< HEAD
 
   .trade-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 }
 
 @media (max-width: 560px) {
@@ -870,29 +858,21 @@ li {
   .paths-grid,
   .stock-grid,
   .congress-grid,
-<<<<<<< HEAD
   .portfolio-list,
   .member-summary,
   .amount-grid,
   .portfolio-values,
   .value-compare,
-=======
-  .member-summary,
-  .amount-grid,
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
   .stock-controls,
   .admin-editor,
   .editor-row {
     grid-template-columns: 1fr;
   }
 
-<<<<<<< HEAD
   .trade-form {
     grid-template-columns: 1fr;
   }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
   .editor-row .wide-field {
     grid-column: auto;
   }

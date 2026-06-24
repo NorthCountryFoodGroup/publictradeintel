@@ -9,17 +9,12 @@ const DATA_DIR = path.join(ROOT, "data");
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");
 const POLICY_FILE = path.join(DATA_DIR, "policySignals.json");
-<<<<<<< HEAD
 const CONGRESS_FEED_STATUS_FILE = path.join(DATA_DIR, "congressFeedStatus.json");
 const MARKET_API_KEY = process.env.ALPHA_VANTAGE_API_KEY || "";
 const POLICY_REFRESH_MS = Number(process.env.POLICY_REFRESH_MS || 60 * 60 * 1000);
 const CONGRESS_TRADES_FEED_URL = process.env.CONGRESS_TRADES_FEED_URL || "";
 const CONGRESS_TRADES_API_KEY = process.env.CONGRESS_TRADES_API_KEY || "";
 const CONGRESS_REFRESH_MS = Number(process.env.CONGRESS_REFRESH_MS || 60 * 60 * 1000);
-=======
-const MARKET_API_KEY = process.env.ALPHA_VANTAGE_API_KEY || "";
-const POLICY_REFRESH_MS = Number(process.env.POLICY_REFRESH_MS || 60 * 60 * 1000);
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -310,7 +305,6 @@ function uniqueTickers(config) {
   return [...tickers].filter(Boolean).slice(0, 20);
 }
 
-<<<<<<< HEAD
 function findCachedQuote(ticker) {
   const symbol = String(ticker || "").toUpperCase().replace(/[^A-Z.-]/g, "").slice(0, 12);
   const config = readJson(CONFIG_FILE, {});
@@ -327,8 +321,6 @@ function findCachedQuote(ticker) {
     : null;
 }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 async function fetchAlphaVantageQuote(ticker) {
   if (!MARKET_API_KEY) {
     throw new Error("Set ALPHA_VANTAGE_API_KEY before refreshing market data.");
@@ -351,10 +343,7 @@ async function fetchAlphaVantageQuote(ticker) {
   return {
     ticker,
     marketPrice: Number(quote["05. price"]),
-<<<<<<< HEAD
     marketChange: Number(quote["09. change"]) || null,
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
     marketChangePercent: String(quote["10. change percent"] || ""),
     marketUpdatedAt: new Date().toISOString(),
     marketProvider: "Alpha Vantage",
@@ -410,7 +399,6 @@ function normalizeImportedTrade(trade) {
   };
 }
 
-<<<<<<< HEAD
 function parseCsvRows(text) {
   const rows = [];
   let row = [];
@@ -523,8 +511,6 @@ async function refreshCongressTradeFeed() {
   return { status, config: nextConfig };
 }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 function summarizeEvents() {
   const events = readJson(EVENTS_FILE, []);
   return events.reduce(
@@ -550,7 +536,6 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
-<<<<<<< HEAD
   if (request.method === "GET" && pathname === "/api/congress-feed-status") {
     sendJson(response, 200, readJson(CONGRESS_FEED_STATUS_FILE, { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null }));
     return;
@@ -577,8 +562,6 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
   if (request.method === "POST" && pathname === "/api/events") {
     const body = await collectBody(request);
     const events = readJson(EVENTS_FILE, []);
@@ -641,7 +624,6 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
-<<<<<<< HEAD
   if (request.method === "POST" && pathname === "/api/admin/refresh-congress-feed") {
     try {
       sendJson(response, 200, await refreshCongressTradeFeed());
@@ -659,8 +641,6 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
   sendJson(response, 404, { error: "Not found" });
 }
 
@@ -717,7 +697,6 @@ if (POLICY_REFRESH_MS > 0) {
     });
   }, POLICY_REFRESH_MS);
 }
-<<<<<<< HEAD
 
 if (CONGRESS_REFRESH_MS > 0 && CONGRESS_TRADES_FEED_URL) {
   setInterval(() => {
@@ -732,5 +711,3 @@ if (CONGRESS_REFRESH_MS > 0 && CONGRESS_TRADES_FEED_URL) {
     });
   }, CONGRESS_REFRESH_MS);
 }
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a

@@ -105,7 +105,6 @@ The public app displays leveled strategy cards:
 
 The scanner stores results in `data/policySignals.json`.
 
-<<<<<<< HEAD
 ## Live congressional trading feed
 
 Set this environment variable to connect a real congressional trading data source:
@@ -151,8 +150,6 @@ sourceUrl, source
 
 Admin has a **Refresh congress feed** button. The server also refreshes hourly while running if `CONGRESS_TRADES_FEED_URL` is set.
 
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 ## Deploy publictradeintel.com
 
 Recommended simple host: Render Web Service.
@@ -168,12 +165,9 @@ Optional:
 
 ```text
 ALPHA_VANTAGE_API_KEY=your-market-data-key
-<<<<<<< HEAD
 CONGRESS_TRADES_FEED_URL=https://your-provider-or-dataset-url
 CONGRESS_TRADES_API_KEY=your-provider-key-if-needed
 CONGRESS_REFRESH_MS=3600000
-=======
->>>>>>> a2402b6eaefdbf55188d33f6fe53551a966d591a
 POLICY_REFRESH_MS=3600000
 ```
 
