@@ -1,20 +1,28 @@
 const http = require("http");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
 const PORT = Number(process.env.PORT || 3000);
-const ADMIN_PIN = process.env.ADMIN_PIN || "1234";
+const ADMIN_PIN = process.env.ADMIN_PIN || "";
+const LOGIN_PIN = process.env.LOGIN_PIN || ADMIN_PIN;
+const PORTFOLIO_PIN = process.env.PORTFOLIO_PIN || ADMIN_PIN;
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");
 const POLICY_FILE = path.join(DATA_DIR, "policySignals.json");
 const CONGRESS_FEED_STATUS_FILE = path.join(DATA_DIR, "congressFeedStatus.json");
+const PORTFOLIO_FILE = path.join(DATA_DIR, "portfolio.json");
+const PREDICTIONS_FILE = path.join(DATA_DIR, "predictions.json");
 const MARKET_API_KEY = String(process.env.ALPHA_VANTAGE_API_KEY || "").trim();
 const POLICY_REFRESH_MS = Number(process.env.POLICY_REFRESH_MS || 60 * 60 * 1000);
 const CONGRESS_TRADES_FEED_URL = process.env.CONGRESS_TRADES_FEED_URL || "";
 const CONGRESS_TRADES_API_KEY = process.env.CONGRESS_TRADES_API_KEY || "";
 const CONGRESS_REFRESH_MS = Number(process.env.CONGRESS_REFRESH_MS || 60 * 60 * 1000);
+const PREDICTION_REFRESH_MS = Number(process.env.PREDICTION_REFRESH_MS || 60 * 60 * 1000);
+const SESSION_COOKIE = "pti_session";
+const sessions = new Map();
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -46,6 +54,23 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function publicErrorMessage(error, fallback = "Request failed.") {
+  const message = String(error?.message || fallback);
+  const redacted = MARKET_API_KEY ? message.replaceAll(MARKET_API_KEY, "[redacted]") : message;
+  if (/apikey|api key|premium endpoint|rate limit|frequency|alpha vantage/i.test(redacted)) {
+    return fallback;
+  }
+  return redacted.slice(0, 180);
+}
+
+function sendRedirect(response, location) {
+  response.writeHead(302, {
+    Location: location,
+    "Cache-Control": "no-store",
+  });
+  response.end();
+}
+
 function collectBody(request) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -62,7 +87,41 @@ function collectBody(request) {
 }
 
 function isAdmin(request) {
-  return request.headers["x-admin-pin"] === ADMIN_PIN;
+  return Boolean(ADMIN_PIN && request.headers["x-admin-pin"] === ADMIN_PIN);
+}
+
+function isPortfolioOwner(request) {
+  return Boolean(PORTFOLIO_PIN && request.headers["x-portfolio-pin"] === PORTFOLIO_PIN);
+}
+
+function parseCookies(request) {
+  return String(request.headers.cookie || "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((cookies, part) => {
+      const index = part.indexOf("=");
+      if (index === -1) return cookies;
+      cookies[part.slice(0, index)] = decodeURIComponent(part.slice(index + 1));
+      return cookies;
+    }, {});
+}
+
+function isLoggedIn(request) {
+  const token = parseCookies(request)[SESSION_COOKIE];
+  return Boolean(token && sessions.has(token));
+}
+
+function createSession(response) {
+  const token = crypto.randomBytes(32).toString("hex");
+  sessions.set(token, { createdAt: Date.now() });
+  response.setHeader("Set-Cookie", `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`);
+}
+
+function clearSession(request, response) {
+  const token = parseCookies(request)[SESSION_COOKIE];
+  if (token) sessions.delete(token);
+  response.setHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
 }
 
 function safeHttpUrl(value, fallback) {
@@ -72,6 +131,53 @@ function safeHttpUrl(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function clamp(value, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, Number(value) || 0));
+}
+
+function numberPercent(value) {
+  const parsed = Number(String(value || "").replace("%", "").trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sanitizePortfolioPosition(position) {
+  const ticker = String(position?.ticker || "")
+    .toUpperCase()
+    .replace(/[^A-Z.-]/g, "")
+    .slice(0, 12);
+  const amountInvested = Math.max(0, Number(position?.amountInvested) || 0);
+  const buyPrice = Math.max(0, Number(position?.buyPrice) || 0);
+  const shares = Math.max(0, Number(position?.shares) || (buyPrice > 0 ? amountInvested / buyPrice : 0));
+  const currentPrice = Math.max(0, Number(position?.currentPrice) || buyPrice);
+  const dailySnapshots = Array.isArray(position?.dailySnapshots)
+    ? position.dailySnapshots.slice(-30).map((snapshot) => ({
+        date: String(snapshot.date || "").slice(0, 10),
+        currentPrice: Math.max(0, Number(snapshot.currentPrice) || 0),
+        currentValue: Math.max(0, Number(snapshot.currentValue) || 0),
+        totalGain: Number(snapshot.totalGain) || 0,
+        totalReturn: Number(snapshot.totalReturn) || 0,
+      }))
+    : [];
+
+  return {
+    id: String(position?.id || `${Date.now()}-${ticker || "POSITION"}`).replace(/[^\w.-]/g, "").slice(0, 80),
+    ticker: ticker || "TICKER",
+    amountInvested,
+    buyPrice,
+    shares,
+    boughtAt: String(position?.boughtAt || new Date().toISOString().slice(0, 10)).slice(0, 10),
+    currentPrice,
+    marketChangePercent: String(position?.marketChangePercent || "").slice(0, 24),
+    marketUpdatedAt: String(position?.marketUpdatedAt || "").slice(0, 40),
+    marketProvider: String(position?.marketProvider || "Manual entry").slice(0, 40),
+    dailySnapshots,
+  };
+}
+
+function sanitizePortfolio(value) {
+  return Array.isArray(value) ? value.slice(0, 200).map(sanitizePortfolioPosition) : [];
 }
 
 function sanitizeConfig(config) {
@@ -392,7 +498,7 @@ async function fetchMarketQuote(ticker) {
     return {
       ...fallback,
       marketProvider: `${fallback.marketProvider} fallback`,
-      marketNote: alphaError.message,
+      marketNote: "Primary quote provider unavailable; fallback quote used.",
     };
   }
 }
@@ -425,6 +531,220 @@ async function refreshMarketData(config) {
     quotes,
     errors,
   };
+}
+
+function predictionCongressMetrics(ticker, trades) {
+  const related = (trades || []).filter((trade) => trade.ticker === ticker);
+  const buys = related.filter((trade) => trade.transaction === "Buy");
+  const sells = related.filter((trade) => trade.transaction === "Sell");
+  const visibility = related.reduce((sum, trade) => sum + (Number(trade.signalScore) || 0), 0) / Math.max(1, related.length);
+  const bipartisan = new Set(related.map((trade) => trade.party).filter(Boolean)).size > 1 ? 12 : 0;
+  const cluster = Math.min(22, buys.length * 8 + related.length * 3);
+  const sellPenalty = Math.min(30, sells.length * 14);
+  return {
+    count: related.length,
+    buys: buys.length,
+    sells: sells.length,
+    members: [...new Set(related.map((trade) => trade.representative).filter(Boolean))],
+    score: clamp(visibility * 0.58 + cluster + bipartisan - sellPenalty),
+  };
+}
+
+function predictionPolicyMetrics(ticker, policySignals) {
+  const related = (policySignals.signals || []).filter((signal) => signal.ticker === ticker);
+  const positive = related.filter((signal) => signal.direction === "positive").length;
+  const negative = related.filter((signal) => signal.direction === "negative").length;
+  const score = related.reduce((sum, signal) => sum + (Number(signal.score) || 0), 0) / Math.max(1, related.length);
+  return {
+    count: related.length,
+    positive,
+    negative,
+    score: clamp(score + positive * 8 - negative * 10),
+    strongest: related.sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0))[0] || null,
+  };
+}
+
+function assetGroup(stock) {
+  const ticker = stock.ticker;
+  if (["GLD", "SLV", "GDX", "SIL", "SILJ"].includes(ticker)) return "Gold/Silver";
+  if (["BTC", "ETH", "MSTR", "COIN"].includes(ticker)) return "Crypto";
+  if (/energy|oil|gas/i.test(`${stock.name} ${stock.pressNotes}`)) return "Energy";
+  if (/health|medical|biotech|pharma/i.test(`${stock.name} ${stock.pressNotes}`)) return "Healthcare";
+  if (/defense|aerospace|military/i.test(`${stock.name} ${stock.pressNotes} ${stock.committeeNotes}`)) return "Defense";
+  if (/bank|financial|insurance/i.test(`${stock.name} ${stock.pressNotes}`)) return "Financials";
+  if (/industrial|manufacturing/i.test(`${stock.name} ${stock.pressNotes}`)) return "Industrials";
+  if (stock.type === "ETF") return "ETF";
+  return "Technology";
+}
+
+function predictionLabel(score) {
+  if (score >= 82) return "Strong AI Buy Candidate";
+  if (score >= 68) return "Possible Trade";
+  if (score >= 52) return "Watch Only";
+  return "Avoid for Now";
+}
+
+function predictionStatus(score, previousScore) {
+  if (!Number.isFinite(previousScore)) return "new";
+  const delta = score - previousScore;
+  if (delta >= 5) return "improved";
+  if (delta <= -5) return "weakened";
+  return "stayed the same";
+}
+
+function buildPrediction(stock, config, policySignals, previousByTicker) {
+  const ticker = stock.ticker;
+  const congress = predictionCongressMetrics(ticker, config.congressTrades || []);
+  const policy = predictionPolicyMetrics(ticker, policySignals);
+  const marketChange = numberPercent(stock.marketChangePercent);
+  const price = Number(stock.marketPrice) || null;
+  const momentum = clamp((Number(stock.momentumScore) || 0) + marketChange * 1.4);
+  const trend = clamp((Number(stock.qualityScore) || 0) * 0.45 + momentum * 0.55);
+  const breakout = clamp(momentum * 0.58 + (Number(stock.pressScore) || 0) * 0.26 + policy.score * 0.16);
+  const reversal = clamp((100 - (Number(stock.valuationScore) || 0)) * 0.38 + (100 - momentum) * 0.34 + (Number(stock.volatilityScore) || 0) * 0.28);
+  const newsImpact = clamp((Number(stock.pressScore) || 0) * 0.55 + policy.score * 0.45);
+  const sentiment = clamp((Number(stock.pressScore) || 0) * 0.42 + momentum * 0.4 + policy.positive * 8 - policy.negative * 10);
+  const macro = clamp(assetGroup(stock) === "Gold/Silver" ? 70 + Math.max(0, marketChange) * 2 : (Number(stock.committeeScore) || 0) * 0.52 + policy.score * 0.48);
+  const sectorStrength = clamp((Number(stock.committeeScore) || 0) * 0.34 + newsImpact * 0.34 + momentum * 0.32);
+  const relativeStrength = clamp(momentum * 0.7 + (Number(stock.qualityScore) || 0) * 0.3);
+  const institutionalFlow = clamp(congress.score * 0.46 + (Number(stock.qualityScore) || 0) * 0.28 + (Number(stock.pressScore) || 0) * 0.26);
+  const volatilityRisk = clamp(100 - (Number(stock.volatilityScore) || 0));
+  const liquidity = stock.type === "ETF" ? 84 : clamp((Number(stock.qualityScore) || 0) * 0.48 + (Number(stock.momentumScore) || 0) * 0.52);
+  const congressionalActivity = congress.score;
+
+  const opportunityScore = Math.round(
+    momentum * 0.16 +
+      trend * 0.11 +
+      breakout * 0.1 +
+      newsImpact * 0.11 +
+      sentiment * 0.07 +
+      macro * 0.08 +
+      sectorStrength * 0.08 +
+      relativeStrength * 0.08 +
+      institutionalFlow * 0.07 +
+      liquidity * 0.05 +
+      congressionalActivity * 0.09 -
+      volatilityRisk * 0.05,
+  );
+  const score = clamp(opportunityScore);
+  const bearishScore = clamp(volatilityRisk * 0.5 + (100 - trend) * 0.28 + policy.negative * 10 + congress.sells * 8);
+  const bullishScore = clamp(score * 0.74 + congress.score * 0.12 + policy.score * 0.14);
+  const confidence = clamp((liquidity + trend + newsImpact + Math.max(20, congress.count * 15)) / 4 - volatilityRisk * 0.12);
+  const oneDayUpside = Math.max(0.4, score / 58 + marketChange * 0.16);
+  const threeDayUpside = oneDayUpside * 1.7;
+  const sevenDayUpside = oneDayUpside * 2.7;
+  const thirtyDayUpside = oneDayUpside * 5.8;
+  const downsideRisk = Math.max(1.2, volatilityRisk / 14 + bearishScore / 38);
+  const riskReward = sevenDayUpside / downsideRisk;
+  const previous = previousByTicker.get(ticker);
+  const previousScore = previous ? Number(previous.aiOpportunityScore) : NaN;
+  const scoreChange = Number.isFinite(previousScore) ? Math.round(score - previousScore) : 0;
+  const status = predictionStatus(score, previousScore);
+  const catalyst = policy.strongest
+    ? `${policy.strongest.sourceName}: ${policy.strongest.direction} policy signal`
+    : congress.buys
+      ? `${congress.buys} congressional buy signal(s)`
+      : stock.pressNotes || stock.aiOutlook || "Momentum and quality signals";
+
+  return {
+    ticker,
+    name: stock.name,
+    assetGroup: assetGroup(stock),
+    currentPrice: price,
+    marketChangePercent: stock.marketChangePercent || "",
+    aiOpportunityScore: score,
+    bullishScore: Math.round(bullishScore),
+    bearishScore: Math.round(bearishScore),
+    confidenceScore: Math.round(confidence),
+    label: predictionLabel(score),
+    status,
+    scoreChange,
+    expectedTimeHorizon: score >= 82 ? "1-7 days" : score >= 68 ? "3-30 days" : "Watch for confirmation",
+    forecasts: {
+      oneDay: { expectedUpside: Number(oneDayUpside.toFixed(2)), downsideRisk: Number((downsideRisk * 0.55).toFixed(2)) },
+      threeDay: { expectedUpside: Number(threeDayUpside.toFixed(2)), downsideRisk: Number((downsideRisk * 0.8).toFixed(2)) },
+      sevenDay: { expectedUpside: Number(sevenDayUpside.toFixed(2)), downsideRisk: Number(downsideRisk.toFixed(2)) },
+      thirtyDay: { expectedUpside: Number(thirtyDayUpside.toFixed(2)), downsideRisk: Number((downsideRisk * 1.55).toFixed(2)) },
+    },
+    suggestedEntryZone: price ? `$${(price * 0.985).toFixed(2)} - $${(price * 1.005).toFixed(2)}` : "Need live price",
+    suggestedProfitTarget: price ? `$${(price * (1 + sevenDayUpside / 100)).toFixed(2)}` : "Need live price",
+    suggestedStopLevel: price ? `$${(price * (1 - downsideRisk / 100)).toFixed(2)}` : "Need live price",
+    estimatedVolatility: Math.round(volatilityRisk),
+    riskRewardRatio: Number(riskReward.toFixed(2)),
+    primaryCatalyst: catalyst,
+    supportingIndicators: [
+      `Momentum ${Math.round(momentum)}/100`,
+      `Trend ${Math.round(trend)}/100`,
+      `News/policy ${Math.round(newsImpact)}/100`,
+      `Congress ${Math.round(congress.score)}/100`,
+      `Liquidity ${Math.round(liquidity)}/100`,
+    ],
+    modelScores: {
+      momentum: Math.round(momentum),
+      trend: Math.round(trend),
+      breakout: Math.round(breakout),
+      reversal: Math.round(reversal),
+      newsImpact: Math.round(newsImpact),
+      sentiment: Math.round(sentiment),
+      macro: Math.round(macro),
+      sectorStrength: Math.round(sectorStrength),
+      relativeStrength: Math.round(relativeStrength),
+      institutionalFlow: Math.round(institutionalFlow),
+      volatility: Math.round(100 - volatilityRisk),
+      liquidity: Math.round(liquidity),
+      congressionalActivity: Math.round(congressionalActivity),
+    },
+    congressionalSignal: congress,
+    plainEnglish:
+      score >= 82
+        ? `${ticker} has a strong blended setup across momentum, catalysts, and conviction signals. Size carefully because short-term setups can reverse quickly.`
+        : score >= 68
+          ? `${ticker} has enough positive evidence to research as a possible trade, but confirmation and position sizing matter.`
+          : score >= 52
+            ? `${ticker} has some useful signals, but the prediction is not strong enough for an aggressive buy yet.`
+            : `${ticker} is not scoring well enough right now. Waiting for better confirmation is the cleaner move.`,
+    whatChanged: previous ? `Score ${status} by ${scoreChange >= 0 ? "+" : ""}${scoreChange} points since the last scan.` : "New prediction in this scan.",
+    scannedAt: new Date().toISOString(),
+  };
+}
+
+function predictionSections(predictions) {
+  const byScore = [...predictions].sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
+  return {
+    topBuyCandidates: byScore.slice(0, 6),
+    goldSilverOpportunities: byScore.filter((item) => item.assetGroup === "Gold/Silver").slice(0, 5),
+    highestMomentum: [...predictions].sort((a, b) => b.modelScores.momentum - a.modelScores.momentum).slice(0, 5),
+    strongestSector: [...predictions].sort((a, b) => b.modelScores.sectorStrength - a.modelScores.sectorStrength).slice(0, 5),
+    congressionalTradeSignals: byScore.filter((item) => item.congressionalSignal.count > 0).slice(0, 5),
+    strongestOneDay: [...predictions].sort((a, b) => b.forecasts.oneDay.expectedUpside - a.forecasts.oneDay.expectedUpside).slice(0, 5),
+    strongestSevenDay: [...predictions].sort((a, b) => b.forecasts.sevenDay.expectedUpside - a.forecasts.sevenDay.expectedUpside).slice(0, 5),
+    strongestThirtyDay: [...predictions].sort((a, b) => b.forecasts.thirtyDay.expectedUpside - a.forecasts.thirtyDay.expectedUpside).slice(0, 5),
+    biggestScoreIncrease: [...predictions].sort((a, b) => b.scoreChange - a.scoreChange).slice(0, 5),
+    biggestScoreDrop: [...predictions].sort((a, b) => a.scoreChange - b.scoreChange).slice(0, 5),
+  };
+}
+
+async function refreshPredictions() {
+  const config = sanitizeConfig(readJson(CONFIG_FILE, {}));
+  const policySignals = readJson(POLICY_FILE, { updatedAt: null, signals: [], errors: [] });
+  const previous = readJson(PREDICTIONS_FILE, { predictions: [] });
+  const previousByTicker = new Map((previous.predictions || []).map((item) => [item.ticker, item]));
+  const predictions = (config.stockIdeas || [])
+    .map((stock) => buildPrediction(stock, config, policySignals, previousByTicker))
+    .sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
+  const result = {
+    updatedAt: new Date().toISOString(),
+    predictions,
+    sections: predictionSections(predictions),
+    modelVersion: "v1-blended-signals",
+    notes: [
+      "This is a research score, not a guarantee.",
+      "Congressional disclosures are delayed and treated as lagging conviction signals.",
+      "The learning layer will improve after prediction outcomes are tracked over time.",
+    ],
+  };
+  writeJson(PREDICTIONS_FILE, result);
+  return result;
 }
 
 function normalizeImportedTrade(trade) {
@@ -573,6 +893,37 @@ function summarizeEvents() {
 }
 
 async function handleApi(request, response, pathname) {
+  if (request.method === "POST" && pathname === "/api/login") {
+    const body = await collectBody(request);
+    if (!LOGIN_PIN) {
+      sendJson(response, 503, { error: "Login is not configured." });
+      return;
+    }
+    if (String(body.pin || "") !== LOGIN_PIN) {
+      sendJson(response, 401, { error: "Invalid login" });
+      return;
+    }
+    createSession(response);
+    sendJson(response, 200, { ok: true });
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/logout") {
+    clearSession(request, response);
+    sendJson(response, 200, { ok: true });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/session") {
+    sendJson(response, 200, { loggedIn: isLoggedIn(request) });
+    return;
+  }
+
+  if (!isLoggedIn(request)) {
+    sendJson(response, 401, { error: "Login required" });
+    return;
+  }
+
   if (request.method === "GET" && pathname === "/api/config") {
     sendJson(response, 200, readJson(CONFIG_FILE, {}));
     return;
@@ -583,8 +934,35 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (request.method === "GET" && pathname === "/api/predictions") {
+    const saved = readJson(PREDICTIONS_FILE, null);
+    sendJson(response, 200, saved || (await refreshPredictions()));
+    return;
+  }
+
   if (request.method === "GET" && pathname === "/api/congress-feed-status") {
     sendJson(response, 200, readJson(CONGRESS_FEED_STATUS_FILE, { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null }));
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/portfolio") {
+    if (!isPortfolioOwner(request)) {
+      sendJson(response, 401, { error: "Portfolio PIN required" });
+      return;
+    }
+    sendJson(response, 200, { positions: sanitizePortfolio(readJson(PORTFOLIO_FILE, [])) });
+    return;
+  }
+
+  if (request.method === "PUT" && pathname === "/api/portfolio") {
+    if (!isPortfolioOwner(request)) {
+      sendJson(response, 401, { error: "Portfolio PIN required" });
+      return;
+    }
+    const body = await collectBody(request);
+    const positions = sanitizePortfolio(body.positions);
+    writeJson(PORTFOLIO_FILE, positions);
+    sendJson(response, 200, { positions });
     return;
   }
 
@@ -604,7 +982,7 @@ async function handleApi(request, response, pathname) {
         sendJson(response, 200, cached);
         return;
       }
-      sendJson(response, 400, { error: error.message });
+      sendJson(response, 400, { error: publicErrorMessage(error, "Quote unavailable.") });
     }
     return;
   }
@@ -625,7 +1003,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (!isAdmin(request)) {
-    sendJson(response, 401, { error: "Admin PIN required" });
+    sendJson(response, 401, { error: ADMIN_PIN ? "Admin PIN required" : "Admin PIN is not configured." });
     return;
   }
 
@@ -668,6 +1046,11 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "POST" && pathname === "/api/admin/refresh-policy") {
     sendJson(response, 200, await refreshPolicySignals());
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/admin/refresh-predictions") {
+    sendJson(response, 200, await refreshPredictions());
     return;
   }
 
@@ -717,11 +1100,22 @@ function serveFile(response, pathname) {
 
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
+  const publicFiles = new Set(["/login.html", "/styles.css", "/icon.svg"]);
 
   if (url.pathname.startsWith("/api/")) {
     handleApi(request, response, url.pathname).catch((error) => {
-      sendJson(response, 400, { error: error.message || "Bad request" });
+      sendJson(response, 400, { error: publicErrorMessage(error, "Bad request") });
     });
+    return;
+  }
+
+  if (!isLoggedIn(request) && !publicFiles.has(url.pathname)) {
+    sendRedirect(response, "/login.html");
+    return;
+  }
+
+  if (isLoggedIn(request) && url.pathname === "/login.html") {
+    sendRedirect(response, "/");
     return;
   }
 
@@ -743,6 +1137,20 @@ if (POLICY_REFRESH_MS > 0) {
       });
     });
   }, POLICY_REFRESH_MS);
+}
+
+if (PREDICTION_REFRESH_MS > 0) {
+  setInterval(() => {
+    refreshPredictions().catch((error) => {
+      writeJson(PREDICTIONS_FILE, {
+        updatedAt: new Date().toISOString(),
+        predictions: readJson(PREDICTIONS_FILE, { predictions: [] }).predictions || [],
+        sections: {},
+        modelVersion: "v1-blended-signals",
+        errors: [{ source: "prediction scheduler", error: error.message }],
+      });
+    });
+  }, PREDICTION_REFRESH_MS);
 }
 
 if (CONGRESS_REFRESH_MS > 0 && CONGRESS_TRADES_FEED_URL) {

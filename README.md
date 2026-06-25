@@ -1,6 +1,6 @@
-# Steady Start Money App
+# PublicTradeIntel
 
-A mobile-friendly beginner money app for protecting cash first, avoiding bad debt, building emergency savings, and investing only small safe amounts.
+A private, mobile-friendly portfolio and AI trading research dashboard for tracking holdings, market prices, congressional trades, policy catalysts, and prediction-engine scores.
 
 Production domain:
 
@@ -21,20 +21,18 @@ Open:
 - Public app: `http://localhost:3000`
 - Admin backend: `http://localhost:3000/admin.html`
 
-## Admin
-
-Default local PIN:
-
-```text
-1234
-```
-
-Set a real PIN before deploying:
+## Security
 
 ```powershell
+$env:LOGIN_PIN="your-login-pin"
 $env:ADMIN_PIN="your-secure-pin"
+$env:PORTFOLIO_PIN="your-portfolio-pin"
 node server.js
 ```
+
+There is no default admin PIN. Set `LOGIN_PIN`, `ADMIN_PIN`, and `PORTFOLIO_PIN` in Render before using the deployed app.
+
+## Admin
 
 The admin page can edit:
 

@@ -24,7 +24,10 @@
         <div class="comfort-note">
           <span>Live market view</span>
           <strong>Your buys, current value, daily move, and total gain/loss.</strong>
-          <a href="admin.html">Admin</a>
+          <div class="hero-links">
+            <a href="admin.html">Admin</a>
+            <button type="button" id="logoutButton">Log out</button>
+          </div>
         </div>
       </section>
 
@@ -58,11 +61,41 @@
 
         <div class="portfolio-actions">
           <button type="button" id="refreshPortfolio">Refresh prices</button>
+          <label class="pin-inline">
+            <span>Portfolio PIN</span>
+            <input type="password" id="portfolioPin" placeholder="Sync across sessions" autocomplete="current-password" />
+          </label>
           <span id="portfolioMessage">Your portfolio is saved privately in this browser.</span>
         </div>
 
         <div class="member-summary portfolio-summary" id="portfolioSummary"></div>
         <div class="portfolio-list" id="portfolioList"></div>
+      </section>
+
+      <section class="prediction-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">AI Prediction Engine</p>
+            <h2>Hourly blended opportunity score across market, policy, and congressional signals</h2>
+          </div>
+        </div>
+
+        <div class="disclaimer-box">
+          The engine ranks research candidates using momentum, trend, volatility, liquidity, policy catalysts,
+          and congressional activity. It is a prediction score, not a guarantee.
+        </div>
+
+        <div class="member-summary" id="predictionSummary"></div>
+        <div class="prediction-tabs">
+          <button type="button" class="is-active" data-prediction-view="topBuyCandidates">Top AI buys</button>
+          <button type="button" data-prediction-view="goldSilverOpportunities">Gold/Silver</button>
+          <button type="button" data-prediction-view="strongestOneDay">1-day</button>
+          <button type="button" data-prediction-view="strongestSevenDay">7-day</button>
+          <button type="button" data-prediction-view="strongestThirtyDay">30-day</button>
+          <button type="button" data-prediction-view="congressionalTradeSignals">Congress</button>
+          <button type="button" data-prediction-view="biggestScoreIncrease">Score jumps</button>
+        </div>
+        <div class="prediction-grid" id="predictionGrid"></div>
       </section>
 
       <section class="stock-section">

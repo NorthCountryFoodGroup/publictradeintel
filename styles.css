@@ -43,6 +43,39 @@ textarea {
   padding: 32px 0 48px;
 }
 
+.login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: min(100%, 440px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 28px;
+}
+
+.login-card h1 {
+  font-size: 2.6rem;
+}
+
+.login-card form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.login-message {
+  min-height: 1.4em;
+  margin: 14px 0 0;
+  color: #8b432d;
+  font-weight: 800;
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -117,6 +150,18 @@ h3 {
   color: var(--green);
   font-weight: 900;
   text-decoration: none;
+}
+
+.hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.hero-links button {
+  width: auto;
+  padding: 9px 12px;
 }
 
 .calculator-grid {
@@ -287,6 +332,7 @@ li {
 .progress-section,
 .paths-section,
 .stock-section,
+.prediction-section,
 .best-section,
 .daytrade-section,
 .alerts-section,
@@ -294,6 +340,85 @@ li {
 .congress-section,
 .learn-section {
   margin-top: 28px;
+}
+
+.prediction-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.prediction-tabs button {
+  width: auto;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  padding: 9px 12px;
+}
+
+.prediction-tabs button.is-active {
+  border-color: rgba(39, 106, 75, 0.55);
+  background: var(--green);
+  color: #fff;
+}
+
+.prediction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.prediction-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfffd;
+  padding: 14px;
+}
+
+.prediction-meter {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: #d9e9df;
+}
+
+.prediction-meter div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+}
+
+.score-line.possible {
+  border-color: rgba(191, 139, 44, 0.28);
+  background: #fff6df;
+}
+
+.trade-levels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.trade-levels div {
+  border: 1px solid rgba(39, 106, 75, 0.14);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.trade-levels span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.trade-levels strong {
+  display: block;
+  margin-top: 5px;
 }
 
 .section-heading {
@@ -673,6 +798,20 @@ li {
   font-weight: 700;
 }
 
+.pin-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pin-inline span {
+  white-space: nowrap;
+}
+
+.pin-inline input {
+  width: min(220px, 100%);
+}
+
 .portfolio-actions button,
 .remove-position {
   width: auto;
@@ -885,6 +1024,12 @@ li {
 
   .trade-form {
     grid-template-columns: 1fr;
+  }
+
+  .pin-inline {
+    width: 100%;
+    align-items: start;
+    flex-direction: column;
   }
 
   .editor-row .wide-field {

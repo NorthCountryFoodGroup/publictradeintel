@@ -31,15 +31,19 @@ const output = {
   tradeBuyPrice: document.querySelector("#tradeBuyPrice"),
   tradeDate: document.querySelector("#tradeDate"),
   refreshPortfolio: document.querySelector("#refreshPortfolio"),
+  portfolioPin: document.querySelector("#portfolioPin"),
   portfolioMessage: document.querySelector("#portfolioMessage"),
   portfolioSummary: document.querySelector("#portfolioSummary"),
   portfolioList: document.querySelector("#portfolioList"),
+  predictionSummary: document.querySelector("#predictionSummary"),
+  predictionGrid: document.querySelector("#predictionGrid"),
   alertsList: document.querySelector("#alertsList"),
   policySummary: document.querySelector("#policySummary"),
   policySignalsGrid: document.querySelector("#policySignalsGrid"),
   congressGrid: document.querySelector("#congressGrid"),
   memberSummary: document.querySelector("#memberSummary"),
   memberOptions: document.querySelector("#memberOptions"),
+  logoutButton: document.querySelector("#logoutButton"),
 };
 
 const defaultPlans = [
@@ -142,6 +146,8 @@ let lastEventKey = "";
 let latestRecommendation = null;
 let policySignals = { updatedAt: null, signals: [], errors: [] };
 let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null };
+let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
+let predictionView = "topBuyCandidates";
 let portfolio = [];
 
 function dollars(value) {
@@ -212,6 +218,7 @@ function calculate() {
   renderPlans(activeInvestAmount);
   renderStockIdeas(activeInvestAmount);
   renderBestStocks(activeInvestAmount);
+  renderPredictions();
   renderDayTrades();
   renderCongressAlerts();
   renderPolicySignals();
@@ -549,6 +556,102 @@ function renderDayTrades() {
     .join("");
 }
 
+function pct(value) {
+  return `${Number(value || 0).toFixed(2)}%`;
+}
+
+function predictionToneClass(label) {
+  if (label === "Strong AI Buy Candidate") return "gain";
+  if (label === "Possible Trade") return "possible";
+  if (label === "Avoid for Now") return "loss";
+  return "";
+}
+
+function renderPredictions() {
+  if (!output.predictionGrid || !output.predictionSummary) return;
+  const predictions = predictionEngine.predictions || [];
+  const active = predictionEngine.sections?.[predictionView] || predictions.slice(0, 6);
+  const strong = predictions.filter((item) => item.label === "Strong AI Buy Candidate").length;
+  const possible = predictions.filter((item) => item.label === "Possible Trade").length;
+  const improved = predictions.filter((item) => item.status === "improved").length;
+  const avgScore = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + Number(item.aiOpportunityScore || 0), 0) / predictions.length)
+    : 0;
+
+  output.predictionSummary.innerHTML = `
+    <div>
+      <span>Last scan</span>
+      <strong>${predictionEngine.updatedAt ? new Date(predictionEngine.updatedAt).toLocaleString() : "Not scanned yet"}</strong>
+    </div>
+    <div>
+      <span>Tracked assets</span>
+      <strong>${predictions.length}</strong>
+    </div>
+    <div>
+      <span>Strong buys</span>
+      <strong>${strong}</strong>
+    </div>
+    <div>
+      <span>Possible trades</span>
+      <strong>${possible}</strong>
+    </div>
+    <div>
+      <span>Average score</span>
+      <strong>${avgScore}/100</strong>
+    </div>
+  `;
+
+  if (!active.length) {
+    output.predictionGrid.innerHTML = `
+      <article class="stock-card">
+        <span>No predictions yet</span>
+        <strong>Run a prediction scan</strong>
+        <p>The backend will create predictions from watchlist, market, congressional, and policy signals.</p>
+      </article>
+    `;
+    return;
+  }
+
+  output.predictionGrid.innerHTML = active
+    .map((item) => {
+      const tone = predictionToneClass(item.label);
+      const forecast = item.forecasts?.sevenDay || {};
+      return `
+        <article class="prediction-card">
+          <div class="stock-card-top">
+            <span>${escapeHtml(item.assetGroup)} | ${escapeHtml(item.expectedTimeHorizon)}</span>
+            <strong>${escapeHtml(item.ticker)}</strong>
+          </div>
+          <h3>${escapeHtml(item.name)}</h3>
+          <div class="score-line ${tone}">
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${Number(item.aiOpportunityScore) || 0}/100</strong>
+          </div>
+          <div class="prediction-meter" aria-label="AI Opportunity Score ${Number(item.aiOpportunityScore) || 0}">
+            <div style="width: ${Math.min(100, Number(item.aiOpportunityScore) || 0)}%"></div>
+          </div>
+          <div class="signal-list">
+            <span>Bullish: ${Number(item.bullishScore) || 0}/100</span>
+            <span>Bearish: ${Number(item.bearishScore) || 0}/100</span>
+            <span>Confidence: ${Number(item.confidenceScore) || 0}/100</span>
+            <span>7-day upside: ${pct(forecast.expectedUpside)}</span>
+            <span>Downside risk: ${pct(forecast.downsideRisk)}</span>
+            <span>Risk/reward: ${Number(item.riskRewardRatio || 0).toFixed(2)}</span>
+          </div>
+          <div class="trade-levels">
+            <div><span>Entry zone</span><strong>${escapeHtml(item.suggestedEntryZone)}</strong></div>
+            <div><span>Target</span><strong>${escapeHtml(item.suggestedProfitTarget)}</strong></div>
+            <div><span>Stop</span><strong>${escapeHtml(item.suggestedStopLevel)}</strong></div>
+          </div>
+          <p><strong>Primary catalyst:</strong> ${escapeHtml(item.primaryCatalyst)}</p>
+          <p>${escapeHtml(item.plainEnglish)}</p>
+          <small>${escapeHtml(item.whatChanged)}</small>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function loadPortfolio() {
   try {
     const saved = JSON.parse(localStorage.getItem("publicTradeIntelPortfolio") || "[]");
@@ -558,8 +661,52 @@ function loadPortfolio() {
   }
 }
 
-function savePortfolio() {
+async function loadPortfolioFromServer() {
+  loadPortfolio();
+  if (location.protocol === "file:") return;
+
+  const pin = localStorage.getItem("publicTradeIntelPortfolioPin") || "";
+  if (output.portfolioPin) output.portfolioPin.value = pin;
+  if (!pin) return;
+
+  try {
+    const response = await fetch("api/portfolio", {
+      cache: "no-store",
+      headers: { "x-portfolio-pin": pin },
+    });
+    if (!response.ok) throw new Error("Portfolio unavailable");
+    const data = await response.json();
+    const serverPositions = Array.isArray(data.positions) ? data.positions : [];
+    if (serverPositions.length) {
+      portfolio = serverPositions;
+      localStorage.setItem("publicTradeIntelPortfolio", JSON.stringify(portfolio));
+    } else if (portfolio.length) {
+      await savePortfolio();
+    }
+  } catch {
+    // Keep the browser copy as a fallback if the backend is unavailable.
+  }
+}
+
+async function savePortfolio() {
   localStorage.setItem("publicTradeIntelPortfolio", JSON.stringify(portfolio));
+
+  if (location.protocol === "file:") return;
+  const pin = localStorage.getItem("publicTradeIntelPortfolioPin") || "";
+  if (!pin) {
+    output.portfolioMessage.textContent = "Saved on this device. Enter your Portfolio PIN to sync it to the app backend.";
+    return;
+  }
+
+  try {
+    await fetch("api/portfolio", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-portfolio-pin": pin },
+      body: JSON.stringify({ positions: portfolio }),
+    });
+  } catch {
+    output.portfolioMessage.textContent = "Saved on this device. Cloud portfolio save is temporarily unavailable.";
+  }
 }
 
 function cachedMarketQuote(ticker) {
@@ -781,7 +928,7 @@ async function refreshPortfolioPrices() {
     }
   }
   portfolio = next.map(withDailySnapshot);
-  savePortfolio();
+  await savePortfolio();
   renderPortfolio();
   output.portfolioMessage.textContent = "Portfolio prices refreshed.";
 }
@@ -828,7 +975,7 @@ async function addPortfolioPosition(event) {
   });
   portfolio[0] = withDailySnapshot(portfolio[0]);
 
-  savePortfolio();
+  await savePortfolio();
   output.tradeForm.reset();
   output.tradeDate.value = new Date().toISOString().slice(0, 10);
   output.portfolioMessage.textContent = `${ticker} buy added to recent activity.`;
@@ -1091,6 +1238,16 @@ async function loadPolicySignals() {
   }
 }
 
+async function loadPredictions() {
+  try {
+    const response = await fetch("api/predictions", { cache: "no-store" });
+    if (!response.ok) throw new Error("Predictions unavailable");
+    predictionEngine = await response.json();
+  } catch {
+    predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
+  }
+}
+
 async function loadCongressFeedStatus() {
   try {
     const response = await fetch("api/congress-feed-status", { cache: "no-store" });
@@ -1144,12 +1301,31 @@ document.querySelector("#memberSearch")?.addEventListener("input", renderCongres
 document.querySelector("#memberTradeFilter")?.addEventListener("change", renderCongressTrades);
 output.tradeForm?.addEventListener("submit", addPortfolioPosition);
 output.refreshPortfolio?.addEventListener("click", refreshPortfolioPrices);
+output.portfolioPin?.addEventListener("change", async () => {
+  const pin = output.portfolioPin.value.trim();
+  if (pin) localStorage.setItem("publicTradeIntelPortfolioPin", pin);
+  else localStorage.removeItem("publicTradeIntelPortfolioPin");
+  await loadPortfolioFromServer();
+  calculate();
+  output.portfolioMessage.textContent = pin ? "Portfolio PIN saved on this device." : "Portfolio PIN removed. Saving on this device only.";
+});
+document.querySelectorAll("[data-prediction-view]").forEach((button) => {
+  button.addEventListener("click", () => {
+    predictionView = button.dataset.predictionView;
+    document.querySelectorAll("[data-prediction-view]").forEach((tab) => tab.classList.toggle("is-active", tab === button));
+    renderPredictions();
+  });
+});
 output.portfolioList?.addEventListener("click", (event) => {
   const button = event.target.closest(".remove-position");
   if (!button) return;
   portfolio = portfolio.filter((position) => position.id !== button.dataset.id);
   savePortfolio();
   renderPortfolio();
+});
+output.logoutButton?.addEventListener("click", async () => {
+  await fetch("api/logout", { method: "POST" }).catch(() => {});
+  location.href = "/login.html";
 });
 
 document.querySelector("#resetDemo")?.addEventListener("click", () => {
@@ -1163,6 +1339,5 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
-loadPortfolio();
 if (output.tradeDate) output.tradeDate.value = new Date().toISOString().slice(0, 10);
-Promise.all([loadSettings(), loadPolicySignals(), loadCongressFeedStatus()]).then(calculate);
+Promise.all([loadSettings(), loadPolicySignals(), loadPredictions(), loadCongressFeedStatus(), loadPortfolioFromServer()]).then(calculate);

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#276a4b" />
+    <title>PublicTradeIntel Login</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="login-shell">
+      <section class="login-card">
+        <p class="eyebrow">Private access</p>
+        <h1>PublicTradeIntel</h1>
+        <p>Enter your login PIN to open the portfolio dashboard.</p>
+        <form id="loginForm">
+          <label>
+            <span>Login PIN</span>
+            <input type="password" id="loginPin" autocomplete="current-password" autofocus />
+          </label>
+          <button type="submit">Log in</button>
+        </form>
+        <p class="login-message" id="loginMessage"></p>
+      </section>
+    </main>
+
+    <script>
+      document.querySelector("#loginForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const message = document.querySelector("#loginMessage");
+        message.textContent = "Checking...";
+        try {
+          const response = await fetch("api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pin: document.querySelector("#loginPin").value }),
+          });
+          if (!response.ok) throw new Error("That PIN did not work.");
+          location.href = "/";
+        } catch (error) {
+          message.textContent = error.message;
+        }
+      });
+    </script>
+  </body>
+</html>
