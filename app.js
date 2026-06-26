@@ -147,7 +147,7 @@ let latestRecommendation = null;
 let policySignals = { updatedAt: null, signals: [], errors: [] };
 let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null };
 let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
-let predictionView = "topBuyCandidates";
+let predictionView = "dailyOpportunities";
 let portfolio = [];
 
 function dollars(value) {
@@ -561,10 +561,28 @@ function pct(value) {
 }
 
 function predictionToneClass(label) {
-  if (label === "Strong AI Buy Candidate") return "gain";
-  if (label === "Possible Trade") return "possible";
-  if (label === "Avoid for Now") return "loss";
+  if (label === "Strong AI Buy Candidate" || label === "Strong Daily Setup" || label === "Strong Weekly Setup" || label === "Strong Monthly Setup") return "gain";
+  if (label === "Possible Trade" || label === "Possible Daily Trade" || label === "Possible Weekly Trade" || label === "Possible Monthly Trade") return "possible";
+  if (label === "Avoid for Now" || label === "Bad for Today" || label === "Weak This Week" || label === "Weak This Month") return "loss";
   return "";
+}
+
+function predictionModelForView(item) {
+  const models = item.timeframeModels || {};
+  if (predictionView === "dailyOpportunities" || predictionView === "strongestOneDay") return models.daily || null;
+  if (predictionView === "weeklyOpportunities" || predictionView === "strongestSevenDay") return models.weekly || null;
+  if (predictionView === "monthlyOpportunities" || predictionView === "strongestThirtyDay") return models.monthly || null;
+  const best = String(item.bestTimeframe || "").toLowerCase();
+  return models[best] || models.weekly || models.daily || models.monthly || null;
+}
+
+function predictionModelTitle(model) {
+  if (!model) return "Selected timeframe";
+  return `${model.name} Model`;
+}
+
+function scoreValue(value) {
+  return Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
 }
 
 function renderPredictions() {
@@ -572,8 +590,15 @@ function renderPredictions() {
   const predictions = predictionEngine.predictions || [];
   const active = predictionEngine.sections?.[predictionView] || predictions.slice(0, 6);
   const strong = predictions.filter((item) => item.label === "Strong AI Buy Candidate").length;
-  const possible = predictions.filter((item) => item.label === "Possible Trade").length;
-  const improved = predictions.filter((item) => item.status === "improved").length;
+  const dailyAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.dailyScore), 0) / predictions.length)
+    : 0;
+  const weeklyAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.weeklyScore), 0) / predictions.length)
+    : 0;
+  const monthlyAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.monthlyScore), 0) / predictions.length)
+    : 0;
   const avgScore = predictions.length
     ? Math.round(predictions.reduce((sum, item) => sum + Number(item.aiOpportunityScore || 0), 0) / predictions.length)
     : 0;
@@ -588,15 +613,19 @@ function renderPredictions() {
       <strong>${predictions.length}</strong>
     </div>
     <div>
-      <span>Strong buys</span>
-      <strong>${strong}</strong>
+      <span>Daily avg</span>
+      <strong>${dailyAvg}/100</strong>
     </div>
     <div>
-      <span>Possible trades</span>
-      <strong>${possible}</strong>
+      <span>Weekly avg</span>
+      <strong>${weeklyAvg}/100</strong>
     </div>
     <div>
-      <span>Average score</span>
+      <span>Monthly avg</span>
+      <strong>${monthlyAvg}/100</strong>
+    </div>
+    <div>
+      <span>Overall avg</span>
       <strong>${avgScore}/100</strong>
     </div>
   `;
@@ -614,38 +643,67 @@ function renderPredictions() {
 
   output.predictionGrid.innerHTML = active
     .map((item) => {
-      const tone = predictionToneClass(item.label);
-      const forecast = item.forecasts?.sevenDay || {};
+      const model = predictionModelForView(item);
+      const modelLabel = model?.label || item.label || "Research candidate";
+      const tone = predictionToneClass(modelLabel);
+      const entryZone = model?.entryZone || item.suggestedEntryZone || "Needs current market data";
+      const profitTarget = model?.profitTarget || item.suggestedProfitTarget || "Needs current market data";
+      const stopLevel = model?.stopLevel || item.suggestedStopLevel || "Needs current market data";
+      const reasons = Array.isArray(model?.reasons) && model.reasons.length ? model.reasons : [item.predictionReason || item.plainEnglish || item.primaryCatalyst];
+      const failureRisks = Array.isArray(model?.failureRisks) && model.failureRisks.length ? model.failureRisks : [item.failureRisk || "The setup can fail if market conditions change faster than the signal updates."];
       return `
         <article class="prediction-card">
           <div class="stock-card-top">
-            <span>${escapeHtml(item.assetGroup)} | ${escapeHtml(item.expectedTimeHorizon)}</span>
+            <span>${escapeHtml(item.assetGroup)} | Best: ${escapeHtml(item.bestTimeframe || "mixed")}</span>
             <strong>${escapeHtml(item.ticker)}</strong>
           </div>
           <h3>${escapeHtml(item.name)}</h3>
           <div class="score-line ${tone}">
-            <span>${escapeHtml(item.label)}</span>
+            <span>${escapeHtml(modelLabel)}</span>
             <strong>${Number(item.aiOpportunityScore) || 0}/100</strong>
           </div>
           <div class="prediction-meter" aria-label="AI Opportunity Score ${Number(item.aiOpportunityScore) || 0}">
             <div style="width: ${Math.min(100, Number(item.aiOpportunityScore) || 0)}%"></div>
           </div>
+          <div class="timeframe-score-grid">
+            <div>
+              <span>Daily Score</span>
+              <strong>${scoreValue(item.dailyScore)}/100</strong>
+              <small>1-day setup</small>
+            </div>
+            <div>
+              <span>Weekly Score</span>
+              <strong>${scoreValue(item.weeklyScore)}/100</strong>
+              <small>3-7 day setup</small>
+            </div>
+            <div>
+              <span>Monthly Score</span>
+              <strong>${scoreValue(item.monthlyScore)}/100</strong>
+              <small>30-day setup</small>
+            </div>
+          </div>
           <div class="signal-list">
-            <span>Bullish: ${Number(item.bullishScore) || 0}/100</span>
-            <span>Bearish: ${Number(item.bearishScore) || 0}/100</span>
-            <span>Confidence: ${Number(item.confidenceScore) || 0}/100</span>
-            <span>7-day upside: ${pct(forecast.expectedUpside)}</span>
-            <span>Downside risk: ${pct(forecast.downsideRisk)}</span>
+            <span>Overall Opportunity Score: ${Number(item.aiOpportunityScore) || 0}/100</span>
+            <span>Confidence Score: ${Number(item.confidenceScore) || 0}/100</span>
+            <span>Risk Score: ${Number(item.riskScore) || 0}/100</span>
+            <span>${escapeHtml(predictionModelTitle(model))} upside: ${pct(model?.expectedUpside)}</span>
+            <span>${escapeHtml(predictionModelTitle(model))} downside: ${pct(model?.downsideRisk)}</span>
             <span>Risk/reward: ${Number(item.riskRewardRatio || 0).toFixed(2)}</span>
           </div>
           <div class="trade-levels">
-            <div><span>Entry zone</span><strong>${escapeHtml(item.suggestedEntryZone)}</strong></div>
-            <div><span>Target</span><strong>${escapeHtml(item.suggestedProfitTarget)}</strong></div>
-            <div><span>Stop</span><strong>${escapeHtml(item.suggestedStopLevel)}</strong></div>
+            <div><span>${escapeHtml(predictionModelTitle(model))} entry</span><strong>${escapeHtml(entryZone)}</strong></div>
+            <div><span>Target</span><strong>${escapeHtml(profitTarget)}</strong></div>
+            <div><span>Fail line</span><strong>${escapeHtml(stopLevel)}</strong></div>
           </div>
-          <p><strong>Primary catalyst:</strong> ${escapeHtml(item.primaryCatalyst)}</p>
-          <p>${escapeHtml(item.plainEnglish)}</p>
-          <small>${escapeHtml(item.whatChanged)}</small>
+          <div class="model-reasons">
+            <strong>Reason for prediction</strong>
+            ${reasons.map((reason) => `<p>${escapeHtml(reason)}</p>`).join("")}
+          </div>
+          <div class="model-reasons failure-list">
+            <strong>What could make it fail</strong>
+            ${failureRisks.map((risk) => `<p>${escapeHtml(risk)}</p>`).join("")}
+          </div>
+          <small>${escapeHtml(item.whatChanged || item.plainEnglish || "")}</small>
         </article>
       `;
     })

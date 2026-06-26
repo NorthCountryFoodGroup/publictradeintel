@@ -391,9 +391,59 @@ li {
   background: var(--green);
 }
 
+.timeframe-score-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.timeframe-score-grid div {
+  border: 1px solid rgba(36, 123, 134, 0.18);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.timeframe-score-grid span,
+.timeframe-score-grid small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.timeframe-score-grid strong {
+  display: block;
+  margin: 6px 0 4px;
+  color: var(--green);
+  font-size: 1.25rem;
+}
+
 .score-line.possible {
   border-color: rgba(191, 139, 44, 0.28);
   background: #fff6df;
+}
+
+.model-reasons {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.model-reasons strong {
+  margin: 0;
+  color: var(--ink);
+}
+
+.model-reasons p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.failure-list {
+  border-color: rgba(139, 67, 45, 0.22);
 }
 
 .trade-levels {

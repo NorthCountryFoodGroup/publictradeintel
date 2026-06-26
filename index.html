@@ -76,22 +76,22 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">AI Prediction Engine</p>
-            <h2>Hourly blended opportunity score across market, policy, and congressional signals</h2>
+            <h2>Separate daily, weekly, and monthly opportunity models</h2>
           </div>
         </div>
 
         <div class="disclaimer-box">
-          The engine ranks research candidates using momentum, trend, volatility, liquidity, policy catalysts,
-          and congressional activity. It is a prediction score, not a guarantee.
+          The engine scores each stock across three different timeframes. A ticker can be weak for today,
+          stronger for the week, and strongest for the month. These are research predictions, not guarantees.
         </div>
 
         <div class="member-summary" id="predictionSummary"></div>
         <div class="prediction-tabs">
-          <button type="button" class="is-active" data-prediction-view="topBuyCandidates">Top AI buys</button>
+          <button type="button" class="is-active" data-prediction-view="dailyOpportunities">Daily trades</button>
+          <button type="button" data-prediction-view="weeklyOpportunities">Weekly trades</button>
+          <button type="button" data-prediction-view="monthlyOpportunities">Monthly trades</button>
+          <button type="button" data-prediction-view="topBuyCandidates">Overall</button>
           <button type="button" data-prediction-view="goldSilverOpportunities">Gold/Silver</button>
-          <button type="button" data-prediction-view="strongestOneDay">1-day</button>
-          <button type="button" data-prediction-view="strongestSevenDay">7-day</button>
-          <button type="button" data-prediction-view="strongestThirtyDay">30-day</button>
           <button type="button" data-prediction-view="congressionalTradeSignals">Congress</button>
           <button type="button" data-prediction-view="biggestScoreIncrease">Score jumps</button>
         </div>
