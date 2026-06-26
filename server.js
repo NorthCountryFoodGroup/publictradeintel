@@ -1219,12 +1219,43 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
 
 function previousRanks(previousSections, key) {
   const rows = Array.isArray(previousSections?.[key]) ? previousSections[key] : [];
-  return new Map(rows.map((item, index) => [item.ticker, Number(item.rank) || index + 1]));
+  return new Map(rows.map((item, index) => [item.ticker, { ...item, rank: Number(item.rank) || index + 1 }]));
+}
+
+function signalChangeReasons(previous, current) {
+  if (!previous) return [];
+  const checks = [
+    { label: "volume/unusual activity", current: current.timeframeModels?.oneDay?.metrics?.unusualVolume, previous: previous.timeframeModels?.oneDay?.metrics?.unusualVolume },
+    { label: "sector strength", current: current.modelScores?.sectorStrength, previous: previous.modelScores?.sectorStrength },
+    { label: "momentum", current: current.modelScores?.momentum, previous: previous.modelScores?.momentum },
+    { label: "breakout confirmation", current: current.modelScores?.breakout, previous: previous.modelScores?.breakout },
+    { label: "news impact", current: current.modelScores?.newsImpact, previous: previous.modelScores?.newsImpact },
+    { label: "liquidity", current: current.modelScores?.liquidity, previous: previous.modelScores?.liquidity },
+    { label: "risk", current: current.riskScore, previous: previous.riskScore, inverse: true },
+  ];
+
+  return checks
+    .map((item) => {
+      const currentValue = Number(item.current);
+      const previousValue = Number(item.previous);
+      if (!Number.isFinite(currentValue) || !Number.isFinite(previousValue)) return null;
+      const delta = currentValue - previousValue;
+      if (Math.abs(delta) < 4) return null;
+      const improved = item.inverse ? delta < 0 : delta > 0;
+      return {
+        label: item.label,
+        delta,
+        text: `${item.label} ${improved ? "improved" : "weakened"} by ${Math.abs(Math.round(delta))} points`,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 2);
 }
 
 function rankMovement(ticker, rank, previousMap, item, timeframeName) {
-  const previousRank = previousMap.get(ticker);
-  if (!previousRank) {
+  const previous = previousMap.get(ticker);
+  if (!previous) {
     return {
       status: "new addition",
       previousRank: null,
@@ -1232,13 +1263,20 @@ function rankMovement(ticker, rank, previousMap, item, timeframeName) {
       explanation: `${ticker} is a new addition to the ${timeframeName} Top 25.`,
     };
   }
+  const previousRank = previous.rank;
   const rankChange = previousRank - rank;
+  const reasons = signalChangeReasons(previous, item);
+  const reasonText = reasons.length
+    ? reasons.map((reason) => reason.text).join(" and ")
+    : rankChange >= 0
+    ? item.strongestSupportingSignal || "supporting signals improved"
+    : item.weakestSignal || "one or more signals weakened";
   if (rankChange > 0) {
     return {
       status: "rank increase",
       previousRank,
       rankChange,
-      explanation: `${ticker} moved from #${previousRank} to #${rank} because ${item.strongestSupportingSignal || "supporting signals improved"}.`,
+      explanation: `${ticker} moved from #${previousRank} to #${rank} because ${reasonText}.`,
     };
   }
   if (rankChange < 0) {
@@ -1246,7 +1284,7 @@ function rankMovement(ticker, rank, previousMap, item, timeframeName) {
       status: "rank drop",
       previousRank,
       rankChange,
-      explanation: `${ticker} dropped from #${previousRank} to #${rank} because ${item.weakestSignal || "one or more signals weakened"}.`,
+      explanation: `${ticker} dropped from #${previousRank} to #${rank} because ${reasonText}.`,
     };
   }
   return {
@@ -1342,6 +1380,8 @@ function predictionSections(predictions, previousSections = {}) {
   const top25OneMonth = rankedTopList(predictions, { key: "top25OneMonth", timeframe: "1-month trade", modelKey: "thirtyDay", scoreKey: "thirtyDayScore", previousSections });
   const top25OneYear = rankedTopList(predictions, { key: "top25OneYear", timeframe: "1-year hold", modelKey: "oneYear", scoreKey: "oneYearScore", previousSections });
   const lists = { top25OneDay, top25SevenDay, top25OneMonth, top25OneYear };
+  const comparisons = comparisonView(lists);
+  const highAlignmentTickers = new Set(comparisons.filter((item) => item.label === "High Alignment Candidate").map((item) => item.ticker));
   return {
     topBuyCandidates: byScore.slice(0, 25),
     top25OneDay,
@@ -1356,8 +1396,26 @@ function predictionSections(predictions, previousSections = {}) {
       .filter((item) => item.oneDayScore < 55 || item.riskScore >= 70)
       .sort((a, b) => (b.riskScore - a.riskScore) || (a.oneDayScore - b.oneDayScore))
       .slice(0, 25)
-      .map((item, index) => ({ ...item, rank: index + 1, timeframe: "Avoid today", aiScore: item.oneDayScore, whyTop25: "Danger list: weak short-term setup or elevated risk.", whyMayBeWrong: item.failureRisk })),
-    comparisonView: comparisonView(lists),
+      .map((item, index) => ({
+        ...item,
+        rank: index + 1,
+        timeframe: "Avoid today",
+        aiScore: item.oneDayScore,
+        whyTop25: `Danger today: 1-day score ${item.oneDayScore}/100 with risk ${item.riskScore}/100.`,
+        whyMayBeWrong: item.failureRisk,
+        fallOffReason: "Leaves the Avoid List if risk falls, 1-day momentum improves, or stronger liquidity/news confirmation appears.",
+      })),
+    comparisonView: comparisons,
+    highAlignmentCandidates: byScore
+      .filter((item) => highAlignmentTickers.has(item.ticker))
+      .map((item, index) => ({
+        ...item,
+        rank: index + 1,
+        timeframe: "7-day + 1-month + 1-year alignment",
+        aiScore: item.aiOpportunityScore,
+        whyTop25: "High Alignment Candidate: appears across the 7-day, 1-month, and 1-year ranked lists.",
+        whyMayBeWrong: item.failureRisk,
+      })),
     changedSinceLastScan: [...top25OneDay, ...top25SevenDay, ...top25OneMonth, ...top25OneYear]
       .filter((item) => item.rankMovement?.status !== "repeated winner")
       .slice(0, 40),
