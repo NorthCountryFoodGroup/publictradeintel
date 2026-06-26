@@ -87,6 +87,7 @@
 
         <div class="member-summary" id="predictionSummary"></div>
         <div class="prediction-sort-bar">
+          <button type="button" id="runPredictionScan">Run prediction scan</button>
           <label>
             <span>Sort current list by</span>
             <select id="predictionSort">
@@ -100,6 +101,7 @@
             </select>
           </label>
         </div>
+        <p class="scan-message" id="predictionScanMessage"></p>
         <div class="prediction-tabs">
           <button type="button" class="is-active" data-prediction-view="top25OneDay">Top 25 1-day</button>
           <button type="button" data-prediction-view="top25SevenDay">Top 25 7-day</button>

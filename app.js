@@ -38,6 +38,8 @@ const output = {
   predictionSummary: document.querySelector("#predictionSummary"),
   predictionGrid: document.querySelector("#predictionGrid"),
   predictionSort: document.querySelector("#predictionSort"),
+  runPredictionScan: document.querySelector("#runPredictionScan"),
+  predictionScanMessage: document.querySelector("#predictionScanMessage"),
   alertsList: document.querySelector("#alertsList"),
   policySummary: document.querySelector("#policySummary"),
   policySignalsGrid: document.querySelector("#policySignalsGrid"),
@@ -712,7 +714,8 @@ function renderPredictions() {
       <article class="stock-card">
         <span>No predictions yet</span>
         <strong>Run a prediction scan</strong>
-        <p>The backend will create predictions from watchlist, market, congressional, and policy signals.</p>
+        <p>The backend will load the watchlist, refresh market/news/congressional/policy signals, score each ticker, save the prediction records, and refresh this dashboard.</p>
+        <button type="button" class="inline-scan-button" data-run-prediction-scan>Run prediction scan</button>
       </article>
     `;
     return;
@@ -845,6 +848,52 @@ function renderPredictions() {
       `;
     })
     .join("");
+}
+
+function predictionErrorMessage(error, fallback = "Prediction scan failed") {
+  const message = String(error?.message || fallback);
+  if (/failed to fetch|network/i.test(message)) return "Backend route not connected";
+  if (/No watchlist tickers found/i.test(message)) return "No watchlist tickers found";
+  if (/Market data API key missing/i.test(message)) return "Market data API key missing";
+  if (/Database write failed/i.test(message)) return "Database write failed";
+  if (/Prediction scan failed/i.test(message)) return "Prediction scan failed";
+  return message;
+}
+
+async function runPredictionScan() {
+  if (!output.runPredictionScan && !output.predictionGrid) return;
+  const buttons = [output.runPredictionScan, ...document.querySelectorAll("[data-run-prediction-scan]")].filter(Boolean);
+  buttons.forEach((button) => {
+    button.disabled = true;
+    button.textContent = "Scanning...";
+  });
+  if (output.predictionScanMessage) output.predictionScanMessage.textContent = "Running prediction scan...";
+
+  try {
+    const response = await fetch("api/predictions/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    let result = null;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error("Backend route not connected");
+    }
+    if (!response.ok) throw new Error(result.error || result.detail || "Prediction scan failed");
+    predictionEngine = result;
+    const warningText = Array.isArray(result.warnings) && result.warnings.length ? ` Warnings: ${result.warnings.join(" ")}` : "";
+    if (output.predictionScanMessage) output.predictionScanMessage.textContent = `Prediction scan complete. ${result.predictions?.length || 0} records generated.${warningText}`;
+    renderPredictions();
+  } catch (error) {
+    if (output.predictionScanMessage) output.predictionScanMessage.textContent = predictionErrorMessage(error);
+  } finally {
+    buttons.forEach((button) => {
+      button.disabled = false;
+      button.textContent = "Run prediction scan";
+    });
+  }
 }
 
 function loadPortfolio() {
@@ -1512,6 +1561,10 @@ document.querySelectorAll("[data-prediction-view]").forEach((button) => {
   });
 });
 output.predictionSort?.addEventListener("change", renderPredictions);
+output.runPredictionScan?.addEventListener("click", runPredictionScan);
+output.predictionGrid?.addEventListener("click", (event) => {
+  if (event.target.closest("[data-run-prediction-scan]")) runPredictionScan();
+});
 output.portfolioList?.addEventListener("click", (event) => {
   const button = event.target.closest(".remove-position");
   if (!button) return;

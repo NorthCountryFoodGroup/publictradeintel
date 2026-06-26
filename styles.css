@@ -351,12 +351,29 @@ li {
 
 .prediction-sort-bar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: end;
+  gap: 10px;
   margin-bottom: 12px;
+}
+
+.prediction-sort-bar button,
+.inline-scan-button {
+  width: auto;
+  padding: 11px 14px;
 }
 
 .prediction-sort-bar label {
   width: min(100%, 280px);
+}
+
+.scan-message {
+  min-height: 1.4em;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
 }
 
 .prediction-tabs button {

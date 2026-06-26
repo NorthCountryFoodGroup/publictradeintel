@@ -1439,9 +1439,69 @@ function predictionSections(predictions, previousSections = {}) {
   };
 }
 
-async function refreshPredictions() {
-  const config = sanitizeConfig(readJson(CONFIG_FILE, {}));
-  const policySignals = readJson(POLICY_FILE, { updatedAt: null, signals: [], errors: [] });
+function samplePredictionConfig() {
+  const base = sanitizeConfig(readJson(CONFIG_FILE, {}));
+  const existing = Array.isArray(base.stockIdeas) ? base.stockIdeas : [];
+  if (existing.length) return base;
+  return sanitizeConfig({
+    ...base,
+    stockIdeas: [
+      {
+        ticker: "NVDA",
+        name: "NVIDIA",
+        type: "Stock",
+        risk: "growth",
+        valuationScore: 62,
+        momentumScore: 86,
+        qualityScore: 90,
+        volatilityScore: 58,
+        pressScore: 88,
+        pressNotes: "Sample AI infrastructure momentum signal for development scans.",
+        committeeScore: 70,
+        committeeNotes: "Sample semiconductor policy exposure.",
+        aiOutlook: "Sample prediction row used only when development data is missing.",
+        riskNote: "High valuation and volatility can reverse quickly.",
+      },
+      {
+        ticker: "MSFT",
+        name: "Microsoft",
+        type: "Stock",
+        risk: "balanced",
+        valuationScore: 74,
+        momentumScore: 72,
+        qualityScore: 92,
+        volatilityScore: 76,
+        pressScore: 74,
+        pressNotes: "Sample cloud and AI platform strength.",
+        committeeScore: 54,
+        committeeNotes: "Sample enterprise software policy exposure.",
+        aiOutlook: "Sample durable compounder row for development scans.",
+        riskNote: "Growth can slow if cloud demand weakens.",
+      },
+      {
+        ticker: "VOO",
+        name: "Vanguard S&P 500 ETF",
+        type: "ETF",
+        risk: "balanced",
+        valuationScore: 70,
+        momentumScore: 66,
+        qualityScore: 84,
+        volatilityScore: 82,
+        pressScore: 48,
+        pressNotes: "Sample broad-market ETF baseline.",
+        committeeScore: 32,
+        committeeNotes: "Low single-policy exposure.",
+        aiOutlook: "Sample market benchmark row.",
+        riskNote: "Market-wide drawdowns remain possible.",
+      },
+    ],
+  });
+}
+
+async function refreshPredictions(options = {}) {
+  const config = sanitizeConfig(options.config || readJson(CONFIG_FILE, {}));
+  const policySignals = options.policySignals || readJson(POLICY_FILE, { updatedAt: null, signals: [], errors: [] });
+  const warnings = Array.isArray(options.warnings) ? [...options.warnings] : [];
   const previous = readJson(PREDICTIONS_FILE, { predictions: [] });
   const previousByTicker = new Map((previous.predictions || []).map((item) => [item.ticker, item]));
   const predictions = (config.stockIdeas || [])
@@ -1468,6 +1528,8 @@ async function refreshPredictions() {
       "best-performing model",
       "worst-performing model",
     ],
+    warnings,
+    errors: [],
     modelVersion: "v4-top25-ranking-engine",
     notes: [
       "This engine produces separate Top 25 lists for 1-day trades, 7-day trades, 1-month trades, and 1-year holds.",
@@ -1477,8 +1539,91 @@ async function refreshPredictions() {
       "Market regime and data quality influence how much confidence the app gives each opportunity.",
     ],
   };
-  writeJson(PREDICTIONS_FILE, result);
+  try {
+    writeJson(PREDICTIONS_FILE, result);
+  } catch (error) {
+    const wrapped = new Error(`Database write failed: ${error.message}`);
+    wrapped.code = "DATABASE_WRITE_FAILED";
+    throw wrapped;
+  }
   return result;
+}
+
+async function runPredictionScan() {
+  const warnings = [];
+  let config = sanitizeConfig(readJson(CONFIG_FILE, {}));
+  const tickers = uniqueTickers(config);
+  const developmentMode = process.env.NODE_ENV !== "production";
+
+  if (!tickers.length) {
+    if (!developmentMode) {
+      const error = new Error("No watchlist tickers found");
+      error.code = "NO_WATCHLIST_TICKERS";
+      throw error;
+    }
+    warnings.push("No watchlist tickers found. Development sample predictions were used.");
+    config = samplePredictionConfig();
+  }
+
+  if (!MARKET_API_KEY) {
+    warnings.push("Market data API key missing. Using cached/fallback market data when available.");
+  }
+
+  try {
+    const market = await refreshMarketData(config);
+    config = market.config;
+    if (market.errors.length) {
+      warnings.push(`Market data unavailable for ${market.errors.length} ticker(s). Scores used saved or sample market values where needed.`);
+    }
+    try {
+      writeJson(CONFIG_FILE, config);
+    } catch (error) {
+      const wrapped = new Error(`Database write failed: ${error.message}`);
+      wrapped.code = "DATABASE_WRITE_FAILED";
+      throw wrapped;
+    }
+  } catch (error) {
+    warnings.push(`Market data refresh failed: ${publicErrorMessage(error, "Market data unavailable.")}`);
+    if (developmentMode) config = samplePredictionConfig();
+  }
+
+  let policySignals = readJson(POLICY_FILE, { updatedAt: null, signals: [], errors: [] });
+  try {
+    policySignals = await refreshPolicySignals();
+  } catch (error) {
+    warnings.push(`Policy/news signal refresh failed: ${publicErrorMessage(error, "Policy/news signals unavailable.")}`);
+  }
+
+  if (CONGRESS_TRADES_FEED_URL) {
+    try {
+      const congress = await refreshCongressTradeFeed();
+      config = congress.config || config;
+    } catch (error) {
+      warnings.push(`Congressional feed refresh failed: ${publicErrorMessage(error, "Congressional feed unavailable.")}`);
+    }
+  } else {
+    warnings.push("Congressional feed provider not connected. Using saved congressional trades only.");
+  }
+
+  try {
+    const result = await refreshPredictions({ config, policySignals, warnings });
+    if (!Array.isArray(result.predictions) || !result.predictions.length) {
+      if (!developmentMode) {
+        const error = new Error("Prediction scan failed");
+        error.code = "PREDICTION_SCAN_FAILED";
+        throw error;
+      }
+      warnings.push("Prediction scan produced no rows. Development sample predictions were used.");
+      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings });
+    }
+    return result;
+  } catch (error) {
+    if (developmentMode && error.code !== "DATABASE_WRITE_FAILED") {
+      warnings.push(`Prediction scan failed: ${error.message}. Development sample predictions were used.`);
+      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings });
+    }
+    throw error;
+  }
 }
 
 function normalizeImportedTrade(trade) {
@@ -1669,8 +1814,38 @@ async function handleApi(request, response, pathname) {
   }
 
   if (request.method === "GET" && pathname === "/api/predictions") {
-    const saved = readJson(PREDICTIONS_FILE, null);
-    sendJson(response, 200, saved || (await refreshPredictions()));
+    try {
+      const saved = readJson(PREDICTIONS_FILE, null);
+      sendJson(response, 200, saved && Array.isArray(saved.predictions) && saved.predictions.length ? saved : await runPredictionScan());
+    } catch (error) {
+      sendJson(response, 500, {
+        error: error.code === "NO_WATCHLIST_TICKERS" ? "No watchlist tickers found" : error.code === "DATABASE_WRITE_FAILED" ? "Database write failed" : "Prediction scan failed",
+        detail: publicErrorMessage(error, "Prediction scan failed."),
+      });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/predictions/scan") {
+    try {
+      sendJson(response, 200, await runPredictionScan());
+    } catch (error) {
+      const status =
+        error.code === "NO_WATCHLIST_TICKERS"
+          ? 400
+          : error.code === "DATABASE_WRITE_FAILED"
+          ? 500
+          : 500;
+      sendJson(response, status, {
+        error:
+          error.code === "NO_WATCHLIST_TICKERS"
+            ? "No watchlist tickers found"
+            : error.code === "DATABASE_WRITE_FAILED"
+            ? "Database write failed"
+            : "Prediction scan failed",
+        detail: publicErrorMessage(error, "Prediction scan failed."),
+      });
+    }
     return;
   }
 
@@ -1784,7 +1959,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (request.method === "POST" && pathname === "/api/admin/refresh-predictions") {
-    sendJson(response, 200, await refreshPredictions());
+    sendJson(response, 200, await runPredictionScan());
     return;
   }
 
