@@ -349,6 +349,16 @@ li {
   margin-bottom: 14px;
 }
 
+.prediction-sort-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.prediction-sort-bar label {
+  width: min(100%, 280px);
+}
+
 .prediction-tabs button {
   width: auto;
   border: 1px solid var(--line);
@@ -507,6 +517,25 @@ li {
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.35;
+}
+
+.rank-change {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(36, 123, 134, 0.18);
+  border-radius: 8px;
+  background: #eef9fa;
+  padding: 10px 12px;
+}
+
+.rank-change strong {
+  margin: 0;
+}
+
+.rank-change span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.4;
 }
 
 .trade-levels {

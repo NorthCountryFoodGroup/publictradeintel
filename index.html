@@ -81,21 +81,37 @@
         </div>
 
         <div class="disclaimer-box">
-          The engine scores each stock across 1-day, 3-day, 7-day, and 30-day horizons using ensemble signals,
-          market regime awareness, data quality, similar setups, and portfolio impact. These are research predictions,
-          not guarantees.
+          The engine builds separate Top 25 lists for 1-day trades, 7-day trades, 1-month trades, and 1-year holds.
+          Each list uses different weights, rank movement, evidence, failure risks, and list-overlap labels.
         </div>
 
         <div class="member-summary" id="predictionSummary"></div>
+        <div class="prediction-sort-bar">
+          <label>
+            <span>Sort current list by</span>
+            <select id="predictionSort">
+              <option value="rank">Rank</option>
+              <option value="upside">Highest upside</option>
+              <option value="confidence">Highest confidence</option>
+              <option value="risk">Lowest risk</option>
+              <option value="riskReward">Best risk/reward</option>
+              <option value="improved">Most improved</option>
+              <option value="smallAccount">Best for small account</option>
+            </select>
+          </label>
+        </div>
         <div class="prediction-tabs">
-          <button type="button" class="is-active" data-prediction-view="oneDayOpportunities">1-day trades</button>
-          <button type="button" data-prediction-view="threeDayOpportunities">3-day trades</button>
-          <button type="button" data-prediction-view="sevenDayOpportunities">7-day trades</button>
-          <button type="button" data-prediction-view="thirtyDayOpportunities">30-day trades</button>
-          <button type="button" data-prediction-view="topBuyCandidates">Overall</button>
-          <button type="button" data-prediction-view="goldSilverOpportunities">Gold/Silver</button>
-          <button type="button" data-prediction-view="congressionalTradeSignals">Congress</button>
-          <button type="button" data-prediction-view="biggestScoreIncrease">Score jumps</button>
+          <button type="button" class="is-active" data-prediction-view="top25OneDay">Top 25 1-day</button>
+          <button type="button" data-prediction-view="top25SevenDay">Top 25 7-day</button>
+          <button type="button" data-prediction-view="top25OneMonth">Top 25 1-month</button>
+          <button type="button" data-prediction-view="top25OneYear">Top 25 1-year</button>
+          <button type="button" data-prediction-view="bestFiveOneDay">Best 5 today</button>
+          <button type="button" data-prediction-view="bestFiveSevenDay">Best 5 week</button>
+          <button type="button" data-prediction-view="bestFiveOneMonth">Best 5 month</button>
+          <button type="button" data-prediction-view="bestFiveOneYear">Best 5 year</button>
+          <button type="button" data-prediction-view="avoidList">Avoid list</button>
+          <button type="button" data-prediction-view="changedSinceLastScan">Changed</button>
+          <button type="button" data-prediction-view="comparisonView">Comparison</button>
         </div>
         <div class="prediction-grid" id="predictionGrid"></div>
       </section>

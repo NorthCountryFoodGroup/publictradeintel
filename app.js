@@ -37,6 +37,7 @@ const output = {
   portfolioList: document.querySelector("#portfolioList"),
   predictionSummary: document.querySelector("#predictionSummary"),
   predictionGrid: document.querySelector("#predictionGrid"),
+  predictionSort: document.querySelector("#predictionSort"),
   alertsList: document.querySelector("#alertsList"),
   policySummary: document.querySelector("#policySummary"),
   policySignalsGrid: document.querySelector("#policySignalsGrid"),
@@ -147,7 +148,7 @@ let latestRecommendation = null;
 let policySignals = { updatedAt: null, signals: [], errors: [] };
 let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null };
 let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
-let predictionView = "oneDayOpportunities";
+let predictionView = "top25OneDay";
 let portfolio = [];
 
 function dollars(value) {
@@ -601,11 +602,16 @@ function fallbackAlignment(item) {
 
 function predictionModelForView(item) {
   const models = item.timeframeModels || {};
-  if (predictionView === "oneDayOpportunities" || predictionView === "dailyOpportunities" || predictionView === "strongestOneDay") return models.oneDay || models.daily || null;
+  if (predictionView === "top25OneDay" || predictionView === "bestFiveOneDay" || predictionView === "oneDayOpportunities" || predictionView === "dailyOpportunities" || predictionView === "strongestOneDay" || predictionView === "avoidList") return models.oneDay || models.daily || null;
   if (predictionView === "threeDayOpportunities" || predictionView === "strongestThreeDay") return models.threeDay || null;
-  if (predictionView === "sevenDayOpportunities" || predictionView === "weeklyOpportunities" || predictionView === "strongestSevenDay") return models.sevenDay || models.weekly || null;
-  if (predictionView === "thirtyDayOpportunities" || predictionView === "monthlyOpportunities" || predictionView === "strongestThirtyDay") return models.thirtyDay || models.monthly || null;
+  if (predictionView === "top25SevenDay" || predictionView === "bestFiveSevenDay" || predictionView === "sevenDayOpportunities" || predictionView === "weeklyOpportunities" || predictionView === "strongestSevenDay") return models.sevenDay || models.weekly || null;
+  if (predictionView === "top25OneMonth" || predictionView === "bestFiveOneMonth" || predictionView === "thirtyDayOpportunities" || predictionView === "monthlyOpportunities" || predictionView === "strongestThirtyDay") return models.thirtyDay || models.monthly || null;
+  if (predictionView === "top25OneYear" || predictionView === "bestFiveOneYear") return models.oneYear || null;
   const best = String(item.bestTimeframe || "").toLowerCase();
+  if (best.includes("year")) return models.oneYear || null;
+  if (best.includes("month")) return models.thirtyDay || models.monthly || null;
+  if (best.includes("7")) return models.sevenDay || models.weekly || null;
+  if (best.includes("1-day")) return models.oneDay || models.daily || null;
   return models[best] || models[best.replace("-", "")] || models.sevenDay || models.weekly || models.oneDay || models.daily || models.thirtyDay || models.monthly || null;
 }
 
@@ -618,10 +624,41 @@ function scoreValue(value) {
   return Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
 }
 
+function sortedPredictionRows(rows) {
+  const sort = output.predictionSort?.value || "rank";
+  const list = [...rows];
+  if (sort === "upside") return list.sort((a, b) => (Number(b.expectedUpside) || Number(b.forecasts?.sevenDay?.expectedUpside) || 0) - (Number(a.expectedUpside) || Number(a.forecasts?.sevenDay?.expectedUpside) || 0));
+  if (sort === "confidence") return list.sort((a, b) => (Number(b.confidenceScore) || 0) - (Number(a.confidenceScore) || 0));
+  if (sort === "risk") return list.sort((a, b) => (Number(a.riskScore) || 0) - (Number(b.riskScore) || 0));
+  if (sort === "riskReward") return list.sort((a, b) => (Number(b.riskRewardRatio) || 0) - (Number(a.riskRewardRatio) || 0));
+  if (sort === "improved") return list.sort((a, b) => (Number(b.scoreChange) || 0) - (Number(a.scoreChange) || 0));
+  if (sort === "smallAccount") return list.sort((a, b) => ((Number(b.confidenceScore) || 0) - (Number(b.riskScore) || 0)) - ((Number(a.confidenceScore) || 0) - (Number(a.riskScore) || 0)));
+  return list.sort((a, b) => (Number(a.rank) || 999) - (Number(b.rank) || 999));
+}
+
+function renderComparisonRows(rows) {
+  output.predictionGrid.innerHTML = rows
+    .map((item) => `
+      <article class="prediction-card">
+        <div class="stock-card-top">
+          <span>${escapeHtml(item.label || "Comparison")}</span>
+          <strong>${escapeHtml(item.ticker)}</strong>
+        </div>
+        <h3>${escapeHtml(item.name || item.ticker)}</h3>
+        <div class="signal-list">
+          ${(item.lists || [])
+            .map((entry) => `<span>${escapeHtml(entry.timeframe)}: #${entry.rank} (${Number(entry.score) || 0}/100)</span>`)
+            .join("")}
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
 function renderPredictions() {
   if (!output.predictionGrid || !output.predictionSummary) return;
   const predictions = predictionEngine.predictions || [];
-  const active = predictionEngine.sections?.[predictionView] || predictions.slice(0, 6);
+  const active = predictionEngine.sections?.[predictionView] || predictions.slice(0, 25);
   const strong = predictions.filter((item) => item.label === "Strong AI Buy Candidate").length;
   const oneDayAvg = predictions.length
     ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.oneDayScore || item.dailyScore), 0) / predictions.length)
@@ -681,7 +718,12 @@ function renderPredictions() {
     return;
   }
 
-  output.predictionGrid.innerHTML = active
+  if (predictionView === "comparisonView") {
+    renderComparisonRows(active);
+    return;
+  }
+
+  output.predictionGrid.innerHTML = sortedPredictionRows(active)
     .map((item) => {
       const model = predictionModelForView(item);
       const alignment = item.signalAlignment || fallbackAlignment(item);
@@ -703,7 +745,7 @@ function renderPredictions() {
             <span>${escapeHtml(item.assetGroup)} | Best: ${escapeHtml(item.bestTimeframe || "mixed")}</span>
             <strong>${escapeHtml(item.ticker)}</strong>
           </div>
-          <h3>${escapeHtml(item.name)}</h3>
+          <h3>${item.rank ? `#${item.rank} ` : ""}${escapeHtml(item.name)}</h3>
           <div class="alignment-pill ${alignmentTone}">
             <strong>${escapeHtml(alignment.label)}</strong>
             <span>${escapeHtml(alignment.action)}</span>
@@ -716,6 +758,11 @@ function renderPredictions() {
             <div style="width: ${Math.min(100, Number(item.aiOpportunityScore) || 0)}%"></div>
           </div>
           <div class="timeframe-score-grid">
+            <div>
+              <span>Ranked score</span>
+              <strong>${scoreValue(item.aiScore || item.aiOpportunityScore)}/100</strong>
+              <small>${escapeHtml(item.timeframe || item.bestTimeframe || "overall")}</small>
+            </div>
             <div>
               <span>1-Day Score</span>
               <strong>${scoreValue(item.oneDayScore || item.dailyScore)}/100</strong>
@@ -736,6 +783,11 @@ function renderPredictions() {
               <strong>${scoreValue(item.thirtyDayScore || item.monthlyScore)}/100</strong>
               <small>30-day setup</small>
             </div>
+            <div>
+              <span>1-Year Score</span>
+              <strong>${scoreValue(item.oneYearScore)}/100</strong>
+              <small>1-year hold</small>
+            </div>
           </div>
           <div class="signal-list">
             <span>Overall Opportunity Score: ${Number(item.aiOpportunityScore) || 0}/100</span>
@@ -753,13 +805,16 @@ function renderPredictions() {
             <div><span>Fail line</span><strong>${escapeHtml(stopLevel)}</strong></div>
           </div>
           <div class="model-reasons">
-            <strong>Reason for prediction</strong>
-            ${reasons.map((reason) => `<p>${escapeHtml(reason)}</p>`).join("")}
+            <strong>Why this made the Top 25</strong>
+            <p>${escapeHtml(item.whyTop25 || item.reasonForRecommendation || reasons[0] || "Ranked by AI score and supporting signals.")}</p>
+            ${reasons.slice(1).map((reason) => `<p>${escapeHtml(reason)}</p>`).join("")}
           </div>
           <div class="model-reasons failure-list">
-            <strong>What could make it fail</strong>
-            ${failureRisks.map((risk) => `<p>${escapeHtml(risk)}</p>`).join("")}
+            <strong>Why this may be wrong</strong>
+            <p>${escapeHtml(item.whyMayBeWrong || failureRisks[0] || "The prediction can fail if market conditions change.")}</p>
+            <p>${escapeHtml(item.fallOffReason || "It falls off the list if stronger opportunities outrank it.")}</p>
           </div>
+          ${item.rankMovement ? `<div class="rank-change"><strong>Changed since last scan</strong><span>${escapeHtml(item.rankMovement.explanation)}</span></div>` : ""}
           <div class="research-grid">
             <div>
               <strong>Similar setup history</strong>
@@ -1456,6 +1511,7 @@ document.querySelectorAll("[data-prediction-view]").forEach((button) => {
     renderPredictions();
   });
 });
+output.predictionSort?.addEventListener("change", renderPredictions);
 output.portfolioList?.addEventListener("click", (event) => {
   const button = event.target.closest(".remove-position");
   if (!button) return;

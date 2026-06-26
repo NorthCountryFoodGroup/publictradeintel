@@ -871,6 +871,14 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const insiderBuyingProxy = clamp(congressionalActivity * 0.55 + institutionalFlow * 0.45);
   const thirtyNinetyMomentum = clamp(momentum * 0.45 + relativeStrength * 0.4 + trend * 0.15);
   const companyGuidance = clamp(newsImpact * 0.55 + (Number(stock.qualityScore) || 0) * 0.45);
+  const profitMargins = clamp((Number(stock.qualityScore) || 0) * 0.64 + valuation * 0.18 + liquidity * 0.18);
+  const debtLevels = clamp((Number(stock.volatilityScore) || 0) * 0.46 + (Number(stock.qualityScore) || 0) * 0.34 + valuation * 0.2);
+  const freeCashFlow = clamp((Number(stock.qualityScore) || 0) * 0.56 + valuation * 0.24 + trend * 0.2);
+  const marketPosition = clamp((Number(stock.qualityScore) || 0) * 0.5 + liquidity * 0.25 + sectorStrength * 0.25);
+  const longTermTrend = clamp(trend * 0.4 + thirtyNinetyMomentum * 0.36 + macro * 0.24);
+  const dividendStrength = stock.type === "ETF" || /dividend|income|yield/i.test(`${stock.name} ${stock.aiOutlook}`) ? 72 : clamp(valuation * 0.35 + (Number(stock.qualityScore) || 0) * 0.45 + liquidity * 0.2);
+  const companyMoat = clamp((Number(stock.qualityScore) || 0) * 0.52 + marketPosition * 0.28 + valuation * 0.2);
+  const macroTailwinds = clamp(macro * 0.58 + sectorStrength * 0.42);
 
   const dailyScore = weightedScore([
     { score: unusualVolume, weight: 0.13 },
@@ -905,10 +913,26 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     { score: companyGuidance, weight: 0.09 },
     { score: institutionalFlow, weight: 0.05 },
   ]);
+  const oneYearScore = weightedScore([
+    { score: revenueGrowthProxy, weight: 0.11 },
+    { score: earningsGrowthProxy, weight: 0.11 },
+    { score: profitMargins, weight: 0.08 },
+    { score: debtLevels, weight: 0.08 },
+    { score: freeCashFlow, weight: 0.08 },
+    { score: marketPosition, weight: 0.08 },
+    { score: macroTailwinds, weight: 0.09 },
+    { score: valuation, weight: 0.09 },
+    { score: institutionalFlow, weight: 0.07 },
+    { score: longTermTrend, weight: 0.08 },
+    { score: dividendStrength, weight: 0.05 },
+    { score: companyMoat, weight: 0.05 },
+    { score: macro, weight: 0.03 },
+  ]);
   const score = Math.round(weightedScore([
-    { score: dailyScore, weight: 0.28 },
-    { score: weeklyScore, weight: 0.34 },
-    { score: monthlyScore, weight: 0.38 },
+    { score: dailyScore, weight: 0.22 },
+    { score: weeklyScore, weight: 0.28 },
+    { score: monthlyScore, weight: 0.28 },
+    { score: oneYearScore, weight: 0.22 },
   ]));
   const riskScore = Math.round(clamp(volatilityRisk * 0.42 + (100 - liquidity) * 0.18 + policy.negative * 10 + congress.sells * 7));
   const bullishScore = clamp(score * 0.58 + Math.max(dailyScore, weeklyScore, monthlyScore) * 0.24 + newsImpact * 0.18);
@@ -917,9 +941,11 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const dailyUpside = Math.max(0.25, dailyScore / 72 + Math.max(0, marketChange) * 0.12);
   const weeklyUpside = Math.max(0.7, weeklyScore / 34);
   const monthlyUpside = Math.max(1.2, monthlyScore / 14);
+  const oneYearUpside = Math.max(4, oneYearScore / 4.8);
   const dailyDownside = Math.max(0.8, riskScore / 32);
   const weeklyDownside = Math.max(1.4, riskScore / 18);
   const monthlyDownside = Math.max(2.2, riskScore / 11);
+  const oneYearDownside = Math.max(6, riskScore / 4.5);
   const previous = previousByTicker.get(ticker);
   const previousScore = previous ? Number(previous.aiOpportunityScore) : NaN;
   const scoreChange = Number.isFinite(previousScore) ? Math.round(score - previousScore) : 0;
@@ -932,9 +958,11 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const dailyReason = `Daily model: momentum ${Math.round(momentum)}/100, unusual-volume proxy ${Math.round(unusualVolume)}/100, intraday-trend proxy ${Math.round(intradayTrend)}/100, sector strength today ${Math.round(sectorStrength)}/100.`;
   const weeklyReason = `Weekly model: 5-day trend proxy ${Math.round(fiveDayTrend)}/100, breakout pattern ${Math.round(technicalBreakout)}/100, news momentum ${Math.round(newsImpact)}/100, institutional-flow proxy ${Math.round(institutionalFlow)}/100.`;
   const monthlyReason = `Monthly model: growth quality ${Math.round(revenueGrowthProxy)}/100, valuation ${Math.round(valuation)}/100, macro ${Math.round(macro)}/100, congressional signal ${Math.round(congressionalActivity)}/100.`;
+  const oneYearReason = `1-year model: revenue growth ${Math.round(revenueGrowthProxy)}/100, earnings growth ${Math.round(earningsGrowthProxy)}/100, market position ${Math.round(marketPosition)}/100, long-term trend ${Math.round(longTermTrend)}/100, moat ${Math.round(companyMoat)}/100.`;
   const dailyFail = volatilityRisk > 55 ? "Daily setup can fail if volatility reverses the move intraday." : "Daily setup can fail if volume fades after the open.";
   const weeklyFail = technicalBreakout < 60 ? "Weekly setup can fail if breakout confirmation never appears." : "Weekly setup can fail if news momentum cools before follow-through.";
   const monthlyFail = valuation < 55 ? "Monthly setup can fail if valuation pressure overwhelms growth signals." : "Monthly setup can fail if macro or guidance shifts against the sector.";
+  const oneYearFail = debtLevels < 55 ? "1-year setup can fail if balance-sheet/debt pressure overwhelms growth." : "1-year setup can fail if growth slows or the sector outlook deteriorates.";
   const dailyModel = buildTimeframeModel({
     name: "Daily",
     score: dailyScore,
@@ -970,6 +998,18 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     reasons: [monthlyReason, catalyst, stock.aiOutlook],
     failureRisks: [monthlyFail, "30-day prediction can fail if market-wide risk appetite changes.", congress.sells ? "Congressional selling lowers the monthly conviction score." : ""],
     metrics: { revenueGrowth: revenueGrowthProxy, earningsGrowth: earningsGrowthProxy, valuation, macroTrends: macro, congressionalBuying: congressionalActivity, insiderBuying: insiderBuyingProxy, sectorStrength, thirtyNinetyDayMomentum: thirtyNinetyMomentum, companyGuidance },
+  });
+  const oneYearModel = buildTimeframeModel({
+    name: "1-Year",
+    score: oneYearScore,
+    confidence: confidence * 0.48 + (Number(stock.qualityScore) || 0) * 0.32 + dataQualityBreakdown({ price, stock, policy, congress, liquidity, volatilityRisk, marketChange }).score * 0.2,
+    risk: clamp(riskScore * 0.62 + (100 - debtLevels) * 0.18 + (100 - freeCashFlow) * 0.12),
+    upside: oneYearUpside,
+    downside: oneYearDownside,
+    price,
+    reasons: [oneYearReason, catalyst, marketPosition >= 70 ? "Strong market-position proxy improves long-term hold quality." : ""],
+    failureRisks: [oneYearFail, "A 1-year thesis can fail if revenue/earnings estimates weaken or valuation compresses.", congress.sells ? "Congressional selling lowers long-term conviction." : ""],
+    metrics: { revenueGrowth: revenueGrowthProxy, earningsGrowth: earningsGrowthProxy, profitMargins, debtLevels, freeCashFlow, marketPosition, sectorOutlook: macroTailwinds, valuation, institutionalOwnership: institutionalFlow, longTermTrend, dividendStrength, companyMoat, macroTailwinds },
   });
   const threeDayScore = weightedScore([
     { score: dailyModel.score, weight: 0.32 },
@@ -1017,18 +1057,21 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   };
   const modelLeaderboard = Object.values(ensembleModels).sort((a, b) => (b.bullishScore + b.confidenceScore + b.dataQualityScore) - (a.bullishScore + a.confidenceScore + a.dataQualityScore));
   const bestTimeframe =
-    dailyModel.score >= threeDayModel.score && dailyModel.score >= weeklyModel.score && dailyModel.score >= monthlyModel.score
+    dailyModel.score >= threeDayModel.score && dailyModel.score >= weeklyModel.score && dailyModel.score >= monthlyModel.score && dailyModel.score >= oneYearModel.score
       ? "1-Day"
-      : threeDayModel.score >= weeklyModel.score && threeDayModel.score >= monthlyModel.score
+      : threeDayModel.score >= weeklyModel.score && threeDayModel.score >= monthlyModel.score && threeDayModel.score >= oneYearModel.score
       ? "3-Day"
-      : weeklyModel.score >= monthlyModel.score
+      : weeklyModel.score >= monthlyModel.score && weeklyModel.score >= oneYearModel.score
       ? "7-Day"
-      : "30-Day";
+      : monthlyModel.score >= oneYearModel.score
+      ? "1-Month"
+      : "1-Year";
   const similarHistory = similarSetupAnalysis(stock, Array.from(previousByTicker.values()), {
     oneDay: dailyModel.score,
     threeDay: threeDayModel.score,
     sevenDay: weeklyModel.score,
     thirtyDay: monthlyModel.score,
+    oneYear: oneYearModel.score,
     overall: score,
     alignmentType: alignment.type,
   });
@@ -1045,6 +1088,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     threeDayScore: threeDayModel.score,
     sevenDayScore: weeklyModel.score,
     thirtyDayScore: monthlyModel.score,
+    oneYearScore: oneYearModel.score,
     dailyScore: dailyModel.score,
     weeklyScore: weeklyModel.score,
     monthlyScore: monthlyModel.score,
@@ -1062,16 +1106,18 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
       threeDay: threeDayModel,
       sevenDay: weeklyModel,
       thirtyDay: monthlyModel,
+      oneYear: oneYearModel,
       daily: dailyModel,
       weekly: weeklyModel,
       monthly: monthlyModel,
     },
-    expectedTimeHorizon: "1-Day / 3-Day / 7-Day / 30-Day scored separately",
+    expectedTimeHorizon: "1-Day / 7-Day / 1-Month / 1-Year scored separately",
     forecasts: {
       oneDay: { expectedUpside: dailyModel.expectedUpside, downsideRisk: dailyModel.downsideRisk },
       threeDay: { expectedUpside: threeDayModel.expectedUpside, downsideRisk: threeDayModel.downsideRisk },
       sevenDay: { expectedUpside: weeklyModel.expectedUpside, downsideRisk: weeklyModel.downsideRisk },
       thirtyDay: { expectedUpside: monthlyModel.expectedUpside, downsideRisk: monthlyModel.downsideRisk },
+      oneYear: { expectedUpside: oneYearModel.expectedUpside, downsideRisk: oneYearModel.downsideRisk },
     },
     suggestedEntryZone: weeklyModel.suggestedEntryZone,
     suggestedProfitTarget: weeklyModel.suggestedProfitTarget,
@@ -1084,6 +1130,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
       `3-Day ${threeDayModel.score}/100`,
       `7-Day ${weeklyModel.score}/100`,
       `30-Day ${monthlyModel.score}/100`,
+      `1-Year ${oneYearModel.score}/100`,
       alignment.label,
       marketRegime.primary,
       `Risk ${riskScore}/100`,
@@ -1094,6 +1141,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
       threeDay: threeDayModel.score,
       sevenDay: weeklyModel.score,
       thirtyDay: monthlyModel.score,
+      oneYear: oneYearModel.score,
       daily: dailyModel.score,
       weekly: weeklyModel.score,
       monthly: monthlyModel.score,
@@ -1131,7 +1179,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     },
     performanceTracking: {
       predictedDirection: score >= 52 ? "up" : "down/avoid",
-      predictedReturn: bestTimeframe === "1-Day" ? dailyModel.expectedUpside : bestTimeframe === "3-Day" ? threeDayModel.expectedUpside : bestTimeframe === "7-Day" ? weeklyModel.expectedUpside : monthlyModel.expectedUpside,
+      predictedReturn: bestTimeframe === "1-Day" ? dailyModel.expectedUpside : bestTimeframe === "3-Day" ? threeDayModel.expectedUpside : bestTimeframe === "7-Day" ? weeklyModel.expectedUpside : bestTimeframe === "1-Month" ? monthlyModel.expectedUpside : oneYearModel.expectedUpside,
       status: "Pending outcome tracking",
       fieldsTrackedAfterExpiry: [
         "actual direction",
@@ -1151,31 +1199,175 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
         ? dailyReason
         : bestTimeframe === "7-Day" || bestTimeframe === "3-Day"
         ? weeklyReason
-        : monthlyReason,
+        : bestTimeframe === "1-Month"
+        ? monthlyReason
+        : oneYearReason,
     failureRisk:
       bestTimeframe === "1-Day"
         ? dailyFail
         : bestTimeframe === "7-Day" || bestTimeframe === "3-Day"
         ? weeklyFail
-        : monthlyFail,
+        : bestTimeframe === "1-Month"
+        ? monthlyFail
+        : oneYearFail,
     plainEnglish:
-      `${ticker} scores 1-Day ${dailyModel.score}, 3-Day ${threeDayModel.score}, 7-Day ${weeklyModel.score}, and 30-Day ${monthlyModel.score}. Best current timeframe: ${bestTimeframe}.`,
+      `${ticker} scores 1-Day ${dailyModel.score}, 7-Day ${weeklyModel.score}, 1-Month ${monthlyModel.score}, and 1-Year ${oneYearModel.score}. Best current timeframe: ${bestTimeframe}.`,
     whatChanged: previous ? `Score ${status} by ${scoreChange >= 0 ? "+" : ""}${scoreChange} points since the last scan.` : "New prediction in this scan.",
     scannedAt: new Date().toISOString(),
   };
 }
 
-function predictionSections(predictions) {
-  const byScore = [...predictions].sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
+function previousRanks(previousSections, key) {
+  const rows = Array.isArray(previousSections?.[key]) ? previousSections[key] : [];
+  return new Map(rows.map((item, index) => [item.ticker, Number(item.rank) || index + 1]));
+}
+
+function rankMovement(ticker, rank, previousMap, item, timeframeName) {
+  const previousRank = previousMap.get(ticker);
+  if (!previousRank) {
+    return {
+      status: "new addition",
+      previousRank: null,
+      rankChange: null,
+      explanation: `${ticker} is a new addition to the ${timeframeName} Top 25.`,
+    };
+  }
+  const rankChange = previousRank - rank;
+  if (rankChange > 0) {
+    return {
+      status: "rank increase",
+      previousRank,
+      rankChange,
+      explanation: `${ticker} moved from #${previousRank} to #${rank} because ${item.strongestSupportingSignal || "supporting signals improved"}.`,
+    };
+  }
+  if (rankChange < 0) {
+    return {
+      status: "rank drop",
+      previousRank,
+      rankChange,
+      explanation: `${ticker} dropped from #${previousRank} to #${rank} because ${item.weakestSignal || "one or more signals weakened"}.`,
+    };
+  }
   return {
-    topBuyCandidates: byScore.slice(0, 6),
-    oneDayOpportunities: [...predictions].sort((a, b) => b.oneDayScore - a.oneDayScore).slice(0, 6),
+    status: "repeated winner",
+    previousRank,
+    rankChange: 0,
+    explanation: `${ticker} held rank #${rank} on the ${timeframeName} list.`,
+  };
+}
+
+function supportingSignalsFor(item) {
+  const models = Object.values(item.ensembleModels || {});
+  const strongest = models.sort((a, b) => b.bullishScore - a.bullishScore)[0];
+  const weakest = models.sort((a, b) => a.bullishScore - b.bullishScore)[0];
+  return {
+    strongestSupportingSignal: strongest ? `${strongest.name}: ${strongest.bullishScore}/100` : item.primaryCatalyst,
+    weakestSignal: weakest ? `${weakest.name}: ${weakest.bullishScore}/100` : item.failureRisk,
+  };
+}
+
+function rankedTopList(predictions, { key, timeframe, modelKey, scoreKey, previousSections }) {
+  const previousMap = previousRanks(previousSections, key);
+  return [...predictions]
+    .sort((a, b) => (Number(b[scoreKey]) || 0) - (Number(a[scoreKey]) || 0))
+    .slice(0, 25)
+    .map((item, index) => {
+      const model = item.timeframeModels?.[modelKey] || item.timeframeModels?.weekly || {};
+      const signals = supportingSignalsFor(item);
+      const rank = index + 1;
+      return {
+        ...item,
+        rank,
+        timeframe,
+        timeframeKey: key,
+        aiScore: Number(item[scoreKey]) || 0,
+        expectedUpside: model.expectedUpside,
+        downsideRisk: model.downsideRisk,
+        suggestedEntryRange: model.entryZone || model.suggestedEntryZone || item.suggestedEntryZone,
+        suggestedStopLevel: model.stopLevel || model.suggestedStopLevel || item.suggestedStopLevel,
+        suggestedTarget: model.profitTarget || model.suggestedProfitTarget || item.suggestedProfitTarget,
+        reasonForRecommendation: model.reasons?.[0] || item.predictionReason,
+        whyTop25: `Ranked #${rank} for ${timeframe} because ${model.reasons?.[0] || item.predictionReason || item.primaryCatalyst}.`,
+        whyMayBeWrong: model.failureRisks?.[0] || item.failureRisk,
+        primaryCatalyst: item.primaryCatalyst,
+        strongestSupportingSignal: signals.strongestSupportingSignal,
+        weakestSignal: signals.weakestSignal,
+        fallOffReason: `Falls off the ${timeframe} Top 25 if score drops below peers, risk rises, or ${signals.weakestSignal} weakens further.`,
+        lastUpdated: item.scannedAt,
+        rankMovement: rankMovement(item.ticker, rank, previousMap, { ...item, ...signals }, timeframe),
+      };
+    });
+}
+
+function comparisonView(lists) {
+  const groups = new Map();
+  Object.entries(lists).forEach(([key, rows]) => {
+    rows.forEach((item) => {
+      const current = groups.get(item.ticker) || {
+        ticker: item.ticker,
+        name: item.name,
+        currentPrice: item.currentPrice,
+        lists: [],
+      };
+      current.lists.push({ key, timeframe: item.timeframe, rank: item.rank, score: item.aiScore });
+      groups.set(item.ticker, current);
+    });
+  });
+
+  return [...groups.values()]
+    .map((item) => {
+      const keys = new Set(item.lists.map((entry) => entry.key));
+      const label =
+        keys.has("top25OneDay") && keys.size === 1
+          ? "Short-Term Momentum"
+          : keys.has("top25SevenDay") && keys.size === 1
+          ? "Weekly Trade Setup"
+          : keys.has("top25OneMonth") && keys.size === 1
+          ? "Swing Trade Candidate"
+          : keys.has("top25OneYear") && keys.size === 1
+          ? "Long-Term Hold Candidate"
+          : keys.has("top25SevenDay") && keys.has("top25OneMonth") && keys.has("top25OneYear")
+          ? "High Alignment Candidate"
+          : "Multi-Timeframe Candidate";
+      return { ...item, label };
+    })
+    .sort((a, b) => b.lists.length - a.lists.length || Math.min(...a.lists.map((item) => item.rank)) - Math.min(...b.lists.map((item) => item.rank)));
+}
+
+function predictionSections(predictions, previousSections = {}) {
+  const byScore = [...predictions].sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
+  const top25OneDay = rankedTopList(predictions, { key: "top25OneDay", timeframe: "1-day trade", modelKey: "oneDay", scoreKey: "oneDayScore", previousSections });
+  const top25SevenDay = rankedTopList(predictions, { key: "top25SevenDay", timeframe: "7-day trade", modelKey: "sevenDay", scoreKey: "sevenDayScore", previousSections });
+  const top25OneMonth = rankedTopList(predictions, { key: "top25OneMonth", timeframe: "1-month trade", modelKey: "thirtyDay", scoreKey: "thirtyDayScore", previousSections });
+  const top25OneYear = rankedTopList(predictions, { key: "top25OneYear", timeframe: "1-year hold", modelKey: "oneYear", scoreKey: "oneYearScore", previousSections });
+  const lists = { top25OneDay, top25SevenDay, top25OneMonth, top25OneYear };
+  return {
+    topBuyCandidates: byScore.slice(0, 25),
+    top25OneDay,
+    top25SevenDay,
+    top25OneMonth,
+    top25OneYear,
+    bestFiveOneDay: top25OneDay.slice(0, 5),
+    bestFiveSevenDay: top25SevenDay.slice(0, 5),
+    bestFiveOneMonth: top25OneMonth.slice(0, 5),
+    bestFiveOneYear: top25OneYear.slice(0, 5),
+    avoidList: [...predictions]
+      .filter((item) => item.oneDayScore < 55 || item.riskScore >= 70)
+      .sort((a, b) => (b.riskScore - a.riskScore) || (a.oneDayScore - b.oneDayScore))
+      .slice(0, 25)
+      .map((item, index) => ({ ...item, rank: index + 1, timeframe: "Avoid today", aiScore: item.oneDayScore, whyTop25: "Danger list: weak short-term setup or elevated risk.", whyMayBeWrong: item.failureRisk })),
+    comparisonView: comparisonView(lists),
+    changedSinceLastScan: [...top25OneDay, ...top25SevenDay, ...top25OneMonth, ...top25OneYear]
+      .filter((item) => item.rankMovement?.status !== "repeated winner")
+      .slice(0, 40),
+    oneDayOpportunities: top25OneDay,
     threeDayOpportunities: [...predictions].sort((a, b) => b.threeDayScore - a.threeDayScore).slice(0, 6),
-    sevenDayOpportunities: [...predictions].sort((a, b) => b.sevenDayScore - a.sevenDayScore).slice(0, 6),
-    thirtyDayOpportunities: [...predictions].sort((a, b) => b.thirtyDayScore - a.thirtyDayScore).slice(0, 6),
-    dailyOpportunities: [...predictions].sort((a, b) => b.oneDayScore - a.oneDayScore).slice(0, 6),
-    weeklyOpportunities: [...predictions].sort((a, b) => b.sevenDayScore - a.sevenDayScore).slice(0, 6),
-    monthlyOpportunities: [...predictions].sort((a, b) => b.thirtyDayScore - a.thirtyDayScore).slice(0, 6),
+    sevenDayOpportunities: top25SevenDay,
+    thirtyDayOpportunities: top25OneMonth,
+    dailyOpportunities: top25OneDay,
+    weeklyOpportunities: top25SevenDay,
+    monthlyOpportunities: top25OneMonth,
     goldSilverOpportunities: byScore.filter((item) => item.assetGroup === "Gold/Silver").slice(0, 5),
     highestMomentum: [...predictions].sort((a, b) => b.modelScores.momentum - a.modelScores.momentum).slice(0, 5),
     strongestSector: [...predictions].sort((a, b) => b.modelScores.sectorStrength - a.modelScores.sectorStrength).slice(0, 5),
@@ -1200,12 +1392,29 @@ async function refreshPredictions() {
   const result = {
     updatedAt: new Date().toISOString(),
     predictions,
-    sections: predictionSections(predictions),
-    modelVersion: "v3-ensemble-research-platform",
+    sections: predictionSections(predictions, previous.sections || {}),
+    refreshCadence: {
+      top25OneDay: "hourly",
+      top25SevenDay: "every 4 hours",
+      top25OneMonth: "daily",
+      top25OneYear: "weekly",
+    },
+    performanceTrackingWindows: ["1 day", "7 days", "30 days", "1 year"],
+    historicalRankingTracking: [
+      "new additions",
+      "removed stocks",
+      "rank increases",
+      "rank drops",
+      "repeated winners",
+      "failed predictions",
+      "best-performing model",
+      "worst-performing model",
+    ],
+    modelVersion: "v4-top25-ranking-engine",
     notes: [
-      "This engine uses separate 1-day, 3-day, 7-day, and 30-day prediction models before calculating the overall opportunity score.",
+      "This engine produces separate Top 25 lists for 1-day trades, 7-day trades, 1-month trades, and 1-year holds.",
       "Fifteen ensemble submodels score momentum, trend, breakout, mean reversion, earnings, news, sentiment, options, insider/congressional activity, sector rotation, macro, volatility, liquidity, and valuation.",
-      "Similar setup and model performance sections start with saved scan history and become more useful as prediction outcomes accumulate.",
+      "Rank movement and historical performance become more useful as repeated scans and outcome data accumulate.",
       "Congressional disclosures are delayed and treated as lagging conviction signals.",
       "Market regime and data quality influence how much confidence the app gives each opportunity.",
     ],
@@ -1613,7 +1822,7 @@ if (PREDICTION_REFRESH_MS > 0) {
         updatedAt: new Date().toISOString(),
         predictions: readJson(PREDICTIONS_FILE, { predictions: [] }).predictions || [],
         sections: {},
-        modelVersion: "v3-ensemble-research-platform",
+        modelVersion: "v4-top25-ranking-engine",
         errors: [{ source: "prediction scheduler", error: error.message }],
       });
     });
