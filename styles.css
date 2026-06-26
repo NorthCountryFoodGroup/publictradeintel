@@ -428,7 +428,7 @@ li {
 
 .timeframe-score-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -479,6 +479,34 @@ li {
 
 .failure-list {
   border-color: rgba(139, 67, 45, 0.22);
+}
+
+.research-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.research-grid div {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(36, 123, 134, 0.16);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.research-grid strong {
+  margin: 0 0 2px;
+}
+
+.research-grid span,
+.research-grid small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .trade-levels {
@@ -1069,6 +1097,15 @@ li {
   .trade-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .prediction-grid,
+  .research-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .timeframe-score-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 560px) {
@@ -1102,6 +1139,9 @@ li {
   .portfolio-values,
   .value-compare,
   .stock-controls,
+  .timeframe-score-grid,
+  .research-grid,
+  .trade-levels,
   .admin-editor,
   .editor-row {
     grid-template-columns: 1fr;

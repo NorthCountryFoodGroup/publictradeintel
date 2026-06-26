@@ -147,7 +147,7 @@ let latestRecommendation = null;
 let policySignals = { updatedAt: null, signals: [], errors: [] };
 let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null };
 let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
-let predictionView = "dailyOpportunities";
+let predictionView = "oneDayOpportunities";
 let portfolio = [];
 
 function dollars(value) {
@@ -557,7 +557,13 @@ function renderDayTrades() {
 }
 
 function pct(value) {
+  if (value === null || value === undefined || value === "") return "n/a";
   return `${Number(value || 0).toFixed(2)}%`;
+}
+
+function compactValue(value, suffix = "") {
+  if (value === null || value === undefined || value === "") return "n/a";
+  return `${value}${suffix}`;
 }
 
 function predictionToneClass(label) {
@@ -575,9 +581,9 @@ function alignmentToneClass(type) {
 }
 
 function fallbackAlignment(item) {
-  const daily = scoreValue(item.dailyScore);
-  const weekly = scoreValue(item.weeklyScore);
-  const monthly = scoreValue(item.monthlyScore);
+  const daily = scoreValue(item.oneDayScore || item.dailyScore);
+  const weekly = scoreValue(item.sevenDayScore || item.weeklyScore);
+  const monthly = scoreValue(item.thirtyDayScore || item.monthlyScore);
   const dailyBullish = daily >= 70;
   const weeklyBullish = weekly >= 70;
   const monthlyBullish = monthly >= 70;
@@ -595,11 +601,12 @@ function fallbackAlignment(item) {
 
 function predictionModelForView(item) {
   const models = item.timeframeModels || {};
-  if (predictionView === "dailyOpportunities" || predictionView === "strongestOneDay") return models.daily || null;
-  if (predictionView === "weeklyOpportunities" || predictionView === "strongestSevenDay") return models.weekly || null;
-  if (predictionView === "monthlyOpportunities" || predictionView === "strongestThirtyDay") return models.monthly || null;
+  if (predictionView === "oneDayOpportunities" || predictionView === "dailyOpportunities" || predictionView === "strongestOneDay") return models.oneDay || models.daily || null;
+  if (predictionView === "threeDayOpportunities" || predictionView === "strongestThreeDay") return models.threeDay || null;
+  if (predictionView === "sevenDayOpportunities" || predictionView === "weeklyOpportunities" || predictionView === "strongestSevenDay") return models.sevenDay || models.weekly || null;
+  if (predictionView === "thirtyDayOpportunities" || predictionView === "monthlyOpportunities" || predictionView === "strongestThirtyDay") return models.thirtyDay || models.monthly || null;
   const best = String(item.bestTimeframe || "").toLowerCase();
-  return models[best] || models.weekly || models.daily || models.monthly || null;
+  return models[best] || models[best.replace("-", "")] || models.sevenDay || models.weekly || models.oneDay || models.daily || models.thirtyDay || models.monthly || null;
 }
 
 function predictionModelTitle(model) {
@@ -616,14 +623,17 @@ function renderPredictions() {
   const predictions = predictionEngine.predictions || [];
   const active = predictionEngine.sections?.[predictionView] || predictions.slice(0, 6);
   const strong = predictions.filter((item) => item.label === "Strong AI Buy Candidate").length;
-  const dailyAvg = predictions.length
-    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.dailyScore), 0) / predictions.length)
+  const oneDayAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.oneDayScore || item.dailyScore), 0) / predictions.length)
     : 0;
-  const weeklyAvg = predictions.length
-    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.weeklyScore), 0) / predictions.length)
+  const threeDayAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.threeDayScore || item.weeklyScore), 0) / predictions.length)
     : 0;
-  const monthlyAvg = predictions.length
-    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.monthlyScore), 0) / predictions.length)
+  const sevenDayAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.sevenDayScore || item.weeklyScore), 0) / predictions.length)
+    : 0;
+  const thirtyDayAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.thirtyDayScore || item.monthlyScore), 0) / predictions.length)
     : 0;
   const avgScore = predictions.length
     ? Math.round(predictions.reduce((sum, item) => sum + Number(item.aiOpportunityScore || 0), 0) / predictions.length)
@@ -639,16 +649,20 @@ function renderPredictions() {
       <strong>${predictions.length}</strong>
     </div>
     <div>
-      <span>Daily avg</span>
-      <strong>${dailyAvg}/100</strong>
+      <span>1-day avg</span>
+      <strong>${oneDayAvg}/100</strong>
     </div>
     <div>
-      <span>Weekly avg</span>
-      <strong>${weeklyAvg}/100</strong>
+      <span>3-day avg</span>
+      <strong>${threeDayAvg}/100</strong>
     </div>
     <div>
-      <span>Monthly avg</span>
-      <strong>${monthlyAvg}/100</strong>
+      <span>7-day avg</span>
+      <strong>${sevenDayAvg}/100</strong>
+    </div>
+    <div>
+      <span>30-day avg</span>
+      <strong>${thirtyDayAvg}/100</strong>
     </div>
     <div>
       <span>Overall avg</span>
@@ -679,6 +693,10 @@ function renderPredictions() {
       const stopLevel = model?.stopLevel || item.suggestedStopLevel || "Needs current market data";
       const reasons = Array.isArray(model?.reasons) && model.reasons.length ? model.reasons : [item.predictionReason || item.plainEnglish || item.primaryCatalyst];
       const failureRisks = Array.isArray(model?.failureRisks) && model.failureRisks.length ? model.failureRisks : [item.failureRisk || "The setup can fail if market conditions change faster than the signal updates."];
+      const similar = item.similarSetupHistory || {};
+      const regime = item.marketRegime || {};
+      const quality = item.dataQuality || {};
+      const leaderboard = item.modelLeaderboard || {};
       return `
         <article class="prediction-card">
           <div class="stock-card-top">
@@ -699,18 +717,23 @@ function renderPredictions() {
           </div>
           <div class="timeframe-score-grid">
             <div>
-              <span>Daily Score</span>
-              <strong>${scoreValue(item.dailyScore)}/100</strong>
+              <span>1-Day Score</span>
+              <strong>${scoreValue(item.oneDayScore || item.dailyScore)}/100</strong>
               <small>1-day setup</small>
             </div>
             <div>
-              <span>Weekly Score</span>
-              <strong>${scoreValue(item.weeklyScore)}/100</strong>
-              <small>3-7 day setup</small>
+              <span>3-Day Score</span>
+              <strong>${scoreValue(item.threeDayScore || item.weeklyScore)}/100</strong>
+              <small>3-day setup</small>
             </div>
             <div>
-              <span>Monthly Score</span>
-              <strong>${scoreValue(item.monthlyScore)}/100</strong>
+              <span>7-Day Score</span>
+              <strong>${scoreValue(item.sevenDayScore || item.weeklyScore)}/100</strong>
+              <small>7-day setup</small>
+            </div>
+            <div>
+              <span>30-Day Score</span>
+              <strong>${scoreValue(item.thirtyDayScore || item.monthlyScore)}/100</strong>
               <small>30-day setup</small>
             </div>
           </div>
@@ -718,6 +741,8 @@ function renderPredictions() {
             <span>Overall Opportunity Score: ${Number(item.aiOpportunityScore) || 0}/100</span>
             <span>Confidence Score: ${Number(item.confidenceScore) || 0}/100</span>
             <span>Risk Score: ${Number(item.riskScore) || 0}/100</span>
+            <span>Data Quality Score: ${Number(quality.score) || 0}/100</span>
+            <span>Market regime: ${escapeHtml(regime.primary || "unknown")}</span>
             <span>${escapeHtml(predictionModelTitle(model))} upside: ${pct(model?.expectedUpside)}</span>
             <span>${escapeHtml(predictionModelTitle(model))} downside: ${pct(model?.downsideRisk)}</span>
             <span>Risk/reward: ${Number(item.riskRewardRatio || 0).toFixed(2)}</span>
@@ -734,6 +759,31 @@ function renderPredictions() {
           <div class="model-reasons failure-list">
             <strong>What could make it fail</strong>
             ${failureRisks.map((risk) => `<p>${escapeHtml(risk)}</p>`).join("")}
+          </div>
+          <div class="research-grid">
+            <div>
+              <strong>Similar setup history</strong>
+              <span>Past setups: ${compactValue(similar.similarPastSetups)}</span>
+              <span>Win rate: ${compactValue(similar.winRate, "%")}</span>
+              <span>Avg 1d / 3d / 7d / 30d: ${pct(similar.averageReturnAfter1Day)} / ${pct(similar.averageReturnAfter3Days)} / ${pct(similar.averageReturnAfter7Days)} / ${pct(similar.averageReturnAfter30Days)}</span>
+              <span>Best / worst: ${pct(similar.bestCase)} / ${pct(similar.worstCase)}</span>
+              <small>${escapeHtml(similar.confidenceLevel || similar.note || "Building history from saved scans.")}</small>
+            </div>
+            <div>
+              <strong>Model leaderboard</strong>
+              <span>Best today: ${escapeHtml(leaderboard.bestModelToday || "Tracking")}</span>
+              <span>Best week: ${escapeHtml(leaderboard.bestModelThisWeek || "Tracking")}</span>
+              <span>Best month: ${escapeHtml(leaderboard.bestModelThisMonth || "Tracking")}</span>
+              <span>Weakest: ${escapeHtml(leaderboard.worstPerformingModel || "Tracking")}</span>
+              <small>${escapeHtml(leaderboard.note || "Outcome leaderboard starts after predictions expire.")}</small>
+            </div>
+            <div>
+              <strong>Portfolio impact</strong>
+              <span>${escapeHtml(item.portfolioImpact?.positionOverlap || "No portfolio impact data yet")}</span>
+              <span>${escapeHtml(item.portfolioImpact?.sectorConcentration || "")}</span>
+              <span>${escapeHtml(item.portfolioImpact?.volatilityImpact || "")}</span>
+              <small>Best timeframe: ${escapeHtml(item.portfolioImpact?.bestForTimeframe || item.bestTimeframe || "mixed")}</small>
+            </div>
           </div>
           <small>${escapeHtml(item.whatChanged || item.plainEnglish || "")}</small>
         </article>

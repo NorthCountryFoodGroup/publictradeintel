@@ -76,20 +76,22 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">AI Prediction Engine</p>
-            <h2>Separate daily, weekly, and monthly opportunity models</h2>
+            <h2>Hedge-fund-style multi-horizon AI research engine</h2>
           </div>
         </div>
 
         <div class="disclaimer-box">
-          The engine scores each stock across three different timeframes. A ticker can be weak for today,
-          stronger for the week, and strongest for the month. These are research predictions, not guarantees.
+          The engine scores each stock across 1-day, 3-day, 7-day, and 30-day horizons using ensemble signals,
+          market regime awareness, data quality, similar setups, and portfolio impact. These are research predictions,
+          not guarantees.
         </div>
 
         <div class="member-summary" id="predictionSummary"></div>
         <div class="prediction-tabs">
-          <button type="button" class="is-active" data-prediction-view="dailyOpportunities">Daily trades</button>
-          <button type="button" data-prediction-view="weeklyOpportunities">Weekly trades</button>
-          <button type="button" data-prediction-view="monthlyOpportunities">Monthly trades</button>
+          <button type="button" class="is-active" data-prediction-view="oneDayOpportunities">1-day trades</button>
+          <button type="button" data-prediction-view="threeDayOpportunities">3-day trades</button>
+          <button type="button" data-prediction-view="sevenDayOpportunities">7-day trades</button>
+          <button type="button" data-prediction-view="thirtyDayOpportunities">30-day trades</button>
           <button type="button" data-prediction-view="topBuyCandidates">Overall</button>
           <button type="button" data-prediction-view="goldSilverOpportunities">Gold/Silver</button>
           <button type="button" data-prediction-view="congressionalTradeSignals">Congress</button>
