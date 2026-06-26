@@ -633,6 +633,61 @@ function buildTimeframeModel({ name, score, confidence, risk, upside, downside, 
   };
 }
 
+function signalAlignment(dailyScore, weeklyScore, monthlyScore) {
+  const dailyBullish = dailyScore >= 70;
+  const weeklyBullish = weeklyScore >= 70;
+  const monthlyBullish = monthlyScore >= 70;
+  const dailyWeak = dailyScore < 55;
+  const weeklyWeak = weeklyScore < 55;
+  const monthlyWeak = monthlyScore < 55;
+
+  if (dailyBullish && weeklyBullish && monthlyBullish) {
+    return {
+      label: "High-Alignment Opportunity",
+      type: "high-alignment",
+      action: "All three timeframes are bullish. This is the cleanest multi-timeframe setup.",
+    };
+  }
+
+  if (dailyBullish && monthlyWeak) {
+    return {
+      label: "Short-Term Only",
+      type: "short-term-only",
+      action: "Daily signal is bullish, but the monthly model is weak. Treat this as a fast trade, not a hold.",
+    };
+  }
+
+  if (monthlyBullish && dailyWeak) {
+    return {
+      label: "Wait for Better Entry",
+      type: "wait-for-entry",
+      action: "Monthly signal is bullish, but today is weak. Watch for a better entry instead of chasing.",
+    };
+  }
+
+  if (dailyWeak && weeklyWeak && monthlyWeak) {
+    return {
+      label: "Avoid",
+      type: "avoid",
+      action: "Daily, weekly, and monthly models are all weak. The setup does not have enough support.",
+    };
+  }
+
+  if (weeklyBullish && (dailyBullish || monthlyBullish)) {
+    return {
+      label: "Partial Alignment",
+      type: "partial-alignment",
+      action: "Two timeframes are supportive. Size and timing matter more than with a full-alignment setup.",
+    };
+  }
+
+  return {
+    label: "Mixed Signals",
+    type: "mixed",
+    action: "The timeframes disagree. Use the strongest model, but keep risk tighter.",
+  };
+}
+
 function buildPrediction(stock, config, policySignals, previousByTicker) {
   const ticker = stock.ticker;
   const congress = predictionCongressMetrics(ticker, config.congressTrades || []);
@@ -768,6 +823,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     failureRisks: [monthlyFail, "30-day prediction can fail if market-wide risk appetite changes.", congress.sells ? "Congressional selling lowers the monthly conviction score." : ""],
     metrics: { revenueGrowth: revenueGrowthProxy, earningsGrowth: earningsGrowthProxy, valuation, macroTrends: macro, congressionalBuying: congressionalActivity, insiderBuying: insiderBuyingProxy, sectorStrength, thirtyNinetyDayMomentum: thirtyNinetyMomentum, companyGuidance },
   });
+  const alignment = signalAlignment(dailyModel.score, weeklyModel.score, monthlyModel.score);
 
   return {
     ticker,
@@ -786,6 +842,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     label: predictionLabel(score),
     status,
     scoreChange,
+    signalAlignment: alignment,
     bestTimeframe:
       dailyModel.score >= weeklyModel.score && dailyModel.score >= monthlyModel.score
         ? "Daily"
@@ -814,6 +871,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
       `Daily ${dailyModel.score}/100`,
       `Weekly ${weeklyModel.score}/100`,
       `Monthly ${monthlyModel.score}/100`,
+      alignment.label,
       `Risk ${riskScore}/100`,
       `Confidence ${Math.round(confidence)}/100`,
     ],

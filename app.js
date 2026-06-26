@@ -567,6 +567,32 @@ function predictionToneClass(label) {
   return "";
 }
 
+function alignmentToneClass(type) {
+  if (type === "high-alignment") return "gain";
+  if (type === "short-term-only" || type === "wait-for-entry" || type === "partial-alignment") return "possible";
+  if (type === "avoid") return "loss";
+  return "";
+}
+
+function fallbackAlignment(item) {
+  const daily = scoreValue(item.dailyScore);
+  const weekly = scoreValue(item.weeklyScore);
+  const monthly = scoreValue(item.monthlyScore);
+  const dailyBullish = daily >= 70;
+  const weeklyBullish = weekly >= 70;
+  const monthlyBullish = monthly >= 70;
+  const dailyWeak = daily < 55;
+  const weeklyWeak = weekly < 55;
+  const monthlyWeak = monthly < 55;
+
+  if (dailyBullish && weeklyBullish && monthlyBullish) return { label: "High-Alignment Opportunity", type: "high-alignment", action: "All three timeframes are bullish." };
+  if (dailyBullish && monthlyWeak) return { label: "Short-Term Only", type: "short-term-only", action: "Daily is bullish, but monthly is weak." };
+  if (monthlyBullish && dailyWeak) return { label: "Wait for Better Entry", type: "wait-for-entry", action: "Monthly is bullish, but today is weak." };
+  if (dailyWeak && weeklyWeak && monthlyWeak) return { label: "Avoid", type: "avoid", action: "All three timeframes are weak." };
+  if (weeklyBullish && (dailyBullish || monthlyBullish)) return { label: "Partial Alignment", type: "partial-alignment", action: "Two timeframes are supportive." };
+  return { label: "Mixed Signals", type: "mixed", action: "The timeframes disagree." };
+}
+
 function predictionModelForView(item) {
   const models = item.timeframeModels || {};
   if (predictionView === "dailyOpportunities" || predictionView === "strongestOneDay") return models.daily || null;
@@ -644,8 +670,10 @@ function renderPredictions() {
   output.predictionGrid.innerHTML = active
     .map((item) => {
       const model = predictionModelForView(item);
+      const alignment = item.signalAlignment || fallbackAlignment(item);
       const modelLabel = model?.label || item.label || "Research candidate";
       const tone = predictionToneClass(modelLabel);
+      const alignmentTone = alignmentToneClass(alignment.type);
       const entryZone = model?.entryZone || item.suggestedEntryZone || "Needs current market data";
       const profitTarget = model?.profitTarget || item.suggestedProfitTarget || "Needs current market data";
       const stopLevel = model?.stopLevel || item.suggestedStopLevel || "Needs current market data";
@@ -658,6 +686,10 @@ function renderPredictions() {
             <strong>${escapeHtml(item.ticker)}</strong>
           </div>
           <h3>${escapeHtml(item.name)}</h3>
+          <div class="alignment-pill ${alignmentTone}">
+            <strong>${escapeHtml(alignment.label)}</strong>
+            <span>${escapeHtml(alignment.action)}</span>
+          </div>
           <div class="score-line ${tone}">
             <span>${escapeHtml(modelLabel)}</span>
             <strong>${Number(item.aiOpportunityScore) || 0}/100</strong>

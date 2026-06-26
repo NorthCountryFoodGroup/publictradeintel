@@ -391,6 +391,41 @@ li {
   background: var(--green);
 }
 
+.alignment-pill {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(36, 123, 134, 0.2);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  padding: 10px 12px;
+}
+
+.alignment-pill strong {
+  margin: 0;
+  color: var(--ink);
+}
+
+.alignment-pill span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.alignment-pill.gain {
+  border-color: rgba(39, 106, 75, 0.28);
+  background: var(--green-soft);
+}
+
+.alignment-pill.possible {
+  border-color: rgba(191, 139, 44, 0.28);
+  background: #fff6df;
+}
+
+.alignment-pill.loss {
+  border-color: rgba(139, 67, 45, 0.28);
+  background: #fff0e9;
+}
+
 .timeframe-score-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
