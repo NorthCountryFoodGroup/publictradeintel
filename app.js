@@ -742,6 +742,7 @@ function renderPredictions() {
       const regime = item.marketRegime || {};
       const quality = item.dataQuality || {};
       const leaderboard = item.modelLeaderboard || {};
+      const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
       return `
         <article class="prediction-card">
           <div class="stock-card-top">
@@ -798,6 +799,10 @@ function renderPredictions() {
             <span>Risk Score: ${Number(item.riskScore) || 0}/100</span>
             <span>Data Quality Score: ${Number(quality.score) || 0}/100</span>
             <span>Market regime: ${escapeHtml(regime.primary || "unknown")}</span>
+            <span>Technical score: ${Number(technical.technicalSignalScore) || 0}/100</span>
+            <span>Trend: ${escapeHtml(technical.trendDirection || "unknown")}</span>
+            <span>Price vs 9/20 EMA: ${compactValue(technical.priceVs9Ema, "%")} / ${compactValue(technical.priceVs20Ema, "%")}</span>
+            <span>Support / resistance: ${technical.nearestSupport ? `$${Number(technical.nearestSupport).toFixed(2)}` : "n/a"} / ${technical.nearestResistance ? `$${Number(technical.nearestResistance).toFixed(2)}` : "n/a"}</span>
             <span>${escapeHtml(predictionModelTitle(model))} upside: ${pct(model?.expectedUpside)}</span>
             <span>${escapeHtml(predictionModelTitle(model))} downside: ${pct(model?.downsideRisk)}</span>
             <span>Risk/reward: ${Number(item.riskRewardRatio || 0).toFixed(2)}</span>

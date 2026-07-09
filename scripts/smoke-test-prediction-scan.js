@@ -120,10 +120,32 @@ function assertPredictionShape(result) {
   assert.ok(Number.isFinite(Number(first.sevenDayScore)), "prediction has 7-day score");
   assert.ok(Number.isFinite(Number(first.thirtyDayScore)), "prediction has 1-month score");
   assert.ok(Number.isFinite(Number(first.oneYearScore)), "prediction has 1-year score");
+  assertTechnicalShape(first.technicalAnalysis?.oneDay, "prediction has 1-day technical analysis");
+  assertTechnicalShape(first.technicalAnalysis?.sevenDay, "prediction has 7-day technical analysis");
+  assertTechnicalShape(first.technicalAnalysis?.thirtyDay, "prediction has 1-month technical analysis");
+  assertTechnicalShape(first.technicalAnalysis?.oneYear, "prediction has 1-year technical analysis");
+  assertTechnicalShape(first.timeframeModels?.oneDay?.technicalAnalysis, "1-day model has technical analysis");
+  assertTechnicalShape(first.timeframeModels?.sevenDay?.technicalAnalysis, "7-day model has technical analysis");
+  assertTechnicalShape(first.timeframeModels?.thirtyDay?.technicalAnalysis, "1-month model has technical analysis");
+  assertTechnicalShape(first.timeframeModels?.oneYear?.technicalAnalysis, "1-year model has technical analysis");
   assert.ok(Array.isArray(result.sections?.top25OneDay), "has Top 25 1-day section");
   assert.ok(Array.isArray(result.sections?.top25SevenDay), "has Top 25 7-day section");
   assert.ok(Array.isArray(result.sections?.top25OneMonth), "has Top 25 1-month section");
   assert.ok(Array.isArray(result.sections?.top25OneYear), "has Top 25 1-year section");
+}
+
+function assertTechnicalShape(technical, message) {
+  assert.ok(technical, message);
+  assert.ok(typeof technical.trendDirection === "string", `${message}: trend direction`);
+  assert.ok("priceVs9Ema" in technical, `${message}: price vs 9 EMA`);
+  assert.ok("priceVs20Ema" in technical, `${message}: price vs 20 EMA`);
+  assert.ok("ema9Vs20Ema" in technical, `${message}: 9 EMA vs 20 EMA`);
+  assert.ok("priceVsVwap" in technical, `${message}: price vs VWAP`);
+  assert.ok("nearestSupport" in technical, `${message}: nearest support`);
+  assert.ok("nearestResistance" in technical, `${message}: nearest resistance`);
+  assert.ok("openingRangeHigh" in technical, `${message}: opening range high`);
+  assert.ok("openingRangeLow" in technical, `${message}: opening range low`);
+  assert.ok(Number.isFinite(Number(technical.technicalSignalScore)), `${message}: technical signal score`);
 }
 
 async function main() {

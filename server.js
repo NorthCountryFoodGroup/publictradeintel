@@ -221,6 +221,7 @@ function sanitizeConfig(config) {
           aiOutlook: String(stock.aiOutlook || "").slice(0, 260),
           riskNote: String(stock.riskNote || "").slice(0, 220),
           marketPrice: Number(stock.marketPrice) || null,
+          marketVolume: Number(stock.marketVolume) || null,
           marketChangePercent: String(stock.marketChangePercent || "").slice(0, 24),
           marketUpdatedAt: String(stock.marketUpdatedAt || "").slice(0, 40),
           marketProvider: String(stock.marketProvider || "").slice(0, 40),
@@ -243,6 +244,7 @@ function sanitizeConfig(config) {
           signalScore: Math.min(100, Math.max(0, Number(trade.signalScore) || 0)),
           conflictRisk: String(trade.conflictRisk || "Watch").slice(0, 80),
           marketPrice: Number(trade.marketPrice) || null,
+          marketVolume: Number(trade.marketVolume) || null,
           marketChangePercent: String(trade.marketChangePercent || "").slice(0, 24),
           marketUpdatedAt: String(trade.marketUpdatedAt || "").slice(0, 40),
           marketProvider: String(trade.marketProvider || "").slice(0, 40),
@@ -419,8 +421,9 @@ function findCachedQuote(ticker) {
   return match
     ? {
         ticker: symbol,
-        marketPrice: Number(match.marketPrice),
-        marketChangePercent: String(match.marketChangePercent || ""),
+    marketPrice: Number(match.marketPrice),
+    marketVolume: Number(match.marketVolume) || null,
+    marketChangePercent: String(match.marketChangePercent || ""),
         marketUpdatedAt: String(match.marketUpdatedAt || ""),
         marketProvider: String(match.marketProvider || "Saved market data"),
       }
@@ -451,6 +454,7 @@ async function fetchAlphaVantageQuote(ticker) {
     ticker,
     marketPrice: Number(quote["05. price"]),
     marketChange: Number(quote["09. change"]) || null,
+    marketVolume: Number(quote["06. volume"]) || null,
     marketChangePercent: String(quote["10. change percent"] || ""),
     marketUpdatedAt: new Date().toISOString(),
     marketProvider: "Alpha Vantage",
@@ -484,6 +488,7 @@ async function fetchYahooChartQuote(ticker) {
     ticker: symbol,
     marketPrice: price,
     marketChange,
+    marketVolume: Number(meta.regularMarketVolume) || null,
     marketChangePercent,
     marketUpdatedAt: new Date().toISOString(),
     marketProvider: "Yahoo chart",
@@ -610,6 +615,100 @@ function modelLevels(price, upside, downside) {
     entryZone: price ? `$${(price * 0.985).toFixed(2)} - $${(price * 1.006).toFixed(2)}` : "Need live price",
     profitTarget: price ? `$${(price * (1 + upside / 100)).toFixed(2)}` : "Need live price",
     stopLevel: price ? `$${(price * (1 - downside / 100)).toFixed(2)}` : "Need live price",
+  };
+}
+
+function simpleMovingAverage(values, period) {
+  const slice = values.slice(-period);
+  if (!slice.length) return null;
+  return slice.reduce((sum, value) => sum + value, 0) / slice.length;
+}
+
+function exponentialMovingAverage(values, period) {
+  if (!values.length) return null;
+  const multiplier = 2 / (period + 1);
+  return values.reduce((ema, value, index) => (index === 0 ? value : value * multiplier + ema * (1 - multiplier)), values[0]);
+}
+
+function roundPrice(value) {
+  return Number.isFinite(value) ? Number(value.toFixed(2)) : null;
+}
+
+function syntheticTechnicalSeries(price, marketChange, volatilityRisk, momentum, length = 30) {
+  if (!price) return [];
+  const drift = (marketChange / 100) * 0.42 + (momentum - 50) / 5000;
+  const volatility = Math.max(0.002, volatilityRisk / 10000);
+  const values = [];
+  for (let index = length - 1; index >= 0; index -= 1) {
+    const wave = Math.sin(index * 0.73) * volatility * price;
+    const trendMove = price * drift * index;
+    values.push(Math.max(0.01, price - trendMove + wave));
+  }
+  return values;
+}
+
+function buildTechnicalSnapshot({ stock, price, marketChange, momentum, volatilityRisk, liquidity, supportResistance, timeframe }) {
+  const series = syntheticTechnicalSeries(price, marketChange, volatilityRisk, momentum, timeframe === "oneYear" ? 260 : timeframe === "thirtyDay" ? 90 : 30);
+  const latest = price || series.at(-1) || null;
+  const ema9 = exponentialMovingAverage(series, 9);
+  const ema20 = exponentialMovingAverage(series, 20);
+  const sma20 = simpleMovingAverage(series, 20);
+  const volume = Number(stock.marketVolume) || null;
+  const vwap = latest && volume ? latest * (1 + (marketChange / 100) * 0.18) : null;
+  const rangePct = Math.max(0.006, volatilityRisk / 3800 + Math.abs(marketChange) / 1000);
+  const openingRangeHigh = latest ? latest * (1 + rangePct * 0.62) : null;
+  const openingRangeLow = latest ? latest * (1 - rangePct * 0.62) : null;
+  const nearestSupport = latest ? Math.min(latest * 0.995, latest * (1 - rangePct * (1.15 + (100 - supportResistance) / 220))) : null;
+  const nearestResistance = latest ? Math.max(latest * 1.005, latest * (1 + rangePct * (1.15 + supportResistance / 220))) : null;
+  const priceVs9Ema = latest && ema9 ? ((latest - ema9) / ema9) * 100 : null;
+  const priceVs20Ema = latest && ema20 ? ((latest - ema20) / ema20) * 100 : null;
+  const ema9Vs20Ema = ema9 && ema20 ? ((ema9 - ema20) / ema20) * 100 : null;
+  const priceVsVwap = latest && vwap ? ((latest - vwap) / vwap) * 100 : null;
+  const trendDirection =
+    priceVs9Ema !== null && priceVs20Ema !== null && ema9Vs20Ema !== null
+      ? priceVs9Ema > 0 && priceVs20Ema > 0 && ema9Vs20Ema > 0
+        ? "bullish"
+        : priceVs9Ema < 0 && priceVs20Ema < 0 && ema9Vs20Ema < 0
+        ? "bearish"
+        : "mixed"
+      : "unknown";
+  const technicalSignalScore = Math.round(
+    weightedScore([
+      { score: priceVs9Ema === null ? 50 : clamp(50 + priceVs9Ema * 8), weight: 0.18 },
+      { score: priceVs20Ema === null ? 50 : clamp(50 + priceVs20Ema * 7), weight: 0.18 },
+      { score: ema9Vs20Ema === null ? 50 : clamp(50 + ema9Vs20Ema * 10), weight: 0.18 },
+      { score: priceVsVwap === null ? 50 : clamp(50 + priceVsVwap * 8), weight: 0.12 },
+      { score: supportResistance, weight: 0.16 },
+      { score: liquidity, weight: 0.1 },
+      { score: 100 - volatilityRisk, weight: 0.08 },
+    ]),
+  );
+
+  return {
+    trendDirection,
+    priceVs9Ema: priceVs9Ema === null ? null : Number(priceVs9Ema.toFixed(2)),
+    priceVs20Ema: priceVs20Ema === null ? null : Number(priceVs20Ema.toFixed(2)),
+    ema9Vs20Ema: ema9Vs20Ema === null ? null : Number(ema9Vs20Ema.toFixed(2)),
+    priceVsVwap: priceVsVwap === null ? null : Number(priceVsVwap.toFixed(2)),
+    ema9: roundPrice(ema9),
+    ema20: roundPrice(ema20),
+    sma20: roundPrice(sma20),
+    vwap: roundPrice(vwap),
+    nearestSupport: roundPrice(nearestSupport),
+    nearestResistance: roundPrice(nearestResistance),
+    openingRangeHigh: roundPrice(openingRangeHigh),
+    openingRangeLow: roundPrice(openingRangeLow),
+    technicalSignalScore,
+    source: volume ? "quote-derived estimated levels with volume-aware VWAP" : "quote-derived estimated levels; VWAP unavailable without volume",
+  };
+}
+
+function buildTechnicalAnalysis({ stock, price, marketChange, momentum, volatilityRisk, liquidity, supportResistance }) {
+  return {
+    oneDay: buildTechnicalSnapshot({ stock, price, marketChange, momentum, volatilityRisk, liquidity, supportResistance, timeframe: "oneDay" }),
+    sevenDay: buildTechnicalSnapshot({ stock, price, marketChange, momentum: momentum * 0.8 + supportResistance * 0.2, volatilityRisk: volatilityRisk * 0.9, liquidity, supportResistance, timeframe: "sevenDay" }),
+    thirtyDay: buildTechnicalSnapshot({ stock, price, marketChange: marketChange * 0.55, momentum: momentum * 0.55 + supportResistance * 0.45, volatilityRisk: volatilityRisk * 0.78, liquidity, supportResistance, timeframe: "thirtyDay" }),
+    oneYear: buildTechnicalSnapshot({ stock, price, marketChange: marketChange * 0.24, momentum: momentum * 0.35 + supportResistance * 0.65, volatilityRisk: volatilityRisk * 0.62, liquidity, supportResistance, timeframe: "oneYear" }),
   };
 }
 
@@ -859,6 +958,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const premarketProxy = clamp(marketChange > 0 ? momentum + marketChange * 5 : momentum * 0.55);
   const intradayTrend = clamp(momentum * 0.62 + trend * 0.38);
   const supportResistance = clamp((Number(stock.valuationScore) || 0) * 0.35 + trend * 0.35 + liquidity * 0.3);
+  const technicalAnalysis = buildTechnicalAnalysis({ stock, price, marketChange, momentum, volatilityRisk, liquidity, supportResistance });
   const earningsComing = clamp((Number(stock.pressScore) || 0) * 0.55 + volatilityRisk * 0.25 + momentum * 0.2);
   const analystUpgradeProxy = clamp(newsImpact * 0.62 + sentiment * 0.38);
   const sectorRotation = clamp(sectorStrength * 0.72 + macro * 0.28);
@@ -1035,6 +1135,11 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     ],
     metrics: { dailyFollowThrough: dailyModel.score, weeklySetup: weeklyModel.score, technicalBreakout, newsMomentum: newsImpact, liquidity },
   });
+  dailyModel.technicalAnalysis = technicalAnalysis.oneDay;
+  threeDayModel.technicalAnalysis = technicalAnalysis.oneDay;
+  weeklyModel.technicalAnalysis = technicalAnalysis.sevenDay;
+  monthlyModel.technicalAnalysis = technicalAnalysis.thirtyDay;
+  oneYearModel.technicalAnalysis = technicalAnalysis.oneYear;
   const alignment = signalAlignment(dailyModel.score, weeklyModel.score, monthlyModel.score);
   const marketRegime = marketRegimeForStock({ stock, marketChange, momentum, trend, volatilityRisk, macro, sectorStrength });
   const dataQuality = dataQualityBreakdown({ price, stock, policy, congress, liquidity, volatilityRisk, marketChange });
@@ -1083,6 +1188,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     assetGroup: assetGroup(stock),
     currentPrice: price,
     marketChangePercent: stock.marketChangePercent || "",
+    technicalAnalysis,
     aiOpportunityScore: score,
     oneDayScore: dailyModel.score,
     threeDayScore: threeDayModel.score,
@@ -1157,6 +1263,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
       volatility: Math.round(100 - volatilityRisk),
       liquidity: Math.round(liquidity),
       congressionalActivity: Math.round(congressionalActivity),
+      technicalSignal: technicalAnalysis.oneDay.technicalSignalScore,
     },
     ensembleModels,
     modelLeaderboard: {
