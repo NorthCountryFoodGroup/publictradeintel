@@ -4,6 +4,7 @@
   "private": true,
   "description": "PublicTradeIntel market, congressional trade, and policy catalyst intelligence app.",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "smoke:predictions": "node scripts/smoke-test-prediction-scan.js"
   }
 }
