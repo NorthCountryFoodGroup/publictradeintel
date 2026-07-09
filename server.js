@@ -1211,7 +1211,18 @@ function confidenceTier(unifiedScore, confidence, conflicts) {
   return "low";
 }
 
-function buildUnifiedPredictionLayer({ baseScore, confidence, technicalAnalysis, multiTimeframeAlignment, setupSignals, shortSqueezeSignal, chartPatternSignal }) {
+function lowerConfidenceTier(tier) {
+  const order = ["low", "medium", "high", "very high"];
+  const index = order.indexOf(tier);
+  return index <= 0 ? "low" : order[index - 1];
+}
+
+function capConfidenceTier(tier, cap) {
+  const order = ["low", "medium", "high", "very high"];
+  return order[Math.min(order.indexOf(tier), order.indexOf(cap))] || "low";
+}
+
+function buildUnifiedPredictionLayer({ baseScore, confidence, technicalAnalysis, multiTimeframeAlignment, setupSignals, shortSqueezeSignal, chartPatternSignal, dataQuality }) {
   const technical = technicalAnalysis?.oneDay || {};
   const technicalScore = Number(technical.technicalSignalScore) || 0;
   const alignmentScore = Number(multiTimeframeAlignment?.alignmentScore) || 0;
@@ -1286,14 +1297,28 @@ function buildUnifiedPredictionLayer({ baseScore, confidence, technicalAnalysis,
       return layer.direction === "mixed";
     })
     .map((layer) => layer.reason);
+  let tier = confidenceTier(unifiedPredictionScore, confidence, conflictingSignals.length);
+  const guardrailNotes = [];
+  if (unifiedDirection === "mixed") {
+    tier = capConfidenceTier(tier, "medium");
+    guardrailNotes.push("Mixed unified direction caps confidence at medium.");
+  }
+  if (conflictingSignals.length > 2) {
+    tier = capConfidenceTier(tier, "high");
+    guardrailNotes.push("More than two conflicting signals prevents very high confidence.");
+  }
+  if (["partial", "stale", "failed"].includes(dataQuality?.dataQualityStatus)) {
+    tier = lowerConfidenceTier(tier);
+    guardrailNotes.push(`Data quality is ${dataQuality.dataQualityStatus}, so confidence was lowered one tier.`);
+  }
 
   return {
     unifiedPredictionScore,
     unifiedDirection,
-    confidenceTier: confidenceTier(unifiedPredictionScore, confidence, conflictingSignals.length),
+    confidenceTier: tier,
     strongestSignals,
     conflictingSignals,
-    finalReasonSummary: `${unifiedDirection} unified read at ${unifiedPredictionScore}/100. Strongest support: ${strongestSignals.slice(0, 2).join("; ")}.${conflictingSignals.length ? ` Conflicts: ${conflictingSignals.slice(0, 2).join("; ")}.` : " No major conflicting layer detected."}`,
+    finalReasonSummary: `${unifiedDirection} unified read at ${unifiedPredictionScore}/100. Strongest support: ${strongestSignals.slice(0, 2).join("; ")}.${conflictingSignals.length ? ` Conflicts: ${conflictingSignals.slice(0, 2).join("; ")}.` : " No major conflicting layer detected."}${guardrailNotes.length ? ` Guardrails: ${guardrailNotes.join(" ")}` : ""}`,
   };
 }
 
@@ -1388,7 +1413,10 @@ function researchSubModel(name, bullish, bearish, confidence, reason, dataQualit
 
 function dataQualityBreakdown({ price, stock, policy, congress, liquidity, volatilityRisk, marketChange }) {
   const sourceReliability = price ? 78 : 44;
-  const freshness = stock.marketUpdatedAt ? 82 : price ? 64 : 38;
+  const marketUpdatedAt = stock.marketUpdatedAt ? Date.parse(stock.marketUpdatedAt) : NaN;
+  const marketAgeHours = Number.isFinite(marketUpdatedAt) ? (Date.now() - marketUpdatedAt) / 3600000 : null;
+  const staleMarketData = marketAgeHours !== null && marketAgeHours > 24;
+  const freshness = staleMarketData ? 42 : stock.marketUpdatedAt ? 82 : price ? 64 : 38;
   const duplicateNewsRisk = policy.count > 3 ? 56 : 82;
   const socialMediaNoise = 72;
   const delayedReporting = congress.count ? 48 : 76;
@@ -1405,9 +1433,26 @@ function dataQualityBreakdown({ price, stock, policy, congress, liquidity, volat
     { score: 100 - abnormalSpreadRisk, weight: 0.12 },
     { score: 100 - missingData, weight: 0.12 },
   ]);
+  const dataQualityNotes = [
+    price ? "" : "Current market price is missing.",
+    stock.marketUpdatedAt ? "" : "Market update timestamp is missing.",
+    staleMarketData ? `Market data is ${Math.round(marketAgeHours)} hours old.` : "",
+    stock.marketChangePercent ? "" : "Market change percentage is missing.",
+    Number(stock.marketVolume) ? "" : "Volume data is missing or unavailable.",
+    policy.count ? "" : "No fresh policy/news signal matched this ticker.",
+  ].filter(Boolean);
+  const dataQualityStatus = !price
+    ? "failed"
+    : staleMarketData
+    ? "stale"
+    : missingData >= 24 || score < 62
+    ? "partial"
+    : "good";
 
   return {
     score: Math.round(score),
+    dataQualityStatus,
+    dataQualityNotes,
     sourceReliability: Math.round(sourceReliability),
     freshness: Math.round(freshness),
     duplicateNewsRisk: Math.round(duplicateNewsRisk),
@@ -1767,6 +1812,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     setupSignals,
     shortSqueezeSignal,
     chartPatternSignal,
+    dataQuality,
   });
   const ensembleModels = {
     momentum: researchSubModel("Momentum Model", momentum, 100 - momentum, confidence, `Price momentum proxy is ${Math.round(momentum)}/100.`, dataQuality.score),
@@ -1824,6 +1870,8 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     strongestSignals: unifiedPrediction.strongestSignals,
     conflictingSignals: unifiedPrediction.conflictingSignals,
     finalReasonSummary: unifiedPrediction.finalReasonSummary,
+    dataQualityStatus: dataQuality.dataQualityStatus,
+    dataQualityNotes: dataQuality.dataQualityNotes,
     aiOpportunityScore: score,
     oneDayScore: dailyModel.score,
     threeDayScore: threeDayModel.score,

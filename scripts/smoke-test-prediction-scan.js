@@ -183,6 +183,17 @@ function assertUnifiedPrediction(prediction) {
   assert.ok(Array.isArray(prediction.strongestSignals), "strongestSignals exists");
   assert.ok(Array.isArray(prediction.conflictingSignals), "conflictingSignals exists");
   assert.ok(typeof prediction.finalReasonSummary === "string", "finalReasonSummary exists");
+  assert.ok(["good", "partial", "stale", "failed"].includes(prediction.dataQualityStatus), "dataQualityStatus exists");
+  assert.ok(Array.isArray(prediction.dataQualityNotes), "dataQualityNotes exists");
+  assert.ok(prediction.dataQuality?.dataQualityStatus === prediction.dataQualityStatus, "dataQuality includes matching status");
+  assert.ok(Array.isArray(prediction.dataQuality?.dataQualityNotes), "dataQuality includes notes");
+  if (prediction.unifiedDirection === "mixed") {
+    assert.notEqual(prediction.confidenceTier, "high", "mixed direction cannot be high confidence");
+    assert.notEqual(prediction.confidenceTier, "very high", "mixed direction cannot be very high confidence");
+  }
+  if (prediction.conflictingSignals.length > 2) {
+    assert.notEqual(prediction.confidenceTier, "very high", "too many conflicts cannot be very high confidence");
+  }
 }
 
 function assertMultiTimeframeAlignment(alignment) {

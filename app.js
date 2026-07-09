@@ -769,6 +769,7 @@ function renderPredictions() {
           <div class="signal-list">
             <span>Direction: ${escapeHtml(item.unifiedDirection || "neutral")}</span>
             <span>Confidence: ${escapeHtml(item.confidenceTier || "low")}</span>
+            <span>Data quality: ${escapeHtml(item.dataQualityStatus || quality.dataQualityStatus || "partial")}</span>
             <span>Base AI score: ${Number(item.aiOpportunityScore) || 0}/100</span>
           </div>
           <div class="timeframe-score-grid">
@@ -810,6 +811,7 @@ function renderPredictions() {
               <p>${escapeHtml(item.finalReasonSummary || "Unified prediction summary is being built from the available signal layers.")}</p>
               ${(item.strongestSignals || []).map((signal) => `<p>${escapeHtml(signal)}</p>`).join("")}
               ${(item.conflictingSignals || []).length ? `<strong>Conflicting signals</strong>${item.conflictingSignals.map((signal) => `<p>${escapeHtml(signal)}</p>`).join("")}` : ""}
+              ${(item.dataQualityNotes || quality.dataQualityNotes || []).length ? `<strong>Data quality notes</strong>${(item.dataQualityNotes || quality.dataQualityNotes || []).map((note) => `<p>${escapeHtml(note)}</p>`).join("")}` : ""}
             </div>
             <div class="signal-list">
             <span>Overall Opportunity Score: ${Number(item.aiOpportunityScore) || 0}/100</span>
