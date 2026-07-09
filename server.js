@@ -1014,6 +1014,189 @@ function buildShortSqueezeSignal({ stock, marketChange, momentum, unusualVolume,
   };
 }
 
+function patternDirection(pattern) {
+  return ["bear flag", "descending triangle", "double top", "wedge breakdown", "head and shoulders"].includes(pattern)
+    ? "bearish"
+    : "bullish";
+}
+
+function buildPatternLevel({ direction, price, support, resistance }) {
+  if (price === null) return { invalidationLevel: null, targetLevel: null };
+  const range = support !== null && resistance !== null ? Math.max(price * 0.015, Math.abs(resistance - support)) : price * 0.045;
+  if (direction === "bullish") {
+    return {
+      invalidationLevel: support !== null ? roundPrice(support) : roundPrice(price * 0.965),
+      targetLevel: resistance !== null && resistance > price ? roundPrice(resistance + range * 0.55) : roundPrice(price + range),
+    };
+  }
+  if (direction === "bearish") {
+    return {
+      invalidationLevel: resistance !== null ? roundPrice(resistance) : roundPrice(price * 1.035),
+      targetLevel: support !== null && support < price ? roundPrice(support - range * 0.55) : roundPrice(price - range),
+    };
+  }
+  return { invalidationLevel: null, targetLevel: null };
+}
+
+function buildChartPatternSignal({ stock, marketChange, momentum, technicalAnalysis, multiTimeframeAlignment, setupSignals }) {
+  const oneDay = technicalAnalysis?.oneDay || {};
+  const fiveMinute = multiTimeframeAlignment?.fiveMinute || {};
+  const price = numericOrNull(fiveMinute.currentPrice) || numericOrNull(oneDay.currentPrice) || numericOrNull(stock.marketPrice);
+  const support = numericOrNull(fiveMinute.nearestSupport) || numericOrNull(oneDay.nearestSupport);
+  const resistance = numericOrNull(fiveMinute.nearestResistance) || numericOrNull(oneDay.nearestResistance);
+  const priceVs9 = numericOrNull(fiveMinute.priceVs9Ema) ?? numericOrNull(oneDay.priceVs9Ema) ?? 0;
+  const priceVs20 = numericOrNull(fiveMinute.priceVs20Ema) ?? numericOrNull(oneDay.priceVs20Ema) ?? 0;
+  const emaSpread = numericOrNull(fiveMinute.ema9Vs20Ema) ?? numericOrNull(oneDay.ema9Vs20Ema) ?? 0;
+  const vwapDistance = numericOrNull(fiveMinute.priceVsVwap) ?? numericOrNull(oneDay.priceVsVwap) ?? 0;
+  const technicalScore = Number(oneDay.technicalSignalScore) || 0;
+  const alignment = multiTimeframeAlignment?.alignmentDirection || "neutral";
+  const rangePercent = price !== null && support !== null && resistance !== null ? ((resistance - support) / price) * 100 : 5;
+  const nearResistance = price !== null && resistance !== null ? Math.abs((resistance - price) / price) * 100 <= 2.4 : false;
+  const nearSupport = price !== null && support !== null ? Math.abs((price - support) / price) * 100 <= 2.4 : false;
+  const bullishStructure = priceVs9 > -0.4 && priceVs20 > -0.8 && emaSpread >= -0.2 && vwapDistance >= -0.25;
+  const bearishStructure = priceVs9 < 0.4 && priceVs20 < 0.8 && emaSpread <= 0.2 && vwapDistance <= 0.25;
+  const breakoutConfirmed = setupSignals?.breakAndRetest?.direction === "bullish" && setupSignals?.breakAndRetest?.detected;
+  const breakdownConfirmed = setupSignals?.breakAndRetest?.direction === "bearish" && setupSignals?.breakAndRetest?.detected;
+  const compactRangeScore = clamp(100 - Math.max(0, rangePercent - 2) * 7);
+
+  const candidates = [
+    {
+      name: "bull flag",
+      score: weightedScore([
+        { score: momentum, weight: 0.28 },
+        { score: marketChange > 0 ? clamp(58 + marketChange * 7) : 28, weight: 0.18 },
+        { score: bullishStructure ? 78 : 34, weight: 0.22 },
+        { score: compactRangeScore, weight: 0.16 },
+        { score: alignment === "bullish" ? 82 : 48, weight: 0.16 },
+      ]),
+    },
+    {
+      name: "bear flag",
+      score: weightedScore([
+        { score: 100 - momentum, weight: 0.28 },
+        { score: marketChange < 0 ? clamp(58 + Math.abs(marketChange) * 7) : 28, weight: 0.18 },
+        { score: bearishStructure ? 78 : 34, weight: 0.22 },
+        { score: compactRangeScore, weight: 0.16 },
+        { score: alignment === "bearish" ? 82 : 48, weight: 0.16 },
+      ]),
+    },
+    {
+      name: "ascending triangle",
+      score: weightedScore([
+        { score: nearResistance ? 82 : 42, weight: 0.26 },
+        { score: bullishStructure ? 76 : 36, weight: 0.24 },
+        { score: compactRangeScore, weight: 0.18 },
+        { score: technicalScore, weight: 0.18 },
+        { score: breakoutConfirmed ? 88 : 48, weight: 0.14 },
+      ]),
+    },
+    {
+      name: "descending triangle",
+      score: weightedScore([
+        { score: nearSupport ? 82 : 42, weight: 0.26 },
+        { score: bearishStructure ? 76 : 36, weight: 0.24 },
+        { score: compactRangeScore, weight: 0.18 },
+        { score: 100 - technicalScore, weight: 0.18 },
+        { score: breakdownConfirmed ? 88 : 48, weight: 0.14 },
+      ]),
+    },
+    {
+      name: "double top",
+      score: weightedScore([
+        { score: nearResistance ? 84 : 34, weight: 0.3 },
+        { score: momentum < 58 ? 72 : 40, weight: 0.22 },
+        { score: marketChange <= 0 ? 76 : 42, weight: 0.18 },
+        { score: priceVs9 < 0 ? 76 : 38, weight: 0.16 },
+        { score: alignment === "bearish" ? 80 : 44, weight: 0.14 },
+      ]),
+    },
+    {
+      name: "double bottom",
+      score: weightedScore([
+        { score: nearSupport ? 84 : 34, weight: 0.3 },
+        { score: momentum > 42 ? 68 : 38, weight: 0.22 },
+        { score: marketChange >= 0 ? 76 : 42, weight: 0.18 },
+        { score: vwapDistance > 0 ? 76 : 38, weight: 0.16 },
+        { score: alignment === "bullish" ? 80 : 44, weight: 0.14 },
+      ]),
+    },
+    {
+      name: "wedge breakout",
+      score: weightedScore([
+        { score: breakoutConfirmed || nearResistance ? 82 : 42, weight: 0.24 },
+        { score: bullishStructure ? 78 : 38, weight: 0.22 },
+        { score: compactRangeScore, weight: 0.18 },
+        { score: momentum, weight: 0.2 },
+        { score: vwapDistance > 0 ? 78 : 40, weight: 0.16 },
+      ]),
+    },
+    {
+      name: "wedge breakdown",
+      score: weightedScore([
+        { score: breakdownConfirmed || nearSupport ? 82 : 42, weight: 0.24 },
+        { score: bearishStructure ? 78 : 38, weight: 0.22 },
+        { score: compactRangeScore, weight: 0.18 },
+        { score: 100 - momentum, weight: 0.2 },
+        { score: vwapDistance < 0 ? 78 : 40, weight: 0.16 },
+      ]),
+    },
+    {
+      name: "head and shoulders",
+      score: weightedScore([
+        { score: nearResistance ? 74 : 36, weight: 0.22 },
+        { score: priceVs20 < 0 ? 82 : 34, weight: 0.24 },
+        { score: emaSpread < 0 ? 78 : 38, weight: 0.2 },
+        { score: marketChange < 0 ? 76 : 42, weight: 0.18 },
+        { score: alignment === "bearish" ? 78 : 44, weight: 0.16 },
+      ]),
+    },
+    {
+      name: "inverse head and shoulders",
+      score: weightedScore([
+        { score: nearSupport ? 74 : 36, weight: 0.22 },
+        { score: priceVs20 > 0 ? 82 : 34, weight: 0.24 },
+        { score: emaSpread > 0 ? 78 : 38, weight: 0.2 },
+        { score: marketChange > 0 ? 76 : 42, weight: 0.18 },
+        { score: alignment === "bullish" ? 78 : 44, weight: 0.16 },
+      ]),
+    },
+  ].map((pattern) => ({
+    name: pattern.name,
+    direction: patternDirection(pattern.name),
+    score: Math.round(clamp(pattern.score)),
+  }));
+
+  const detectedPatterns = candidates
+    .filter((pattern) => pattern.score >= 55)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+  const primary = detectedPatterns[0] || candidates.sort((a, b) => b.score - a.score)[0] || null;
+  const primaryPattern = primary && primary.score >= 45 ? primary.name : "none";
+  const bullishCount = detectedPatterns.filter((pattern) => pattern.direction === "bullish").length;
+  const bearishCount = detectedPatterns.filter((pattern) => pattern.direction === "bearish").length;
+  const patternDirectionValue =
+    primaryPattern === "none"
+      ? "none"
+      : bullishCount && bearishCount
+      ? "mixed"
+      : primary?.direction || "none";
+  const patternScore = primaryPattern === "none" ? 0 : primary.score;
+  const levels = buildPatternLevel({ direction: patternDirectionValue === "mixed" ? primary.direction : patternDirectionValue, price, support, resistance });
+
+  return {
+    detectedPatterns,
+    primaryPattern,
+    patternDirection: patternDirectionValue,
+    patternScore,
+    invalidationLevel: levels.invalidationLevel,
+    targetLevel: levels.targetLevel,
+    reasonSummary:
+      primaryPattern === "none"
+        ? "No high-quality chart pattern is confirmed from the current technical snapshot."
+        : `${primaryPattern} is the strongest chart pattern at ${patternScore}/100 using EMA/VWAP position, support/resistance, range compression, and trend alignment.`,
+  };
+}
+
 function buildTimeframeModel({ name, score, confidence, risk, upside, downside, price, reasons, failureRisks, metrics }) {
   const levels = modelLevels(price, upside, downside);
   return {
@@ -1280,6 +1463,14 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     multiTimeframeAlignment,
     setupSignals,
   });
+  const chartPatternSignal = buildChartPatternSignal({
+    stock,
+    marketChange,
+    momentum,
+    technicalAnalysis,
+    multiTimeframeAlignment,
+    setupSignals,
+  });
   const earningsComing = clamp((Number(stock.pressScore) || 0) * 0.55 + volatilityRisk * 0.25 + momentum * 0.2);
   const analystUpgradeProxy = clamp(newsImpact * 0.62 + sentiment * 0.38);
   const sectorRotation = clamp(sectorStrength * 0.72 + macro * 0.28);
@@ -1517,6 +1708,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     multiTimeframeAlignment,
     setupSignals,
     shortSqueezeSignal,
+    chartPatternSignal,
     aiOpportunityScore: score,
     oneDayScore: dailyModel.score,
     threeDayScore: threeDayModel.score,
@@ -1595,6 +1787,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
       intradayAlignment: multiTimeframeAlignment.alignmentScore,
       setupSignal: setupSignals.setupScore,
       shortSqueeze: shortSqueezeSignal.squeezeScore,
+      chartPattern: chartPatternSignal.patternScore,
     },
     ensembleModels,
     modelLeaderboard: {

@@ -131,6 +131,7 @@ function assertPredictionShape(result) {
   assertMultiTimeframeAlignment(first.multiTimeframeAlignment);
   assertSetupSignals(first.setupSignals);
   assertShortSqueezeSignal(first.shortSqueezeSignal);
+  assertChartPatternSignal(first.chartPatternSignal);
   assert.ok(Array.isArray(result.sections?.top25OneDay), "has Top 25 1-day section");
   assert.ok(Array.isArray(result.sections?.top25SevenDay), "has Top 25 7-day section");
   assert.ok(Array.isArray(result.sections?.top25OneMonth), "has Top 25 1-month section");
@@ -159,6 +160,18 @@ function assertShortSqueezeSignal(shortSqueezeSignal) {
   assert.equal(typeof shortSqueezeSignal.breakingKeyResistance, "boolean", "breakingKeyResistance exists");
   assert.equal(typeof shortSqueezeSignal.failedBreakdowns, "boolean", "failedBreakdowns exists");
   assert.ok(typeof shortSqueezeSignal.reasonSummary === "string", "short squeeze reason summary exists");
+}
+
+function assertChartPatternSignal(chartPatternSignal) {
+  assert.ok(chartPatternSignal, "chartPatternSignal exists");
+  assert.ok(Array.isArray(chartPatternSignal.detectedPatterns), "detectedPatterns exists");
+  assert.ok(typeof chartPatternSignal.primaryPattern === "string", "primaryPattern exists");
+  assert.ok(["bullish", "bearish", "mixed", "none"].includes(chartPatternSignal.patternDirection), "patternDirection exists");
+  assert.ok(Number.isFinite(Number(chartPatternSignal.patternScore)), "patternScore exists");
+  assert.ok(chartPatternSignal.patternScore >= 0 && chartPatternSignal.patternScore <= 100, "patternScore is 0-100");
+  assert.ok("invalidationLevel" in chartPatternSignal, "invalidationLevel exists");
+  assert.ok("targetLevel" in chartPatternSignal, "targetLevel exists");
+  assert.ok(typeof chartPatternSignal.reasonSummary === "string", "chart pattern reason summary exists");
 }
 
 function assertMultiTimeframeAlignment(alignment) {
