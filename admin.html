@@ -112,6 +112,16 @@
 
         <div class="section-heading editor-heading">
           <div>
+            <h2>Prediction engine health</h2>
+            <p class="muted-copy">Run an authenticated production validation scan and review ranking sanity checks.</p>
+          </div>
+          <button type="button" id="refreshPredictions">Run prediction scan</button>
+        </div>
+        <p class="form-message" id="predictionHealthMessage"></p>
+        <div class="admin-list" id="predictionHealthPanel"></div>
+
+        <div class="section-heading editor-heading">
+          <div>
             <h2>Policy catalyst monitor</h2>
             <p class="muted-copy">The server scans configured public sources hourly. Use this button to refresh immediately.</p>
           </div>

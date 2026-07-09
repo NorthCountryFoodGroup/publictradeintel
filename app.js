@@ -661,6 +661,12 @@ function renderPredictions() {
   if (!output.predictionGrid || !output.predictionSummary) return;
   const predictions = predictionEngine.predictions || [];
   const active = predictionEngine.sections?.[predictionView] || predictions.slice(0, 25);
+  const health = predictionEngine.predictionEngineHealth || {};
+  const top25Counts = health.top25Counts || {};
+  const qualityCounts = health.dataQualityStatusCounts || {};
+  const unifiedAverages = health.averageUnifiedPredictionScoreByTimeframe || {};
+  const sanityChecks = health.rankingSanityChecks || {};
+  const failedTickers = health.failedTickers || [];
   const strong = predictions.filter((item) => item.label === "Strong AI Buy Candidate").length;
   const oneDayAvg = predictions.length
     ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.oneDayScore || item.dailyScore), 0) / predictions.length)
@@ -707,10 +713,57 @@ function renderPredictions() {
       <span>Overall avg</span>
       <strong>${avgScore}/100</strong>
     </div>
+    <div>
+      <span>Engine health</span>
+      <strong>${escapeHtml(health.status || "Not run")}</strong>
+    </div>
+    <div>
+      <span>Predictions generated</span>
+      <strong>${Number(health.predictionsGenerated) || predictions.length}</strong>
+    </div>
+    <div>
+      <span>Top 25 counts</span>
+      <strong>${Number(top25Counts.top25OneDay) || 0}/${Number(top25Counts.top25SevenDay) || 0}/${Number(top25Counts.top25OneMonth) || 0}/${Number(top25Counts.top25OneYear) || 0}</strong>
+    </div>
+    <div>
+      <span>Data quality</span>
+      <strong>G ${Number(qualityCounts.good) || 0} / P ${Number(qualityCounts.partial) || 0} / S ${Number(qualityCounts.stale) || 0} / F ${Number(qualityCounts.failed) || 0}</strong>
+    </div>
   `;
+
+  const healthCard = health.status
+    ? `
+      <article class="prediction-card engine-health-card ${health.status === "Healthy" ? "health-good" : health.status === "Failed" ? "health-failed" : "health-warning"}">
+        <div class="stock-card-top">
+          <span>Authenticated validation checklist</span>
+          <strong>${escapeHtml(health.status)}</strong>
+        </div>
+        <h3>Prediction engine health</h3>
+        <div class="signal-list">
+          <span>Scan completed: ${health.scanCompletedAt ? new Date(health.scanCompletedAt).toLocaleString() : "Not run yet"}</span>
+          <span>Tickers scanned: ${Number(health.tickersScanned) || 0}</span>
+          <span>Predictions generated: ${Number(health.predictionsGenerated) || 0}</span>
+          <span>Top 25 entries: 1d ${Number(top25Counts.top25OneDay) || 0}, 7d ${Number(top25Counts.top25SevenDay) || 0}, 1m ${Number(top25Counts.top25OneMonth) || 0}, 1y ${Number(top25Counts.top25OneYear) || 0}</span>
+          <span>Avg unified scores: 1d ${Number(unifiedAverages.top25OneDay) || 0}, 7d ${Number(unifiedAverages.top25SevenDay) || 0}, 1m ${Number(unifiedAverages.top25OneMonth) || 0}, 1y ${Number(unifiedAverages.top25OneYear) || 0}</span>
+          <span>Highest: ${escapeHtml(health.highestScoringTicker?.ticker || "n/a")} ${Number(health.highestScoringTicker?.score) || 0}/100</span>
+          <span>Lowest: ${escapeHtml(health.lowestScoringTicker?.ticker || "n/a")} ${Number(health.lowestScoringTicker?.score) || 0}/100</span>
+          <span>Failed tickers: ${failedTickers.length ? failedTickers.map((item) => `${escapeHtml(item.ticker)} (${escapeHtml(item.reason)})`).join(", ") : "None"}</span>
+        </div>
+        <details class="why-pick">
+          <summary>Ranking sanity checks</summary>
+          <div class="signal-list">
+            ${Object.entries(sanityChecks)
+              .map(([name, passed]) => `<span>${escapeHtml(name)}: ${passed ? "pass" : "fail"}</span>`)
+              .join("")}
+          </div>
+        </details>
+      </article>
+    `
+    : "";
 
   if (!active.length) {
     output.predictionGrid.innerHTML = `
+      ${healthCard}
       <article class="stock-card">
         <span>No predictions yet</span>
         <strong>Run a prediction scan</strong>
@@ -726,7 +779,7 @@ function renderPredictions() {
     return;
   }
 
-  output.predictionGrid.innerHTML = sortedPredictionRows(active)
+  output.predictionGrid.innerHTML = healthCard + sortedPredictionRows(active)
     .map((item) => {
       const model = predictionModelForView(item);
       const alignment = item.signalAlignment || fallbackAlignment(item);

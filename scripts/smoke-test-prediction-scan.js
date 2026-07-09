@@ -137,6 +137,7 @@ function assertPredictionShape(result) {
   assert.ok(Array.isArray(result.sections?.top25SevenDay), "has Top 25 7-day section");
   assert.ok(Array.isArray(result.sections?.top25OneMonth), "has Top 25 1-month section");
   assert.ok(Array.isArray(result.sections?.top25OneYear), "has Top 25 1-year section");
+  assertPredictionEngineHealth(result.predictionEngineHealth);
 }
 
 function assertSetupSignals(setupSignals) {
@@ -194,6 +195,30 @@ function assertUnifiedPrediction(prediction) {
   if (prediction.conflictingSignals.length > 2) {
     assert.notEqual(prediction.confidenceTier, "very high", "too many conflicts cannot be very high confidence");
   }
+}
+
+function assertPredictionEngineHealth(health) {
+  assert.ok(health, "predictionEngineHealth exists");
+  assert.ok(["Healthy", "Warning", "Failed"].includes(health.status), "health status exists");
+  assert.ok(health.scanCompletedAt, "health scan completed timestamp exists");
+  assert.ok(Number.isFinite(Number(health.tickersScanned)), "health tickers scanned exists");
+  assert.ok(Number.isFinite(Number(health.predictionsGenerated)), "health predictions generated exists");
+  assert.ok(health.top25Counts, "health top25 counts exist");
+  assert.ok(Number.isFinite(Number(health.top25Counts.top25OneDay)), "health top25 1-day count exists");
+  assert.ok(Number.isFinite(Number(health.top25Counts.top25SevenDay)), "health top25 7-day count exists");
+  assert.ok(Number.isFinite(Number(health.top25Counts.top25OneMonth)), "health top25 1-month count exists");
+  assert.ok(Number.isFinite(Number(health.top25Counts.top25OneYear)), "health top25 1-year count exists");
+  assert.ok(health.dataQualityStatusCounts, "health data quality counts exist");
+  assert.ok(health.averageUnifiedPredictionScoreByTimeframe, "health unified averages exist");
+  assert.ok(health.highestScoringTicker, "health highest ticker exists");
+  assert.ok(health.lowestScoringTicker, "health lowest ticker exists");
+  assert.ok(Array.isArray(health.failedTickers), "health failed tickers exists");
+  assert.ok(health.rankingSanityChecks, "health ranking sanity checks exist");
+  assert.equal(typeof health.rankingSanityChecks.noDuplicateTickerInSameTop25, "boolean", "duplicate ticker sanity check exists");
+  assert.equal(typeof health.rankingSanityChecks.noMissingUnifiedPredictionScore, "boolean", "missing unified sanity check exists");
+  assert.equal(typeof health.rankingSanityChecks.noMissingFinalReasonSummary, "boolean", "missing summary sanity check exists");
+  assert.equal(typeof health.rankingSanityChecks.noVeryHighConfidenceMixedDirection, "boolean", "mixed very-high sanity check exists");
+  assert.equal(typeof health.rankingSanityChecks.noStaleDataAboveHighConfidence, "boolean", "stale data confidence sanity check exists");
 }
 
 function assertMultiTimeframeAlignment(alignment) {

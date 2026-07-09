@@ -405,6 +405,21 @@ li {
   padding: 14px;
 }
 
+.engine-health-card.health-good {
+  border-color: rgba(39, 106, 75, 0.34);
+  background: var(--green-soft);
+}
+
+.engine-health-card.health-warning {
+  border-color: rgba(170, 118, 28, 0.34);
+  background: #fff8e7;
+}
+
+.engine-health-card.health-failed {
+  border-color: rgba(139, 67, 45, 0.3);
+  background: #fff0e9;
+}
+
 .prediction-meter {
   overflow: hidden;
   height: 10px;

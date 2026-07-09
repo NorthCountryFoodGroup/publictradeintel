@@ -2233,6 +2233,85 @@ function predictionSections(predictions, previousSections = {}) {
   };
 }
 
+function averageUnifiedScore(rows) {
+  const scores = rows.map((item) => Number(item.unifiedPredictionScore)).filter(Number.isFinite);
+  return scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
+}
+
+function countBy(items, key, values) {
+  const counts = Object.fromEntries(values.map((value) => [value, 0]));
+  items.forEach((item) => {
+    const value = item?.[key];
+    counts[value] = (counts[value] || 0) + 1;
+  });
+  return counts;
+}
+
+function duplicateTickers(rows) {
+  const seen = new Set();
+  const duplicates = new Set();
+  rows.forEach((item) => {
+    if (!item?.ticker) return;
+    if (seen.has(item.ticker)) duplicates.add(item.ticker);
+    seen.add(item.ticker);
+  });
+  return [...duplicates];
+}
+
+function buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt }) {
+  const top25 = {
+    top25OneDay: sections.top25OneDay || [],
+    top25SevenDay: sections.top25SevenDay || [],
+    top25OneMonth: sections.top25OneMonth || [],
+    top25OneYear: sections.top25OneYear || [],
+  };
+  const rankingChecks = {
+    noDuplicateTickerInSameTop25: Object.entries(top25).every(([, rows]) => !duplicateTickers(rows).length),
+    noMissingUnifiedPredictionScore: predictions.every((item) => Number.isFinite(Number(item.unifiedPredictionScore))),
+    noMissingFinalReasonSummary: predictions.every((item) => Boolean(item.finalReasonSummary)),
+    noVeryHighConfidenceMixedDirection: predictions.every((item) => !(item.confidenceTier === "very high" && item.unifiedDirection === "mixed")),
+    noStaleDataAboveHighConfidence: predictions.every((item) => !(item.dataQualityStatus === "stale" && item.confidenceTier === "very high")),
+  };
+  const failedTickers = predictions
+    .filter((item) => item.dataQualityStatus === "failed" || !Number.isFinite(Number(item.unifiedPredictionScore)) || !item.finalReasonSummary)
+    .map((item) => ({
+      ticker: item.ticker,
+      reason:
+        item.dataQualityStatus === "failed"
+          ? (item.dataQualityNotes || []).join(" ") || "Data quality failed."
+          : !Number.isFinite(Number(item.unifiedPredictionScore))
+          ? "Missing unified prediction score."
+          : "Missing final reason summary.",
+    }));
+  const dataQualityStatusCounts = countBy(predictions, "dataQualityStatus", ["good", "partial", "stale", "failed"]);
+  const highest = [...predictions].sort((a, b) => Number(b.unifiedPredictionScore || 0) - Number(a.unifiedPredictionScore || 0))[0] || null;
+  const lowest = [...predictions].sort((a, b) => Number(a.unifiedPredictionScore || 0) - Number(b.unifiedPredictionScore || 0))[0] || null;
+  const checkFailures = Object.entries(rankingChecks).filter(([, passed]) => !passed).map(([name]) => name);
+  const status = !predictions.length || failedTickers.length || checkFailures.length ? "Failed" : (warnings.length || dataQualityStatusCounts.partial || dataQualityStatusCounts.stale ? "Warning" : "Healthy");
+
+  return {
+    status,
+    scanCompletedAt: updatedAt,
+    tickersScanned: predictions.length,
+    predictionsGenerated: predictions.length,
+    top25Counts: Object.fromEntries(Object.entries(top25).map(([key, rows]) => [key, rows.length])),
+    dataQualityStatusCounts,
+    averageUnifiedPredictionScoreByTimeframe: {
+      top25OneDay: averageUnifiedScore(top25.top25OneDay),
+      top25SevenDay: averageUnifiedScore(top25.top25SevenDay),
+      top25OneMonth: averageUnifiedScore(top25.top25OneMonth),
+      top25OneYear: averageUnifiedScore(top25.top25OneYear),
+    },
+    highestScoringTicker: highest ? { ticker: highest.ticker, score: Number(highest.unifiedPredictionScore) || 0 } : null,
+    lowestScoringTicker: lowest ? { ticker: lowest.ticker, score: Number(lowest.unifiedPredictionScore) || 0 } : null,
+    failedTickers,
+    rankingSanityChecks: rankingChecks,
+    rankingSanityFailures: checkFailures,
+    duplicateTickersByTimeframe: Object.fromEntries(Object.entries(top25).map(([key, rows]) => [key, duplicateTickers(rows)])),
+    warnings,
+  };
+}
+
 function samplePredictionConfig() {
   const base = sanitizeConfig(readJson(CONFIG_FILE, {}));
   const existing = Array.isArray(base.stockIdeas) ? base.stockIdeas : [];
@@ -2301,10 +2380,14 @@ async function refreshPredictions(options = {}) {
   const predictions = (config.stockIdeas || [])
     .map((stock) => buildPrediction(stock, config, policySignals, previousByTicker))
     .sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
+  const updatedAt = new Date().toISOString();
+  const sections = predictionSections(predictions, previous.sections || {});
+  const predictionEngineHealth = buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt });
   const result = {
-    updatedAt: new Date().toISOString(),
+    updatedAt,
     predictions,
-    sections: predictionSections(predictions, previous.sections || {}),
+    sections,
+    predictionEngineHealth,
     refreshCadence: {
       top25OneDay: "hourly",
       top25SevenDay: "every 4 hours",

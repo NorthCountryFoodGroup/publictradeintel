@@ -10,11 +10,13 @@ const marketMessage = document.querySelector("#marketMessage");
 const policyMessage = document.querySelector("#policyMessage");
 const importMessage = document.querySelector("#importMessage");
 const congressFeedMessage = document.querySelector("#congressFeedMessage");
+const predictionHealthMessage = document.querySelector("#predictionHealthMessage");
 const adminPanel = document.querySelector("#adminPanel");
 const plansEditor = document.querySelector("#plansEditor");
 const goalsEditor = document.querySelector("#goalsEditor");
 const stocksEditor = document.querySelector("#stocksEditor");
 const congressEditor = document.querySelector("#congressEditor");
+const predictionHealthPanel = document.querySelector("#predictionHealthPanel");
 
 const thresholdFields = {
   firstEmergencyTarget: document.querySelector("#firstEmergencyTarget"),
@@ -50,6 +52,58 @@ function renderSummary(summary) {
   document.querySelector("#investChecks").textContent = summary.invest;
   document.querySelector("#saveChecks").textContent = summary.save;
   document.querySelector("#protectChecks").textContent = summary.protect;
+}
+
+function renderPredictionHealth(health) {
+  if (!predictionHealthPanel) return;
+  if (!health) {
+    predictionHealthPanel.innerHTML = `<article class="editor-row"><p class="muted-copy">Run a prediction scan to generate health checks.</p></article>`;
+    return;
+  }
+  const top25 = health.top25Counts || {};
+  const quality = health.dataQualityStatusCounts || {};
+  const averages = health.averageUnifiedPredictionScoreByTimeframe || {};
+  const checks = health.rankingSanityChecks || {};
+  predictionHealthPanel.innerHTML = `
+    <article class="editor-row stock-editor-row">
+      <label>
+        <span>Health status</span>
+        <input readonly value="${escapeHtml(health.status || "Unknown")}" />
+      </label>
+      <label>
+        <span>Scan completed</span>
+        <input readonly value="${escapeHtml(health.scanCompletedAt ? new Date(health.scanCompletedAt).toLocaleString() : "Not run")}" />
+      </label>
+      <label>
+        <span>Tickers / predictions</span>
+        <input readonly value="${Number(health.tickersScanned) || 0} / ${Number(health.predictionsGenerated) || 0}" />
+      </label>
+      <label class="wide-field">
+        <span>Top 25 counts</span>
+        <input readonly value="1d ${Number(top25.top25OneDay) || 0}, 7d ${Number(top25.top25SevenDay) || 0}, 1m ${Number(top25.top25OneMonth) || 0}, 1y ${Number(top25.top25OneYear) || 0}" />
+      </label>
+      <label class="wide-field">
+        <span>Data quality counts</span>
+        <input readonly value="good ${Number(quality.good) || 0}, partial ${Number(quality.partial) || 0}, stale ${Number(quality.stale) || 0}, failed ${Number(quality.failed) || 0}" />
+      </label>
+      <label class="wide-field">
+        <span>Average unified score</span>
+        <input readonly value="1d ${Number(averages.top25OneDay) || 0}, 7d ${Number(averages.top25SevenDay) || 0}, 1m ${Number(averages.top25OneMonth) || 0}, 1y ${Number(averages.top25OneYear) || 0}" />
+      </label>
+      <label class="wide-field">
+        <span>High / low ticker</span>
+        <input readonly value="${escapeHtml(health.highestScoringTicker?.ticker || "n/a")} ${Number(health.highestScoringTicker?.score) || 0}/100 / ${escapeHtml(health.lowestScoringTicker?.ticker || "n/a")} ${Number(health.lowestScoringTicker?.score) || 0}/100" />
+      </label>
+      <label class="wide-field">
+        <span>Failed tickers</span>
+        <input readonly value="${escapeHtml((health.failedTickers || []).map((item) => `${item.ticker}: ${item.reason}`).join("; ") || "None")}" />
+      </label>
+      <label class="wide-field">
+        <span>Ranking sanity checks</span>
+        <input readonly value="${escapeHtml(Object.entries(checks).map(([name, passed]) => `${name}: ${passed ? "pass" : "fail"}`).join("; "))}" />
+      </label>
+    </article>
+  `;
 }
 
 function planRow(plan, index) {
@@ -356,6 +410,23 @@ document.querySelector("#refreshMarket").addEventListener("click", async () => {
     marketMessage.textContent = `Updated ${result.quotes.length} ticker quotes.`;
   } catch (error) {
     marketMessage.textContent = error.message;
+  }
+});
+
+document.querySelector("#refreshPredictions")?.addEventListener("click", async () => {
+  predictionHealthMessage.textContent = "Running prediction scan...";
+  try {
+    const response = await fetch("/api/admin/refresh-predictions", {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({}),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Prediction scan failed.");
+    renderPredictionHealth(result.predictionEngineHealth);
+    predictionHealthMessage.textContent = `Scan complete. ${result.predictions?.length || 0} predictions generated.`;
+  } catch (error) {
+    predictionHealthMessage.textContent = error.message;
   }
 });
 
