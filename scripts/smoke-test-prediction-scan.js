@@ -129,10 +129,21 @@ function assertPredictionShape(result) {
   assertTechnicalShape(first.timeframeModels?.thirtyDay?.technicalAnalysis, "1-month model has technical analysis");
   assertTechnicalShape(first.timeframeModels?.oneYear?.technicalAnalysis, "1-year model has technical analysis");
   assertMultiTimeframeAlignment(first.multiTimeframeAlignment);
+  assertSetupSignals(first.setupSignals);
   assert.ok(Array.isArray(result.sections?.top25OneDay), "has Top 25 1-day section");
   assert.ok(Array.isArray(result.sections?.top25SevenDay), "has Top 25 7-day section");
   assert.ok(Array.isArray(result.sections?.top25OneMonth), "has Top 25 1-month section");
   assert.ok(Array.isArray(result.sections?.top25OneYear), "has Top 25 1-year section");
+}
+
+function assertSetupSignals(setupSignals) {
+  assert.ok(setupSignals, "setupSignals exists");
+  assert.ok(setupSignals.emaBounce, "setupSignals includes emaBounce");
+  assert.ok(setupSignals.breakAndRetest, "setupSignals includes breakAndRetest");
+  assert.ok(["bullish", "bearish", "mixed", "none"].includes(setupSignals.setupDirection), "setup direction exists");
+  assert.ok(Number.isFinite(Number(setupSignals.setupScore)), "setupScore exists");
+  assert.ok(["confirmed", "forming", "failed", "none"].includes(setupSignals.confirmationStatus), "confirmationStatus exists");
+  assert.ok(typeof setupSignals.reasonSummary === "string", "setup reason summary exists");
 }
 
 function assertMultiTimeframeAlignment(alignment) {

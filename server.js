@@ -685,6 +685,7 @@ function buildTechnicalSnapshot({ stock, price, marketChange, momentum, volatili
   );
 
   return {
+    currentPrice: roundPrice(latest),
     trendDirection,
     priceVs9Ema: priceVs9Ema === null ? null : Number(priceVs9Ema.toFixed(2)),
     priceVs20Ema: priceVs20Ema === null ? null : Number(priceVs20Ema.toFixed(2)),
@@ -786,6 +787,154 @@ function buildMultiTimeframeAlignment(intraday) {
     alignmentScore,
     allTimeframesAligned,
     reasonSummary,
+  };
+}
+
+function setupConfirmation(score) {
+  if (score >= 76) return "confirmed";
+  if (score >= 52) return "forming";
+  if (score > 0) return "failed";
+  return "none";
+}
+
+function distancePercent(price, level) {
+  if (!price || !level) return null;
+  return Math.abs((price - level) / level) * 100;
+}
+
+function buildEmaBounceSignal({ fiveMinute, marketChange, momentum, unusualVolume, volume }) {
+  const priceAboveVwap = fiveMinute.priceVsVwap === null ? null : fiveMinute.priceVsVwap > 0;
+  const emaBullish = Number(fiveMinute.ema9Vs20Ema) > 0;
+  const emaBearish = Number(fiveMinute.ema9Vs20Ema) < 0;
+  const near9Ema = Math.abs(Number(fiveMinute.priceVs9Ema) || 0) <= 1.1;
+  const holds9Bullish = Number(fiveMinute.priceVs9Ema) >= -0.25;
+  const holds9Bearish = Number(fiveMinute.priceVs9Ema) <= 0.25;
+  const closesAbovePriorHigh = marketChange > 0.15 && momentum >= 54;
+  const closesBelowPriorLow = marketChange < -0.15 && momentum <= 48;
+  const volumeIncreases = volume ? unusualVolume >= 55 : momentum >= 58 || unusualVolume >= 58;
+  const bullishScore = weightedScore([
+    { score: priceAboveVwap === true ? 100 : priceAboveVwap === null ? 45 : 15, weight: 0.18 },
+    { score: emaBullish ? 100 : 20, weight: 0.18 },
+    { score: near9Ema ? 100 : 35, weight: 0.16 },
+    { score: holds9Bullish ? 100 : 20, weight: 0.16 },
+    { score: closesAbovePriorHigh ? 100 : 35, weight: 0.16 },
+    { score: volumeIncreases ? 100 : 38, weight: 0.16 },
+  ]);
+  const bearishScore = weightedScore([
+    { score: priceAboveVwap === false ? 100 : priceAboveVwap === null ? 45 : 15, weight: 0.18 },
+    { score: emaBearish ? 100 : 20, weight: 0.18 },
+    { score: near9Ema ? 100 : 35, weight: 0.16 },
+    { score: holds9Bearish ? 100 : 20, weight: 0.16 },
+    { score: closesBelowPriorLow ? 100 : 35, weight: 0.16 },
+    { score: volumeIncreases ? 100 : 38, weight: 0.16 },
+  ]);
+  const direction = bullishScore >= 58 || bearishScore >= 58 ? (bullishScore >= bearishScore ? "bullish" : "bearish") : "none";
+  const score = Math.round(Math.max(bullishScore, bearishScore));
+
+  return {
+    detected: direction !== "none" && score >= 52,
+    direction,
+    score,
+    confirmationStatus: setupConfirmation(score),
+    conditions: {
+      priceAboveVwap,
+      emaBullish,
+      emaBearish,
+      near9Ema,
+      holds9Ema: direction === "bearish" ? holds9Bearish : holds9Bullish,
+      nextCandleBreaksPriorExtreme: direction === "bearish" ? closesBelowPriorLow : closesAbovePriorHigh,
+      volumeIncreases,
+    },
+    reasonSummary:
+      direction === "bullish"
+        ? `Bullish 5-minute 9 EMA bounce ${setupConfirmation(score)}: price/VWAP ${priceAboveVwap === null ? "unavailable" : priceAboveVwap ? "supportive" : "not supportive"}, 9 EMA vs 20 EMA supportive, score ${Math.round(score)}/100.`
+        : direction === "bearish"
+        ? `Bearish 5-minute 9 EMA rejection ${setupConfirmation(score)}: price is below/near VWAP with weak EMA structure, score ${Math.round(score)}/100.`
+        : `No clear 5-minute 9 EMA bounce yet; score ${Math.round(score)}/100.`,
+  };
+}
+
+function buildBreakAndRetestSignal({ fiveMinute, marketChange, momentum }) {
+  const price = Number(fiveMinute.currentPrice) || null;
+  const supportDistance = distancePercent(price, Number(fiveMinute.nearestSupport));
+  const resistanceDistance = distancePercent(price, Number(fiveMinute.nearestResistance));
+  const brokeAboveResistance = marketChange > 0.35 && resistanceDistance !== null && resistanceDistance <= 1.4;
+  const retestsResistance = resistanceDistance !== null && resistanceDistance <= 0.95;
+  const holdsAsSupport = Number(fiveMinute.priceVs20Ema) >= -0.2 && Number(fiveMinute.priceVs9Ema) >= -0.35;
+  const closesUpward = marketChange > 0.15 && momentum >= 55;
+  const brokeBelowSupport = marketChange < -0.35 && supportDistance !== null && supportDistance <= 1.4;
+  const retestsSupport = supportDistance !== null && supportDistance <= 0.95;
+  const holdsAsResistance = Number(fiveMinute.priceVs20Ema) <= 0.2 && Number(fiveMinute.priceVs9Ema) <= 0.35;
+  const closesDownward = marketChange < -0.15 && momentum <= 48;
+  const bullishScore = weightedScore([
+    { score: brokeAboveResistance ? 100 : 35, weight: 0.28 },
+    { score: retestsResistance ? 100 : 40, weight: 0.22 },
+    { score: holdsAsSupport ? 100 : 30, weight: 0.24 },
+    { score: closesUpward ? 100 : 35, weight: 0.26 },
+  ]);
+  const bearishScore = weightedScore([
+    { score: brokeBelowSupport ? 100 : 35, weight: 0.28 },
+    { score: retestsSupport ? 100 : 40, weight: 0.22 },
+    { score: holdsAsResistance ? 100 : 30, weight: 0.24 },
+    { score: closesDownward ? 100 : 35, weight: 0.26 },
+  ]);
+  const direction = bullishScore >= 58 || bearishScore >= 58 ? (bullishScore >= bearishScore ? "bullish" : "bearish") : "none";
+  const score = Math.round(Math.max(bullishScore, bearishScore));
+
+  return {
+    detected: direction !== "none" && score >= 52,
+    direction,
+    score,
+    confirmationStatus: setupConfirmation(score),
+    conditions: {
+      brokeAboveResistance,
+      retestsResistance,
+      holdsResistanceAsSupport: holdsAsSupport,
+      closesBackUpward: closesUpward,
+      brokeBelowSupport,
+      retestsSupport,
+      holdsSupportAsResistance: holdsAsResistance,
+      closesBackDownward: closesDownward,
+    },
+    reasonSummary:
+      direction === "bullish"
+        ? `Bullish break/retest ${setupConfirmation(score)} near resistance ${fiveMinute.nearestResistance || "n/a"}; score ${score}/100.`
+        : direction === "bearish"
+        ? `Bearish break/retest ${setupConfirmation(score)} near support ${fiveMinute.nearestSupport || "n/a"}; score ${score}/100.`
+        : `No clear break/retest setup yet; score ${score}/100.`,
+  };
+}
+
+function buildSetupSignals({ multiTimeframeAlignment, marketChange, momentum, unusualVolume, volume }) {
+  const fiveMinute = multiTimeframeAlignment.fiveMinute;
+  const emaBounce = buildEmaBounceSignal({ fiveMinute, marketChange, momentum, unusualVolume, volume });
+  const breakAndRetest = buildBreakAndRetestSignal({ fiveMinute, marketChange, momentum });
+  const bullishCount = [emaBounce, breakAndRetest].filter((signal) => signal.direction === "bullish" && signal.detected).length;
+  const bearishCount = [emaBounce, breakAndRetest].filter((signal) => signal.direction === "bearish" && signal.detected).length;
+  const setupDirection = bullishCount && bearishCount ? "mixed" : bullishCount ? "bullish" : bearishCount ? "bearish" : "none";
+  const setupScore = Math.round(weightedScore([
+    { score: emaBounce.score, weight: 0.52 },
+    { score: breakAndRetest.score, weight: 0.48 },
+  ]));
+  const confirmationStatus =
+    setupDirection === "none"
+      ? "none"
+      : emaBounce.confirmationStatus === "confirmed" || breakAndRetest.confirmationStatus === "confirmed"
+      ? "confirmed"
+      : emaBounce.confirmationStatus === "forming" || breakAndRetest.confirmationStatus === "forming"
+      ? "forming"
+      : "failed";
+
+  return {
+    emaBounce,
+    breakAndRetest,
+    setupDirection,
+    setupScore,
+    confirmationStatus,
+    reasonSummary:
+      setupDirection === "none"
+        ? `No EMA bounce or break/retest setup is active. Combined setup score ${setupScore}/100.`
+        : `${setupDirection} setup ${confirmationStatus}: ${emaBounce.reasonSummary} ${breakAndRetest.reasonSummary}`,
   };
 }
 
@@ -1039,6 +1188,13 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const multiTimeframeAlignment = buildMultiTimeframeAlignment(
     buildIntradayTechnicalAnalysis({ stock, price, marketChange, momentum, volatilityRisk, liquidity, supportResistance }),
   );
+  const setupSignals = buildSetupSignals({
+    multiTimeframeAlignment,
+    marketChange,
+    momentum,
+    unusualVolume,
+    volume: Number(stock.marketVolume) || null,
+  });
   const earningsComing = clamp((Number(stock.pressScore) || 0) * 0.55 + volatilityRisk * 0.25 + momentum * 0.2);
   const analystUpgradeProxy = clamp(newsImpact * 0.62 + sentiment * 0.38);
   const sectorRotation = clamp(sectorStrength * 0.72 + macro * 0.28);
@@ -1222,6 +1378,8 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   oneYearModel.technicalAnalysis = technicalAnalysis.oneYear;
   dailyModel.multiTimeframeAlignment = multiTimeframeAlignment;
   threeDayModel.multiTimeframeAlignment = multiTimeframeAlignment;
+  dailyModel.setupSignals = setupSignals;
+  threeDayModel.setupSignals = setupSignals;
   const alignment = signalAlignment(dailyModel.score, weeklyModel.score, monthlyModel.score);
   const marketRegime = marketRegimeForStock({ stock, marketChange, momentum, trend, volatilityRisk, macro, sectorStrength });
   const dataQuality = dataQualityBreakdown({ price, stock, policy, congress, liquidity, volatilityRisk, marketChange });
@@ -1272,6 +1430,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     marketChangePercent: stock.marketChangePercent || "",
     technicalAnalysis,
     multiTimeframeAlignment,
+    setupSignals,
     aiOpportunityScore: score,
     oneDayScore: dailyModel.score,
     threeDayScore: threeDayModel.score,
@@ -1348,6 +1507,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
       congressionalActivity: Math.round(congressionalActivity),
       technicalSignal: technicalAnalysis.oneDay.technicalSignalScore,
       intradayAlignment: multiTimeframeAlignment.alignmentScore,
+      setupSignal: setupSignals.setupScore,
     },
     ensembleModels,
     modelLeaderboard: {
