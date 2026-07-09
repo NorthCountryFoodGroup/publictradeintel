@@ -128,10 +128,22 @@ function assertPredictionShape(result) {
   assertTechnicalShape(first.timeframeModels?.sevenDay?.technicalAnalysis, "7-day model has technical analysis");
   assertTechnicalShape(first.timeframeModels?.thirtyDay?.technicalAnalysis, "1-month model has technical analysis");
   assertTechnicalShape(first.timeframeModels?.oneYear?.technicalAnalysis, "1-year model has technical analysis");
+  assertMultiTimeframeAlignment(first.multiTimeframeAlignment);
   assert.ok(Array.isArray(result.sections?.top25OneDay), "has Top 25 1-day section");
   assert.ok(Array.isArray(result.sections?.top25SevenDay), "has Top 25 7-day section");
   assert.ok(Array.isArray(result.sections?.top25OneMonth), "has Top 25 1-month section");
   assert.ok(Array.isArray(result.sections?.top25OneYear), "has Top 25 1-year section");
+}
+
+function assertMultiTimeframeAlignment(alignment) {
+  assert.ok(alignment, "multiTimeframeAlignment exists");
+  assertTechnicalShape(alignment.twoMinute, "multiTimeframeAlignment has 2m values");
+  assertTechnicalShape(alignment.fiveMinute, "multiTimeframeAlignment has 5m values");
+  assertTechnicalShape(alignment.fifteenMinute, "multiTimeframeAlignment has 15m values");
+  assert.ok(["bullish", "bearish", "mixed", "neutral"].includes(alignment.alignmentDirection), "alignment direction exists");
+  assert.ok(Number.isFinite(Number(alignment.alignmentScore)), "alignmentScore exists");
+  assert.equal(typeof alignment.allTimeframesAligned, "boolean", "allTimeframesAligned exists");
+  assert.ok(typeof alignment.reasonSummary === "string", "alignment reason summary exists");
 }
 
 function assertTechnicalShape(technical, message) {

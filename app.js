@@ -743,6 +743,7 @@ function renderPredictions() {
       const quality = item.dataQuality || {};
       const leaderboard = item.modelLeaderboard || {};
       const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+      const intradayAlignment = item.multiTimeframeAlignment || model?.multiTimeframeAlignment || {};
       return `
         <article class="prediction-card">
           <div class="stock-card-top">
@@ -801,6 +802,7 @@ function renderPredictions() {
             <span>Market regime: ${escapeHtml(regime.primary || "unknown")}</span>
             <span>Technical score: ${Number(technical.technicalSignalScore) || 0}/100</span>
             <span>Trend: ${escapeHtml(technical.trendDirection || "unknown")}</span>
+            <span>2m/5m/15m alignment: ${escapeHtml(intradayAlignment.alignmentDirection || "unknown")} (${Number(intradayAlignment.alignmentScore) || 0}/100)</span>
             <span>Price vs 9/20 EMA: ${compactValue(technical.priceVs9Ema, "%")} / ${compactValue(technical.priceVs20Ema, "%")}</span>
             <span>Support / resistance: ${technical.nearestSupport ? `$${Number(technical.nearestSupport).toFixed(2)}` : "n/a"} / ${technical.nearestResistance ? `$${Number(technical.nearestResistance).toFixed(2)}` : "n/a"}</span>
             <span>${escapeHtml(predictionModelTitle(model))} upside: ${pct(model?.expectedUpside)}</span>

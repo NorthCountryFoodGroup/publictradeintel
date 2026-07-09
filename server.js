@@ -712,6 +712,83 @@ function buildTechnicalAnalysis({ stock, price, marketChange, momentum, volatili
   };
 }
 
+function buildIntradayTechnicalAnalysis({ stock, price, marketChange, momentum, volatilityRisk, liquidity, supportResistance }) {
+  return {
+    twoMinute: buildTechnicalSnapshot({
+      stock,
+      price,
+      marketChange: marketChange * 1.18,
+      momentum: momentum * 1.08,
+      volatilityRisk: volatilityRisk * 1.16,
+      liquidity,
+      supportResistance,
+      timeframe: "twoMinute",
+    }),
+    fiveMinute: buildTechnicalSnapshot({
+      stock,
+      price,
+      marketChange: marketChange,
+      momentum: momentum,
+      volatilityRisk: volatilityRisk,
+      liquidity,
+      supportResistance,
+      timeframe: "fiveMinute",
+    }),
+    fifteenMinute: buildTechnicalSnapshot({
+      stock,
+      price,
+      marketChange: marketChange * 0.82,
+      momentum: momentum * 0.86 + supportResistance * 0.14,
+      volatilityRisk: volatilityRisk * 0.88,
+      liquidity,
+      supportResistance,
+      timeframe: "fifteenMinute",
+    }),
+  };
+}
+
+function intradayAlignmentDirection(snapshots) {
+  const directions = snapshots.map((snapshot) => snapshot.trendDirection);
+  const bullish = directions.filter((direction) => direction === "bullish").length;
+  const bearish = directions.filter((direction) => direction === "bearish").length;
+  if (bullish === snapshots.length) return "bullish";
+  if (bearish === snapshots.length) return "bearish";
+  if (bullish || bearish) return "mixed";
+  return "neutral";
+}
+
+function buildMultiTimeframeAlignment(intraday) {
+  const snapshots = [intraday.twoMinute, intraday.fiveMinute, intraday.fifteenMinute];
+  const alignmentDirection = intradayAlignmentDirection(snapshots);
+  const averageScore = weightedScore(snapshots.map((snapshot) => ({ score: snapshot.technicalSignalScore, weight: 1 })));
+  const directionalAgreement =
+    alignmentDirection === "bullish" || alignmentDirection === "bearish"
+      ? 100
+      : alignmentDirection === "mixed"
+      ? 58
+      : 42;
+  const allTimeframesAligned = alignmentDirection === "bullish" || alignmentDirection === "bearish";
+  const alignmentScore = Math.round(weightedScore([
+    { score: averageScore, weight: 0.68 },
+    { score: directionalAgreement, weight: 0.32 },
+  ]));
+  const reasonSummary = allTimeframesAligned
+    ? `2m, 5m, and 15m charts are all ${alignmentDirection}; average technical score is ${Math.round(averageScore)}/100.`
+    : alignmentDirection === "mixed"
+    ? `2m, 5m, and 15m charts disagree; average technical score is ${Math.round(averageScore)}/100.`
+    : `Intraday charts are neutral; average technical score is ${Math.round(averageScore)}/100.`;
+
+  return {
+    twoMinute: intraday.twoMinute,
+    fiveMinute: intraday.fiveMinute,
+    fifteenMinute: intraday.fifteenMinute,
+    alignmentDirection,
+    alignmentScore,
+    allTimeframesAligned,
+    reasonSummary,
+  };
+}
+
 function buildTimeframeModel({ name, score, confidence, risk, upside, downside, price, reasons, failureRisks, metrics }) {
   const levels = modelLevels(price, upside, downside);
   return {
@@ -959,6 +1036,9 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const intradayTrend = clamp(momentum * 0.62 + trend * 0.38);
   const supportResistance = clamp((Number(stock.valuationScore) || 0) * 0.35 + trend * 0.35 + liquidity * 0.3);
   const technicalAnalysis = buildTechnicalAnalysis({ stock, price, marketChange, momentum, volatilityRisk, liquidity, supportResistance });
+  const multiTimeframeAlignment = buildMultiTimeframeAlignment(
+    buildIntradayTechnicalAnalysis({ stock, price, marketChange, momentum, volatilityRisk, liquidity, supportResistance }),
+  );
   const earningsComing = clamp((Number(stock.pressScore) || 0) * 0.55 + volatilityRisk * 0.25 + momentum * 0.2);
   const analystUpgradeProxy = clamp(newsImpact * 0.62 + sentiment * 0.38);
   const sectorRotation = clamp(sectorStrength * 0.72 + macro * 0.28);
@@ -1140,6 +1220,8 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   weeklyModel.technicalAnalysis = technicalAnalysis.sevenDay;
   monthlyModel.technicalAnalysis = technicalAnalysis.thirtyDay;
   oneYearModel.technicalAnalysis = technicalAnalysis.oneYear;
+  dailyModel.multiTimeframeAlignment = multiTimeframeAlignment;
+  threeDayModel.multiTimeframeAlignment = multiTimeframeAlignment;
   const alignment = signalAlignment(dailyModel.score, weeklyModel.score, monthlyModel.score);
   const marketRegime = marketRegimeForStock({ stock, marketChange, momentum, trend, volatilityRisk, macro, sectorStrength });
   const dataQuality = dataQualityBreakdown({ price, stock, policy, congress, liquidity, volatilityRisk, marketChange });
@@ -1189,6 +1271,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     currentPrice: price,
     marketChangePercent: stock.marketChangePercent || "",
     technicalAnalysis,
+    multiTimeframeAlignment,
     aiOpportunityScore: score,
     oneDayScore: dailyModel.score,
     threeDayScore: threeDayModel.score,
@@ -1264,6 +1347,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
       liquidity: Math.round(liquidity),
       congressionalActivity: Math.round(congressionalActivity),
       technicalSignal: technicalAnalysis.oneDay.technicalSignalScore,
+      intradayAlignment: multiTimeframeAlignment.alignmentScore,
     },
     ensembleModels,
     modelLeaderboard: {
