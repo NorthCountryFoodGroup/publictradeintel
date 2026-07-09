@@ -11,6 +11,7 @@ const policyMessage = document.querySelector("#policyMessage");
 const importMessage = document.querySelector("#importMessage");
 const congressFeedMessage = document.querySelector("#congressFeedMessage");
 const predictionHealthMessage = document.querySelector("#predictionHealthMessage");
+const scanSettingsMessage = document.querySelector("#scanSettingsMessage");
 const adminPanel = document.querySelector("#adminPanel");
 const plansEditor = document.querySelector("#plansEditor");
 const goalsEditor = document.querySelector("#goalsEditor");
@@ -25,6 +26,24 @@ const thresholdFields = {
 };
 const scanUniverse = document.querySelector("#scanUniverse");
 const customTickers = document.querySelector("#customTickers");
+const activeScanUniverse = document.querySelector("#activeScanUniverse");
+const scanCandidateCount = document.querySelector("#scanCandidateCount");
+
+const universeLabels = {
+  watchlist: "Watchlist only",
+  sp500: "S&P 500",
+  nasdaq100: "Nasdaq-100",
+  etfs: "ETFs",
+  combined: "Combined universe",
+};
+
+const universeBaseCounts = {
+  watchlist: 0,
+  sp500: 60,
+  nasdaq100: 48,
+  etfs: 28,
+  combined: 90,
+};
 
 function adminHeaders() {
   return {
@@ -54,6 +73,27 @@ function renderSummary(summary) {
   document.querySelector("#investChecks").textContent = summary.invest;
   document.querySelector("#saveChecks").textContent = summary.save;
   document.querySelector("#protectChecks").textContent = summary.protect;
+}
+
+function parseCustomTickerCount(value) {
+  return new Set(
+    String(value || "")
+      .toUpperCase()
+      .split(/[\s,]+/)
+      .map((ticker) => ticker.replace(/[^A-Z.-]/g, ""))
+      .filter(Boolean),
+  ).size;
+}
+
+function renderScanSettingsStatus() {
+  if (!scanUniverse || !activeScanUniverse || !scanCandidateCount) return;
+  const mode = scanUniverse.value || "combined";
+  const customCount = parseCustomTickerCount(customTickers?.value || "");
+  const watchlistCount = state.config?.stockIdeas?.length || 0;
+  const baseCount = mode === "watchlist" ? watchlistCount : universeBaseCounts[mode] || 0;
+  const total = Math.min(90, baseCount + customCount);
+  activeScanUniverse.value = universeLabels[mode] || "Combined universe";
+  scanCandidateCount.value = `${total} candidate${total === 1 ? "" : "s"}${customCount ? `, including ${customCount} custom` : ""}`;
 }
 
 function renderPredictionHealth(health) {
@@ -309,6 +349,7 @@ function renderConfig(config) {
   thresholdFields.debtInvestCap.value = config.thresholds.debtInvestCap;
   if (scanUniverse) scanUniverse.value = config.scanSettings?.universe || "combined";
   if (customTickers) customTickers.value = config.scanSettings?.customTickers || "";
+  renderScanSettingsStatus();
   plansEditor.innerHTML = config.plans.map(planRow).join("");
   goalsEditor.innerHTML = config.goals.map(goalRow).join("");
   stocksEditor.innerHTML = (config.stockIdeas || []).map(stockRow).join("");
@@ -403,6 +444,25 @@ document.querySelector("#saveConfig").addEventListener("click", async () => {
     saveMessage.textContent = error.message;
   }
 });
+
+document.querySelector("#saveScanSettings")?.addEventListener("click", async () => {
+  scanSettingsMessage.textContent = "Saving prediction scan settings...";
+  try {
+    const response = await fetch("/api/admin/config", {
+      method: "PUT",
+      headers: adminHeaders(),
+      body: JSON.stringify(collectConfig()),
+    });
+    if (!response.ok) throw new Error("Could not save prediction scan settings.");
+    renderConfig(await response.json());
+    scanSettingsMessage.textContent = "Prediction scan settings saved. Run a prediction scan to use this universe.";
+  } catch (error) {
+    scanSettingsMessage.textContent = error.message;
+  }
+});
+
+scanUniverse?.addEventListener("change", renderScanSettingsStatus);
+customTickers?.addEventListener("input", renderScanSettingsStatus);
 
 document.querySelector("#refreshMarket").addEventListener("click", async () => {
   marketMessage.textContent = "Refreshing market data...";

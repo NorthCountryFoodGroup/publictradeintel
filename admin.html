@@ -88,20 +88,6 @@
             <span>Tiny investing cap while debt exists</span>
             <input type="number" min="0" step="1" id="debtInvestCap" />
           </label>
-          <label>
-            <span>Prediction scan universe</span>
-            <select id="scanUniverse">
-              <option value="watchlist">Watchlist only</option>
-              <option value="sp500">S&P 500</option>
-              <option value="nasdaq100">Nasdaq-100</option>
-              <option value="etfs">ETFs</option>
-              <option value="combined">Combined universe</option>
-            </select>
-          </label>
-          <label class="wide-field">
-            <span>Custom ticker list</span>
-            <textarea id="customTickers" rows="3" placeholder="Example: PLTR, SOFI, RKLB, TSM"></textarea>
-          </label>
         </div>
 
         <div class="section-heading editor-heading">
@@ -123,6 +109,39 @@
         </div>
         <p class="form-message" id="marketMessage"></p>
         <div class="admin-list" id="stocksEditor"></div>
+
+        <div class="section-heading editor-heading">
+          <div>
+            <h2>Prediction Scan Settings</h2>
+            <p class="muted-copy">Choose how broad the prediction engine scans before it builds Top 25 rankings.</p>
+          </div>
+          <button type="button" id="saveScanSettings">Save settings</button>
+        </div>
+        <div class="admin-editor scan-settings-panel">
+          <label>
+            <span>Scan universe</span>
+            <select id="scanUniverse">
+              <option value="watchlist">Watchlist only</option>
+              <option value="sp500">S&P 500</option>
+              <option value="nasdaq100">Nasdaq-100</option>
+              <option value="etfs">ETFs</option>
+              <option value="combined">Combined universe</option>
+            </select>
+          </label>
+          <label>
+            <span>Current active universe</span>
+            <input id="activeScanUniverse" readonly value="Combined universe" />
+          </label>
+          <label>
+            <span>Candidate count</span>
+            <input id="scanCandidateCount" readonly value="Up to 90" />
+          </label>
+          <label class="wide-field">
+            <span>Custom ticker list</span>
+            <textarea id="customTickers" rows="4" placeholder="Example: PLTR, SOFI, RKLB, TSM"></textarea>
+          </label>
+        </div>
+        <p class="form-message" id="scanSettingsMessage"></p>
 
         <div class="section-heading editor-heading">
           <div>

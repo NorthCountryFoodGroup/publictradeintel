@@ -333,6 +333,12 @@ async function main() {
     assert.equal(dashboard.status, 200, "dashboard loads");
     assert.ok(html.includes("runPredictionScan"), "dashboard includes scan button");
 
+    const adminPage = await fetch(`${baseUrl}/admin.html`, { headers: { Cookie: cookie } });
+    const adminHtml = await adminPage.text();
+    assert.equal(adminPage.status, 200, "admin page loads");
+    assert.ok(adminHtml.includes("Prediction Scan Settings"), "admin page includes prediction scan settings section");
+    assert.ok(adminHtml.includes("scanUniverse"), "admin page includes scan universe dropdown");
+
     console.log("Prediction scan smoke test passed.");
   } catch (error) {
     console.error(error.message);
