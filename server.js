@@ -1197,6 +1197,106 @@ function buildChartPatternSignal({ stock, marketChange, momentum, technicalAnaly
   };
 }
 
+function normalizeSignalDirection(direction) {
+  if (["bullish", "bearish", "mixed", "neutral"].includes(direction)) return direction;
+  if (direction === "none" || !direction) return "neutral";
+  return "neutral";
+}
+
+function confidenceTier(unifiedScore, confidence, conflicts) {
+  const adjusted = clamp(unifiedScore * 0.55 + confidence * 0.45 - conflicts * 5);
+  if (adjusted >= 82) return "very high";
+  if (adjusted >= 68) return "high";
+  if (adjusted >= 50) return "medium";
+  return "low";
+}
+
+function buildUnifiedPredictionLayer({ baseScore, confidence, technicalAnalysis, multiTimeframeAlignment, setupSignals, shortSqueezeSignal, chartPatternSignal }) {
+  const technical = technicalAnalysis?.oneDay || {};
+  const technicalScore = Number(technical.technicalSignalScore) || 0;
+  const alignmentScore = Number(multiTimeframeAlignment?.alignmentScore) || 0;
+  const setupScore = Number(setupSignals?.setupScore) || 0;
+  const squeezeScore = Number(shortSqueezeSignal?.squeezeScore) || 0;
+  const patternScore = Number(chartPatternSignal?.patternScore) || 0;
+  const layers = [
+    {
+      name: "Base prediction",
+      score: baseScore,
+      weight: 0.3,
+      direction: baseScore >= 62 ? "bullish" : baseScore <= 38 ? "bearish" : "neutral",
+      reason: `Base AI score ${Math.round(baseScore)}/100`,
+    },
+    {
+      name: "Technical analysis",
+      score: technicalScore,
+      weight: 0.2,
+      direction: normalizeSignalDirection(technical.trendDirection),
+      reason: `Technical score ${Math.round(technicalScore)}/100 with ${technical.trendDirection || "unknown"} trend`,
+    },
+    {
+      name: "Multi-timeframe alignment",
+      score: alignmentScore,
+      weight: 0.2,
+      direction: normalizeSignalDirection(multiTimeframeAlignment?.alignmentDirection),
+      reason: `2m/5m/15m alignment ${multiTimeframeAlignment?.alignmentDirection || "unknown"} at ${Math.round(alignmentScore)}/100`,
+    },
+    {
+      name: "Setup signals",
+      score: setupScore,
+      weight: 0.15,
+      direction: normalizeSignalDirection(setupSignals?.setupDirection),
+      reason: `Setup ${setupSignals?.setupDirection || "none"} ${setupSignals?.confirmationStatus || "none"} at ${Math.round(setupScore)}/100`,
+    },
+    {
+      name: "Chart pattern",
+      score: patternScore,
+      weight: 0.1,
+      direction: normalizeSignalDirection(chartPatternSignal?.patternDirection),
+      reason: `${chartPatternSignal?.primaryPattern || "No pattern"} pattern at ${Math.round(patternScore)}/100`,
+    },
+    {
+      name: "Short squeeze",
+      score: squeezeScore,
+      weight: 0.05,
+      direction: squeezeScore >= 55 ? "bullish" : "neutral",
+      reason: `Short squeeze risk ${shortSqueezeSignal?.squeezeRisk || "low"} at ${Math.round(squeezeScore)}/100`,
+    },
+  ];
+  const unifiedPredictionScore = Math.round(weightedScore(layers.map((layer) => ({ score: layer.score, weight: layer.weight }))));
+  const bullishWeight = layers.reduce((sum, layer) => sum + (layer.direction === "bullish" ? layer.weight : 0), 0);
+  const bearishWeight = layers.reduce((sum, layer) => sum + (layer.direction === "bearish" ? layer.weight : 0), 0);
+  const mixedWeight = layers.reduce((sum, layer) => sum + (layer.direction === "mixed" ? layer.weight : 0), 0);
+  const unifiedDirection =
+    mixedWeight >= 0.18 || (bullishWeight >= 0.25 && bearishWeight >= 0.2)
+      ? "mixed"
+      : bullishWeight > bearishWeight && bullishWeight >= 0.3
+      ? "bullish"
+      : bearishWeight > bullishWeight && bearishWeight >= 0.25
+      ? "bearish"
+      : "neutral";
+  const strongestSignals = [...layers]
+    .sort((a, b) => b.score * b.weight - a.score * a.weight)
+    .slice(0, 4)
+    .map((layer) => layer.reason);
+  const conflictingSignals = layers
+    .filter((layer) => {
+      if (unifiedDirection === "mixed") return layer.direction === "bullish" || layer.direction === "bearish";
+      if (unifiedDirection === "bullish") return layer.direction === "bearish";
+      if (unifiedDirection === "bearish") return layer.direction === "bullish";
+      return layer.direction === "mixed";
+    })
+    .map((layer) => layer.reason);
+
+  return {
+    unifiedPredictionScore,
+    unifiedDirection,
+    confidenceTier: confidenceTier(unifiedPredictionScore, confidence, conflictingSignals.length),
+    strongestSignals,
+    conflictingSignals,
+    finalReasonSummary: `${unifiedDirection} unified read at ${unifiedPredictionScore}/100. Strongest support: ${strongestSignals.slice(0, 2).join("; ")}.${conflictingSignals.length ? ` Conflicts: ${conflictingSignals.slice(0, 2).join("; ")}.` : " No major conflicting layer detected."}`,
+  };
+}
+
 function buildTimeframeModel({ name, score, confidence, risk, upside, downside, price, reasons, failureRisks, metrics }) {
   const levels = modelLevels(price, upside, downside);
   return {
@@ -1659,6 +1759,15 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const alignment = signalAlignment(dailyModel.score, weeklyModel.score, monthlyModel.score);
   const marketRegime = marketRegimeForStock({ stock, marketChange, momentum, trend, volatilityRisk, macro, sectorStrength });
   const dataQuality = dataQualityBreakdown({ price, stock, policy, congress, liquidity, volatilityRisk, marketChange });
+  const unifiedPrediction = buildUnifiedPredictionLayer({
+    baseScore: score,
+    confidence,
+    technicalAnalysis,
+    multiTimeframeAlignment,
+    setupSignals,
+    shortSqueezeSignal,
+    chartPatternSignal,
+  });
   const ensembleModels = {
     momentum: researchSubModel("Momentum Model", momentum, 100 - momentum, confidence, `Price momentum proxy is ${Math.round(momentum)}/100.`, dataQuality.score),
     trend: researchSubModel("Trend Model", trend, 100 - trend, confidence, `Trend blends quality and momentum at ${Math.round(trend)}/100.`, dataQuality.score),
@@ -1709,6 +1818,12 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     setupSignals,
     shortSqueezeSignal,
     chartPatternSignal,
+    unifiedPredictionScore: unifiedPrediction.unifiedPredictionScore,
+    unifiedDirection: unifiedPrediction.unifiedDirection,
+    confidenceTier: unifiedPrediction.confidenceTier,
+    strongestSignals: unifiedPrediction.strongestSignals,
+    conflictingSignals: unifiedPrediction.conflictingSignals,
+    finalReasonSummary: unifiedPrediction.finalReasonSummary,
     aiOpportunityScore: score,
     oneDayScore: dailyModel.score,
     threeDayScore: threeDayModel.score,

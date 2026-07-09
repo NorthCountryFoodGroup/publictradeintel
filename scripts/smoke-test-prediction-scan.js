@@ -132,6 +132,7 @@ function assertPredictionShape(result) {
   assertSetupSignals(first.setupSignals);
   assertShortSqueezeSignal(first.shortSqueezeSignal);
   assertChartPatternSignal(first.chartPatternSignal);
+  assertUnifiedPrediction(first);
   assert.ok(Array.isArray(result.sections?.top25OneDay), "has Top 25 1-day section");
   assert.ok(Array.isArray(result.sections?.top25SevenDay), "has Top 25 7-day section");
   assert.ok(Array.isArray(result.sections?.top25OneMonth), "has Top 25 1-month section");
@@ -172,6 +173,16 @@ function assertChartPatternSignal(chartPatternSignal) {
   assert.ok("invalidationLevel" in chartPatternSignal, "invalidationLevel exists");
   assert.ok("targetLevel" in chartPatternSignal, "targetLevel exists");
   assert.ok(typeof chartPatternSignal.reasonSummary === "string", "chart pattern reason summary exists");
+}
+
+function assertUnifiedPrediction(prediction) {
+  assert.ok(Number.isFinite(Number(prediction.unifiedPredictionScore)), "unifiedPredictionScore exists");
+  assert.ok(prediction.unifiedPredictionScore >= 0 && prediction.unifiedPredictionScore <= 100, "unifiedPredictionScore is 0-100");
+  assert.ok(["bullish", "bearish", "neutral", "mixed"].includes(prediction.unifiedDirection), "unifiedDirection exists");
+  assert.ok(["low", "medium", "high", "very high"].includes(prediction.confidenceTier), "confidenceTier exists");
+  assert.ok(Array.isArray(prediction.strongestSignals), "strongestSignals exists");
+  assert.ok(Array.isArray(prediction.conflictingSignals), "conflictingSignals exists");
+  assert.ok(typeof prediction.finalReasonSummary === "string", "finalReasonSummary exists");
 }
 
 function assertMultiTimeframeAlignment(alignment) {

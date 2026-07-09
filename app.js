@@ -747,6 +747,7 @@ function renderPredictions() {
       const setup = item.setupSignals || model?.setupSignals || {};
       const shortSqueeze = item.shortSqueezeSignal || {};
       const chartPattern = item.chartPatternSignal || {};
+      const unifiedScore = Number(item.unifiedPredictionScore) || Number(item.aiOpportunityScore) || 0;
       return `
         <article class="prediction-card">
           <div class="stock-card-top">
@@ -759,11 +760,16 @@ function renderPredictions() {
             <span>${escapeHtml(alignment.action)}</span>
           </div>
           <div class="score-line ${tone}">
-            <span>${escapeHtml(modelLabel)}</span>
-            <strong>${Number(item.aiOpportunityScore) || 0}/100</strong>
+            <span>Unified Prediction Score</span>
+            <strong>${unifiedScore}/100</strong>
           </div>
-          <div class="prediction-meter" aria-label="AI Opportunity Score ${Number(item.aiOpportunityScore) || 0}">
-            <div style="width: ${Math.min(100, Number(item.aiOpportunityScore) || 0)}%"></div>
+          <div class="prediction-meter" aria-label="Unified Prediction Score ${unifiedScore}">
+            <div style="width: ${Math.min(100, unifiedScore)}%"></div>
+          </div>
+          <div class="signal-list">
+            <span>Direction: ${escapeHtml(item.unifiedDirection || "neutral")}</span>
+            <span>Confidence: ${escapeHtml(item.confidenceTier || "low")}</span>
+            <span>Base AI score: ${Number(item.aiOpportunityScore) || 0}/100</span>
           </div>
           <div class="timeframe-score-grid">
             <div>
@@ -797,7 +803,15 @@ function renderPredictions() {
               <small>1-year hold</small>
             </div>
           </div>
-          <div class="signal-list">
+          <details class="why-pick">
+            <summary>Why this pick?</summary>
+            <div class="model-reasons">
+              <strong>Final read</strong>
+              <p>${escapeHtml(item.finalReasonSummary || "Unified prediction summary is being built from the available signal layers.")}</p>
+              ${(item.strongestSignals || []).map((signal) => `<p>${escapeHtml(signal)}</p>`).join("")}
+              ${(item.conflictingSignals || []).length ? `<strong>Conflicting signals</strong>${item.conflictingSignals.map((signal) => `<p>${escapeHtml(signal)}</p>`).join("")}` : ""}
+            </div>
+            <div class="signal-list">
             <span>Overall Opportunity Score: ${Number(item.aiOpportunityScore) || 0}/100</span>
             <span>Confidence Score: ${Number(item.confidenceScore) || 0}/100</span>
             <span>Risk Score: ${Number(item.riskScore) || 0}/100</span>
@@ -814,7 +828,8 @@ function renderPredictions() {
             <span>${escapeHtml(predictionModelTitle(model))} upside: ${pct(model?.expectedUpside)}</span>
             <span>${escapeHtml(predictionModelTitle(model))} downside: ${pct(model?.downsideRisk)}</span>
             <span>Risk/reward: ${Number(item.riskRewardRatio || 0).toFixed(2)}</span>
-          </div>
+            </div>
+          </details>
           <div class="trade-levels">
             <div><span>${escapeHtml(predictionModelTitle(model))} entry</span><strong>${escapeHtml(entryZone)}</strong></div>
             <div><span>Target</span><strong>${escapeHtml(profitTarget)}</strong></div>
