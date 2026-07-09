@@ -211,6 +211,11 @@ function assertUnifiedPrediction(prediction) {
 function assertPredictionEngineHealth(health) {
   assert.ok(health, "predictionEngineHealth exists");
   assert.ok(["Healthy", "Warning", "Failed"].includes(health.status), "health status exists");
+  assert.ok(["Healthy", "Failed"].includes(health.predictionEngineStatus), "prediction engine status exists");
+  assert.ok(["Healthy", "Warning", "Failed"].includes(health.dataQualityStatus), "data quality status exists");
+  assert.ok(Number.isFinite(Number(health.incompleteMarketDataCount)), "incomplete market data count exists");
+  assert.ok(Number.isFinite(Number(health.incompleteMarketDataPercent)), "incomplete market data percent exists");
+  assert.ok(Array.isArray(health.incompleteMarketDataTickers), "incomplete market data tickers exists");
   assert.ok(health.scanCompletedAt, "health scan completed timestamp exists");
   assert.ok(Number.isFinite(Number(health.tickersScanned)), "health tickers scanned exists");
   assert.ok(Number.isFinite(Number(health.predictionsGenerated)), "health predictions generated exists");
@@ -230,6 +235,9 @@ function assertPredictionEngineHealth(health) {
   assert.equal(typeof health.rankingSanityChecks.noMissingFinalReasonSummary, "boolean", "missing summary sanity check exists");
   assert.equal(typeof health.rankingSanityChecks.noVeryHighConfidenceMixedDirection, "boolean", "mixed very-high sanity check exists");
   assert.equal(typeof health.rankingSanityChecks.noStaleDataAboveHighConfidence, "boolean", "stale data confidence sanity check exists");
+  if (health.predictionsGenerated >= 25 && !health.rankingSanityFailures.length) {
+    assert.notEqual(health.predictionEngineStatus, "Failed", "incomplete market data alone must not fail engine health");
+  }
 }
 
 function assertMultiTimeframeAlignment(alignment) {

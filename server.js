@@ -2359,25 +2359,55 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
     noVeryHighConfidenceMixedDirection: predictions.every((item) => !(item.confidenceTier === "very high" && item.unifiedDirection === "mixed")),
     noStaleDataAboveHighConfidence: predictions.every((item) => !(item.dataQualityStatus === "stale" && item.confidenceTier === "very high")),
   };
-  const failedTickers = predictions
-    .filter((item) => item.dataQualityStatus === "failed" || !Number.isFinite(Number(item.unifiedPredictionScore)) || !item.finalReasonSummary)
+  const structuralFailedTickers = predictions
+    .filter((item) => !Number.isFinite(Number(item.unifiedPredictionScore)) || !item.finalReasonSummary)
     .map((item) => ({
       ticker: item.ticker,
-      reason:
-        item.dataQualityStatus === "failed"
-          ? (item.dataQualityNotes || []).join(" ") || "Data quality failed."
-          : !Number.isFinite(Number(item.unifiedPredictionScore))
+      reason: !Number.isFinite(Number(item.unifiedPredictionScore))
           ? "Missing unified prediction score."
           : "Missing final reason summary.",
     }));
+  const incompleteMarketDataTickers = predictions
+    .filter((item) => ["partial", "stale", "failed"].includes(item.dataQualityStatus))
+    .map((item) => ({
+      ticker: item.ticker,
+      status: item.dataQualityStatus,
+      reason: (item.dataQualityNotes || []).join(" ") || "Market data is incomplete.",
+    }));
   const dataQualityStatusCounts = countBy(predictions, "dataQualityStatus", ["good", "partial", "stale", "failed"]);
+  const incompleteMarketDataCount = dataQualityStatusCounts.partial + dataQualityStatusCounts.stale + dataQualityStatusCounts.failed;
+  const incompleteMarketDataPercent = predictions.length ? Number(((incompleteMarketDataCount / predictions.length) * 100).toFixed(1)) : 100;
+  const dataQualityStatus =
+    !predictions.length
+      ? "Failed"
+      : incompleteMarketDataPercent < 5
+      ? "Healthy"
+      : incompleteMarketDataPercent <= 20
+      ? "Warning"
+      : "Failed";
   const highest = [...predictions].sort((a, b) => Number(b.unifiedPredictionScore || 0) - Number(a.unifiedPredictionScore || 0))[0] || null;
   const lowest = [...predictions].sort((a, b) => Number(a.unifiedPredictionScore || 0) - Number(b.unifiedPredictionScore || 0))[0] || null;
   const checkFailures = Object.entries(rankingChecks).filter(([, passed]) => !passed).map(([name]) => name);
-  const status = !predictions.length || failedTickers.length || checkFailures.length ? "Failed" : (warnings.length || dataQualityStatusCounts.partial || dataQualityStatusCounts.stale ? "Warning" : "Healthy");
+  const engineFailureReasons = [
+    !updatedAt ? "Scan aborted before completion." : "",
+    !predictions.length ? "Prediction generation failed." : "",
+    predictions.length > 0 && predictions.length < 25 ? "Less than 25 predictions generated." : "",
+    structuralFailedTickers.length ? "One or more predictions is missing required generated fields." : "",
+    !rankingChecks.noDuplicateTickerInSameTop25 ? "Duplicate ticker found in a Top 25 timeframe." : "",
+    !rankingChecks.noVeryHighConfidenceMixedDirection ? "Very-high confidence pick has mixed direction." : "",
+    !rankingChecks.noStaleDataAboveHighConfidence ? "Stale-data pick is above high confidence." : "",
+    warnings.some((warning) => /Market data refresh failed|API unavailable/i.test(warning)) && predictions.length < 25 ? "API unavailable and fewer than 25 predictions were generated." : "",
+  ].filter(Boolean);
+  const status = engineFailureReasons.length ? "Failed" : "Healthy";
 
   return {
     status,
+    predictionEngineStatus: status,
+    predictionEngineStatusReasons: engineFailureReasons,
+    dataQualityStatus,
+    incompleteMarketDataCount,
+    incompleteMarketDataPercent,
+    incompleteMarketDataTickers,
     scanCompletedAt: updatedAt,
     tickersScanned: predictions.length,
     predictionsGenerated: predictions.length,
@@ -2391,7 +2421,7 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
     },
     highestScoringTicker: highest ? { ticker: highest.ticker, score: Number(highest.unifiedPredictionScore) || 0 } : null,
     lowestScoringTicker: lowest ? { ticker: lowest.ticker, score: Number(lowest.unifiedPredictionScore) || 0 } : null,
-    failedTickers,
+    failedTickers: structuralFailedTickers,
     rankingSanityChecks: rankingChecks,
     rankingSanityFailures: checkFailures,
     duplicateTickersByTimeframe: Object.fromEntries(Object.entries(top25).map(([key, rows]) => [key, duplicateTickers(rows)])),

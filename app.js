@@ -715,8 +715,12 @@ function renderPredictions() {
       <strong>${avgScore}/100</strong>
     </div>
     <div>
-      <span>Engine health</span>
-      <strong>${escapeHtml(health.status || "Not run")}</strong>
+      <span>Prediction engine</span>
+      <strong>${escapeHtml(health.predictionEngineStatus || health.status || "Not run")}</strong>
+    </div>
+    <div>
+      <span>Data quality status</span>
+      <strong>${escapeHtml(health.dataQualityStatus || "Not run")}</strong>
     </div>
     <div>
       <span>Scan universe</span>
@@ -738,13 +742,15 @@ function renderPredictions() {
 
   const healthCard = health.status
     ? `
-      <article class="prediction-card engine-health-card ${health.status === "Healthy" ? "health-good" : health.status === "Failed" ? "health-failed" : "health-warning"}">
+      <article class="prediction-card engine-health-card ${(health.predictionEngineStatus || health.status) === "Healthy" ? "health-good" : (health.predictionEngineStatus || health.status) === "Failed" ? "health-failed" : "health-warning"}">
         <div class="stock-card-top">
           <span>Authenticated validation checklist</span>
-          <strong>${escapeHtml(health.status)}</strong>
+          <strong>${escapeHtml(health.predictionEngineStatus || health.status)}</strong>
         </div>
         <h3>Prediction engine health</h3>
         <div class="signal-list">
+          <span>Prediction Engine Status: ${escapeHtml(health.predictionEngineStatus || health.status || "Unknown")}</span>
+          <span>Data Quality Status: ${escapeHtml(health.dataQualityStatus || "Unknown")} (${Number(health.incompleteMarketDataPercent) || 0}% incomplete)</span>
           <span>Scan completed: ${health.scanCompletedAt ? new Date(health.scanCompletedAt).toLocaleString() : "Not run yet"}</span>
           <span>Tickers scanned: ${Number(health.tickersScanned) || 0}</span>
           <span>Predictions generated: ${Number(health.predictionsGenerated) || 0}</span>
@@ -752,7 +758,8 @@ function renderPredictions() {
           <span>Avg unified scores: 1d ${Number(unifiedAverages.top25OneDay) || 0}, 7d ${Number(unifiedAverages.top25SevenDay) || 0}, 1m ${Number(unifiedAverages.top25OneMonth) || 0}, 1y ${Number(unifiedAverages.top25OneYear) || 0}</span>
           <span>Highest: ${escapeHtml(health.highestScoringTicker?.ticker || "n/a")} ${Number(health.highestScoringTicker?.score) || 0}/100</span>
           <span>Lowest: ${escapeHtml(health.lowestScoringTicker?.ticker || "n/a")} ${Number(health.lowestScoringTicker?.score) || 0}/100</span>
-          <span>Failed tickers: ${failedTickers.length ? failedTickers.map((item) => `${escapeHtml(item.ticker)} (${escapeHtml(item.reason)})`).join(", ") : "None"}</span>
+          <span>Engine failed tickers: ${failedTickers.length ? failedTickers.map((item) => `${escapeHtml(item.ticker)} (${escapeHtml(item.reason)})`).join(", ") : "None"}</span>
+          <span>Incomplete market data: ${Number(health.incompleteMarketDataCount) || 0} ticker(s)</span>
         </div>
         <details class="why-pick">
           <summary>Ranking sanity checks</summary>

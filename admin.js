@@ -109,8 +109,12 @@ function renderPredictionHealth(health) {
   predictionHealthPanel.innerHTML = `
     <article class="editor-row stock-editor-row">
       <label>
-        <span>Health status</span>
-        <input readonly value="${escapeHtml(health.status || "Unknown")}" />
+        <span>Prediction Engine Status</span>
+        <input readonly value="${escapeHtml(health.predictionEngineStatus || health.status || "Unknown")}" />
+      </label>
+      <label>
+        <span>Data Quality Status</span>
+        <input readonly value="${escapeHtml(health.dataQualityStatus || "Unknown")} (${Number(health.incompleteMarketDataPercent) || 0}% incomplete)" />
       </label>
       <label>
         <span>Scan completed</span>
@@ -137,8 +141,12 @@ function renderPredictionHealth(health) {
         <input readonly value="${escapeHtml(health.highestScoringTicker?.ticker || "n/a")} ${Number(health.highestScoringTicker?.score) || 0}/100 / ${escapeHtml(health.lowestScoringTicker?.ticker || "n/a")} ${Number(health.lowestScoringTicker?.score) || 0}/100" />
       </label>
       <label class="wide-field">
-        <span>Failed tickers</span>
+        <span>Engine failed tickers</span>
         <input readonly value="${escapeHtml((health.failedTickers || []).map((item) => `${item.ticker}: ${item.reason}`).join("; ") || "None")}" />
+      </label>
+      <label class="wide-field">
+        <span>Incomplete market data</span>
+        <input readonly value="${escapeHtml((health.incompleteMarketDataTickers || []).slice(0, 20).map((item) => `${item.ticker}: ${item.status}`).join("; ") || "None")}" />
       </label>
       <label class="wide-field">
         <span>Ranking sanity checks</span>
