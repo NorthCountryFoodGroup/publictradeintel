@@ -23,6 +23,8 @@ const thresholdFields = {
   fullEmergencyTarget: document.querySelector("#fullEmergencyTarget"),
   debtInvestCap: document.querySelector("#debtInvestCap"),
 };
+const scanUniverse = document.querySelector("#scanUniverse");
+const customTickers = document.querySelector("#customTickers");
 
 function adminHeaders() {
   return {
@@ -305,6 +307,8 @@ function renderConfig(config) {
   thresholdFields.firstEmergencyTarget.value = config.thresholds.firstEmergencyTarget;
   thresholdFields.fullEmergencyTarget.value = config.thresholds.fullEmergencyTarget;
   thresholdFields.debtInvestCap.value = config.thresholds.debtInvestCap;
+  if (scanUniverse) scanUniverse.value = config.scanSettings?.universe || "combined";
+  if (customTickers) customTickers.value = config.scanSettings?.customTickers || "";
   plansEditor.innerHTML = config.plans.map(planRow).join("");
   goalsEditor.innerHTML = config.goals.map(goalRow).join("");
   stocksEditor.innerHTML = (config.stockIdeas || []).map(stockRow).join("");
@@ -318,6 +322,10 @@ function collectConfig() {
       firstEmergencyTarget: Number(thresholdFields.firstEmergencyTarget.value) || 100,
       fullEmergencyTarget: Number(thresholdFields.fullEmergencyTarget.value) || 500,
       debtInvestCap: Number(thresholdFields.debtInvestCap.value) || 10,
+    },
+    scanSettings: {
+      universe: scanUniverse?.value || "combined",
+      customTickers: customTickers?.value || "",
     },
     plans: state.config.plans.map((plan) => ({ ...plan })),
     goals: state.config.goals.map((goal) => ({ ...goal })),

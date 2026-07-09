@@ -88,6 +88,20 @@
             <span>Tiny investing cap while debt exists</span>
             <input type="number" min="0" step="1" id="debtInvestCap" />
           </label>
+          <label>
+            <span>Prediction scan universe</span>
+            <select id="scanUniverse">
+              <option value="watchlist">Watchlist only</option>
+              <option value="sp500">S&P 500</option>
+              <option value="nasdaq100">Nasdaq-100</option>
+              <option value="etfs">ETFs</option>
+              <option value="combined">Combined universe</option>
+            </select>
+          </label>
+          <label class="wide-field">
+            <span>Custom ticker list</span>
+            <textarea id="customTickers" rows="3" placeholder="Example: PLTR, SOFI, RKLB, TSM"></textarea>
+          </label>
         </div>
 
         <div class="section-heading editor-heading">

@@ -23,6 +23,28 @@ const CONGRESS_REFRESH_MS = Number(process.env.CONGRESS_REFRESH_MS || 60 * 60 * 
 const PREDICTION_REFRESH_MS = Number(process.env.PREDICTION_REFRESH_MS || 60 * 60 * 1000);
 const SESSION_COOKIE = "pti_session";
 const sessions = new Map();
+const MAX_SCAN_UNIVERSE = 90;
+const MAX_MARKET_REFRESH_TICKERS = 35;
+const SCAN_UNIVERSE_MODES = ["watchlist", "sp500", "nasdaq100", "etfs", "combined"];
+const BUILT_IN_UNIVERSES = {
+  sp500: [
+    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "BRK.B", "LLY", "AVGO", "JPM", "TSLA",
+    "XOM", "UNH", "V", "MA", "COST", "HD", "PG", "WMT", "NFLX", "JNJ", "CRM", "ABBV", "BAC", "ORCL",
+    "KO", "CVX", "MRK", "WFC", "AMD", "PEP", "ACN", "MCD", "ADBE", "CSCO", "TMO", "LIN", "ABT", "QCOM",
+    "GE", "TXN", "PM", "INTU", "IBM", "AMGN", "CAT", "ISRG", "NOW", "GS", "UBER", "DIS", "RTX", "SPGI",
+    "PGR", "AXP", "BKNG", "NEE", "LOW", "HON",
+  ],
+  nasdaq100: [
+    "AAPL", "MSFT", "NVDA", "AMZN", "META", "AVGO", "GOOGL", "GOOG", "TSLA", "COST", "NFLX", "AMD",
+    "PEP", "ADBE", "CSCO", "QCOM", "INTU", "AMGN", "ISRG", "BKNG", "TXN", "CMCSA", "HON", "AMAT",
+    "PANW", "ADP", "GILD", "MU", "ADI", "LRCX", "MELI", "VRTX", "SBUX", "KLAC", "MDLZ", "REGN",
+    "CDNS", "SNPS", "MAR", "CRWD", "PYPL", "ORLY", "MRVL", "ABNB", "CSX", "FTNT", "NXPI", "ROP",
+  ],
+  etfs: [
+    "SPY", "VOO", "IVV", "QQQ", "VTI", "IWM", "DIA", "SCHD", "VIG", "XLK", "XLF", "XLE", "XLV", "XLY",
+    "XLI", "XLP", "XLC", "SMH", "SOXX", "ARKK", "TLT", "HYG", "GLD", "SLV", "USO", "VNQ", "EEM", "VEA",
+  ],
+};
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -187,6 +209,13 @@ function sanitizeConfig(config) {
       fullEmergencyTarget: Math.max(0, Number(config?.thresholds?.fullEmergencyTarget) || 500),
       debtInvestCap: Math.max(0, Number(config?.thresholds?.debtInvestCap) || 10),
     },
+    scanSettings: {
+      universe: SCAN_UNIVERSE_MODES.includes(config?.scanSettings?.universe) ? config.scanSettings.universe : "combined",
+      customTickers: String(config?.scanSettings?.customTickers || "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9.,\s-]/g, "")
+        .slice(0, 1600),
+    },
     plans: Array.isArray(config?.plans)
       ? config.plans.slice(0, 8).map((plan) => ({
           name: String(plan.name || "Starter plan").slice(0, 80),
@@ -204,7 +233,7 @@ function sanitizeConfig(config) {
         }))
       : [],
     stockIdeas: Array.isArray(config?.stockIdeas)
-      ? config.stockIdeas.slice(0, 12).map((stock) => ({
+      ? config.stockIdeas.slice(0, 200).map((stock) => ({
           ticker: String(stock.ticker || "TICKER").toUpperCase().replace(/[^A-Z.-]/g, "").slice(0, 12),
           name: String(stock.name || "Stock idea").slice(0, 80),
           type: ["ETF", "Stock"].includes(stock.type) ? stock.type : "Stock",
@@ -384,7 +413,7 @@ function scorePolicyText(stock, source, text) {
 async function refreshPolicySignals() {
   const config = sanitizeConfig(readJson(CONFIG_FILE, {}));
   const sources = (config.policySources || []).filter((source) => source.enabled);
-  const stocks = config.stockIdeas || [];
+  const stocks = buildScanUniverse(config);
   const signals = [];
   const errors = [];
 
@@ -409,11 +438,69 @@ async function refreshPolicySignals() {
   return result;
 }
 
+function parseTickerList(value) {
+  return [...new Set(String(value || "")
+    .toUpperCase()
+    .split(/[\s,]+/)
+    .map((ticker) => ticker.replace(/[^A-Z.-]/g, "").slice(0, 12))
+    .filter(Boolean))];
+}
+
+function universePresetTickers(mode) {
+  if (mode === "sp500") return BUILT_IN_UNIVERSES.sp500;
+  if (mode === "nasdaq100") return BUILT_IN_UNIVERSES.nasdaq100;
+  if (mode === "etfs") return BUILT_IN_UNIVERSES.etfs;
+  if (mode === "combined") return [...BUILT_IN_UNIVERSES.sp500, ...BUILT_IN_UNIVERSES.nasdaq100, ...BUILT_IN_UNIVERSES.etfs];
+  return [];
+}
+
+function universeCandidate(ticker, index, overrides = {}) {
+  const isEtf = BUILT_IN_UNIVERSES.etfs.includes(ticker) || /ETF/i.test(overrides.type || "");
+  const seed = ticker.split("").reduce((sum, char) => sum + char.charCodeAt(0), index * 7);
+  return {
+    ticker,
+    name: overrides.name || ticker,
+    type: overrides.type || (isEtf ? "ETF" : "Stock"),
+    risk: overrides.risk || (isEtf ? "balanced" : "growth"),
+    minimumWeekly: Number(overrides.minimumWeekly) || 5,
+    valuationScore: Number(overrides.valuationScore) || clamp(56 + (seed % 26)),
+    momentumScore: Number(overrides.momentumScore) || clamp(54 + ((seed * 3) % 34)),
+    qualityScore: Number(overrides.qualityScore) || clamp(isEtf ? 78 : 58 + ((seed * 5) % 36)),
+    volatilityScore: Number(overrides.volatilityScore) || clamp(isEtf ? 74 : 46 + ((seed * 7) % 42)),
+    pressScore: Number(overrides.pressScore) || clamp(42 + ((seed * 11) % 44)),
+    pressNotes: overrides.pressNotes || `${ticker} included from ${isEtf ? "major ETF" : "preset stock"} scan universe.`,
+    committeeScore: Number(overrides.committeeScore) || clamp(30 + ((seed * 13) % 45)),
+    committeeNotes: overrides.committeeNotes || "Preset universe candidate; committee relevance is estimated until specific signals match.",
+    aiOutlook: overrides.aiOutlook || "Universe candidate scored from market, technical, policy, and pattern layers during prediction scans.",
+    riskNote: overrides.riskNote || "Universe candidate. Review live data and risk before acting.",
+    ...overrides,
+  };
+}
+
+function buildScanUniverse(config, quotes = []) {
+  const quoteMap = new Map((quotes || []).map((quote) => [quote.ticker, quote]));
+  const watchlist = new Map((config.stockIdeas || []).map((stock) => [stock.ticker, stock]));
+  const custom = parseTickerList(config.scanSettings?.customTickers);
+  const mode = config.scanSettings?.universe || "combined";
+  const tickers = [
+    ...(mode === "watchlist" ? [...watchlist.keys()] : universePresetTickers(mode)),
+    ...custom,
+  ];
+  if (mode === "combined") tickers.unshift(...watchlist.keys());
+  const unique = [...new Set(tickers.filter(Boolean))].slice(0, MAX_SCAN_UNIVERSE);
+
+  return unique.map((ticker, index) => {
+    const quote = quoteMap.get(ticker) || {};
+    const saved = watchlist.get(ticker) || {};
+    return universeCandidate(ticker, index, { ...saved, ...quote });
+  });
+}
+
 function uniqueTickers(config) {
   const tickers = new Set();
-  for (const stock of config.stockIdeas || []) tickers.add(stock.ticker);
+  for (const stock of buildScanUniverse(config)) tickers.add(stock.ticker);
   for (const trade of config.congressTrades || []) tickers.add(trade.ticker);
-  return [...tickers].filter(Boolean).slice(0, 20);
+  return [...tickers].filter(Boolean).slice(0, MAX_MARKET_REFRESH_TICKERS);
 }
 
 function findCachedQuote(ticker) {
@@ -2375,9 +2462,10 @@ async function refreshPredictions(options = {}) {
   const config = sanitizeConfig(options.config || readJson(CONFIG_FILE, {}));
   const policySignals = options.policySignals || readJson(POLICY_FILE, { updatedAt: null, signals: [], errors: [] });
   const warnings = Array.isArray(options.warnings) ? [...options.warnings] : [];
+  const scanUniverse = buildScanUniverse(config, options.quotes || []);
   const previous = readJson(PREDICTIONS_FILE, { predictions: [] });
   const previousByTicker = new Map((previous.predictions || []).map((item) => [item.ticker, item]));
-  const predictions = (config.stockIdeas || [])
+  const predictions = scanUniverse
     .map((stock) => buildPrediction(stock, config, policySignals, previousByTicker))
     .sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
   const updatedAt = new Date().toISOString();
@@ -2388,6 +2476,12 @@ async function refreshPredictions(options = {}) {
     predictions,
     sections,
     predictionEngineHealth,
+    scanUniverse: {
+      mode: config.scanSettings?.universe || "combined",
+      customTickerCount: parseTickerList(config.scanSettings?.customTickers).length,
+      candidateCount: scanUniverse.length,
+      maxCandidates: MAX_SCAN_UNIVERSE,
+    },
     refreshCadence: {
       top25OneDay: "hourly",
       top25SevenDay: "every 4 hours",
@@ -2431,6 +2525,7 @@ async function runPredictionScan() {
   let config = sanitizeConfig(readJson(CONFIG_FILE, {}));
   const tickers = uniqueTickers(config);
   const developmentMode = process.env.NODE_ENV !== "production";
+  let refreshedQuotes = [];
 
   if (!tickers.length) {
     if (!developmentMode) {
@@ -2449,6 +2544,7 @@ async function runPredictionScan() {
   try {
     const market = await refreshMarketData(config);
     config = market.config;
+    refreshedQuotes = market.quotes || [];
     if (market.errors.length) {
       warnings.push(`Market data unavailable for ${market.errors.length} ticker(s). Scores used saved or sample market values where needed.`);
     }
@@ -2483,7 +2579,7 @@ async function runPredictionScan() {
   }
 
   try {
-    const result = await refreshPredictions({ config, policySignals, warnings });
+    const result = await refreshPredictions({ config, policySignals, warnings, quotes: refreshedQuotes });
     if (!Array.isArray(result.predictions) || !result.predictions.length) {
       if (!developmentMode) {
         const error = new Error("Prediction scan failed");
@@ -2491,13 +2587,13 @@ async function runPredictionScan() {
         throw error;
       }
       warnings.push("Prediction scan produced no rows. Development sample predictions were used.");
-      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings });
+      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes });
     }
     return result;
   } catch (error) {
     if (developmentMode && error.code !== "DATABASE_WRITE_FAILED") {
       warnings.push(`Prediction scan failed: ${error.message}. Development sample predictions were used.`);
-      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings });
+      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes });
     }
     throw error;
   }

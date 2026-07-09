@@ -667,6 +667,7 @@ function renderPredictions() {
   const unifiedAverages = health.averageUnifiedPredictionScoreByTimeframe || {};
   const sanityChecks = health.rankingSanityChecks || {};
   const failedTickers = health.failedTickers || [];
+  const scanUniverse = predictionEngine.scanUniverse || {};
   const strong = predictions.filter((item) => item.label === "Strong AI Buy Candidate").length;
   const oneDayAvg = predictions.length
     ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.oneDayScore || item.dailyScore), 0) / predictions.length)
@@ -716,6 +717,10 @@ function renderPredictions() {
     <div>
       <span>Engine health</span>
       <strong>${escapeHtml(health.status || "Not run")}</strong>
+    </div>
+    <div>
+      <span>Scan universe</span>
+      <strong>${escapeHtml(scanUniverse.mode || "watchlist")} (${Number(scanUniverse.candidateCount) || predictions.length})</strong>
     </div>
     <div>
       <span>Predictions generated</span>

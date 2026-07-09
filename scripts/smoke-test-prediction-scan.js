@@ -59,6 +59,10 @@ function testConfig() {
   const original = readJson(configFile, {});
   return {
     ...original,
+    scanSettings: {
+      universe: "combined",
+      customTickers: "PLTR, SOFI, RKLB",
+    },
     stockIdeas: [
       {
         ticker: "NVDA",
@@ -113,7 +117,7 @@ function testConfig() {
 
 function assertPredictionShape(result) {
   assert.ok(Array.isArray(result.predictions), "scan returns predictions array");
-  assert.ok(result.predictions.length > 0, "scan returns predictions");
+  assert.ok(result.predictions.length >= 25, "scan returns enough predictions for Top 25 lists");
   const first = result.predictions[0];
   assert.ok(first.ticker, "prediction has ticker");
   assert.ok(Number.isFinite(Number(first.oneDayScore)), "prediction has 1-day score");
@@ -137,6 +141,13 @@ function assertPredictionShape(result) {
   assert.ok(Array.isArray(result.sections?.top25SevenDay), "has Top 25 7-day section");
   assert.ok(Array.isArray(result.sections?.top25OneMonth), "has Top 25 1-month section");
   assert.ok(Array.isArray(result.sections?.top25OneYear), "has Top 25 1-year section");
+  assert.equal(result.sections.top25OneDay.length, 25, "1-day Top 25 has 25 records");
+  assert.equal(result.sections.top25SevenDay.length, 25, "7-day Top 25 has 25 records");
+  assert.equal(result.sections.top25OneMonth.length, 25, "1-month Top 25 has 25 records");
+  assert.equal(result.sections.top25OneYear.length, 25, "1-year Top 25 has 25 records");
+  assert.ok(result.scanUniverse, "scan universe metadata exists");
+  assert.equal(result.scanUniverse.mode, "combined", "scan universe mode is returned");
+  assert.ok(result.scanUniverse.candidateCount >= 25, "scan universe has enough candidates");
   assertPredictionEngineHealth(result.predictionEngineHealth);
 }
 
