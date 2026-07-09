@@ -225,6 +225,9 @@ function sanitizeConfig(config) {
           marketChangePercent: String(stock.marketChangePercent || "").slice(0, 24),
           marketUpdatedAt: String(stock.marketUpdatedAt || "").slice(0, 40),
           marketProvider: String(stock.marketProvider || "").slice(0, 40),
+          shortInterest: Number.isFinite(Number(stock.shortInterest)) ? Number(stock.shortInterest) : null,
+          floatSize: Number.isFinite(Number(stock.floatSize)) ? Number(stock.floatSize) : null,
+          relativeVolume: Number.isFinite(Number(stock.relativeVolume)) ? Number(stock.relativeVolume) : null,
         }))
       : [],
     congressTrades: Array.isArray(config?.congressTrades)
@@ -938,6 +941,79 @@ function buildSetupSignals({ multiTimeframeAlignment, marketChange, momentum, un
   };
 }
 
+function squeezeRiskLabel(score) {
+  if (score >= 85) return "extreme";
+  if (score >= 70) return "high";
+  if (score >= 45) return "medium";
+  return "low";
+}
+
+function numericOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function buildShortSqueezeSignal({ stock, marketChange, momentum, unusualVolume, technicalAnalysis, multiTimeframeAlignment, setupSignals }) {
+  const fiveMinute = multiTimeframeAlignment?.fiveMinute || {};
+  const oneDay = technicalAnalysis?.oneDay || {};
+  const shortInterest = numericOrNull(stock.shortInterest);
+  const floatSize = numericOrNull(stock.floatSize);
+  const relativeVolume = numericOrNull(stock.relativeVolume) || Number(Math.max(0.4, unusualVolume / 42).toFixed(2));
+  const currentPrice = numericOrNull(fiveMinute.currentPrice) || numericOrNull(oneDay.currentPrice) || numericOrNull(stock.marketPrice);
+  const vwapDistance = numericOrNull(fiveMinute.priceVsVwap);
+  const resistance = numericOrNull(fiveMinute.nearestResistance) || numericOrNull(oneDay.nearestResistance);
+  const support = numericOrNull(fiveMinute.nearestSupport) || numericOrNull(oneDay.nearestSupport);
+  const priceReclaimingVWAP = vwapDistance !== null ? vwapDistance > 0.08 && marketChange > 0 : marketChange > 0.8;
+  const breakingKeyResistance = currentPrice !== null && resistance !== null
+    ? currentPrice >= resistance * 0.992 || marketChange > 1.3
+    : marketChange > 1.3 && momentum >= 62;
+  const failedBreakdowns = Boolean(
+    setupSignals?.emaBounce?.direction === "bullish" &&
+      setupSignals?.emaBounce?.confirmationStatus !== "failed" &&
+      (support === null || currentPrice === null || currentPrice >= support * 1.003),
+  );
+  const highShortInterest = shortInterest === null ? null : shortInterest >= 15;
+  const lowFloat = floatSize === null ? null : floatSize <= 50000000;
+  const strongUpwardMove = marketChange > 1 || momentum >= 68;
+  const relativeVolumeScore = clamp(relativeVolume * 34);
+  const shortInterestScore = shortInterest === null ? 52 : clamp(shortInterest * 3.4);
+  const floatScore = floatSize === null ? 52 : clamp(100 - Math.log10(Math.max(floatSize, 1000000)) * 9);
+  const squeezeScore = Math.round(weightedScore([
+    { score: relativeVolumeScore, weight: 0.22 },
+    { score: strongUpwardMove ? clamp(62 + Math.max(0, marketChange) * 8 + momentum * 0.2) : clamp(momentum * 0.55), weight: 0.18 },
+    { score: priceReclaimingVWAP ? 82 : 34, weight: 0.14 },
+    { score: breakingKeyResistance ? 84 : 36, weight: 0.14 },
+    { score: failedBreakdowns ? 76 : 38, weight: 0.1 },
+    { score: shortInterestScore, weight: 0.12 },
+    { score: floatScore, weight: 0.1 },
+  ]));
+  const positives = [
+    relativeVolume >= 1.5 ? `relative volume ${relativeVolume.toFixed(2)}x` : "",
+    strongUpwardMove ? "strong upward price move" : "",
+    priceReclaimingVWAP ? "VWAP reclaim" : "",
+    breakingKeyResistance ? "key resistance breakout" : "",
+    failedBreakdowns ? "failed breakdowns holding support" : "",
+    highShortInterest === true ? `short interest ${shortInterest}%` : "",
+    lowFloat === true ? `low float ${Math.round(floatSize).toLocaleString("en-US")}` : "",
+  ].filter(Boolean);
+  const missing = [
+    shortInterest === null ? "short interest unavailable" : "",
+    floatSize === null ? "float unavailable" : "",
+  ].filter(Boolean);
+
+  return {
+    squeezeRisk: squeezeRiskLabel(squeezeScore),
+    squeezeScore,
+    shortInterest,
+    floatSize,
+    relativeVolume,
+    priceReclaimingVWAP,
+    breakingKeyResistance,
+    failedBreakdowns,
+    reasonSummary: `${positives.length ? positives.join(", ") : "No major squeeze trigger is confirmed yet"}. ${missing.length ? `${missing.join("; ")}; scored from available signals.` : "Short-interest and float inputs were included."}`,
+  };
+}
+
 function buildTimeframeModel({ name, score, confidence, risk, upside, downside, price, reasons, failureRisks, metrics }) {
   const levels = modelLevels(price, upside, downside);
   return {
@@ -1195,6 +1271,15 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     unusualVolume,
     volume: Number(stock.marketVolume) || null,
   });
+  const shortSqueezeSignal = buildShortSqueezeSignal({
+    stock,
+    marketChange,
+    momentum,
+    unusualVolume,
+    technicalAnalysis,
+    multiTimeframeAlignment,
+    setupSignals,
+  });
   const earningsComing = clamp((Number(stock.pressScore) || 0) * 0.55 + volatilityRisk * 0.25 + momentum * 0.2);
   const analystUpgradeProxy = clamp(newsImpact * 0.62 + sentiment * 0.38);
   const sectorRotation = clamp(sectorStrength * 0.72 + macro * 0.28);
@@ -1431,6 +1516,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     technicalAnalysis,
     multiTimeframeAlignment,
     setupSignals,
+    shortSqueezeSignal,
     aiOpportunityScore: score,
     oneDayScore: dailyModel.score,
     threeDayScore: threeDayModel.score,
@@ -1508,6 +1594,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
       technicalSignal: technicalAnalysis.oneDay.technicalSignalScore,
       intradayAlignment: multiTimeframeAlignment.alignmentScore,
       setupSignal: setupSignals.setupScore,
+      shortSqueeze: shortSqueezeSignal.squeezeScore,
     },
     ensembleModels,
     modelLeaderboard: {

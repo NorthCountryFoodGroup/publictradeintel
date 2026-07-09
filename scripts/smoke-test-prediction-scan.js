@@ -130,6 +130,7 @@ function assertPredictionShape(result) {
   assertTechnicalShape(first.timeframeModels?.oneYear?.technicalAnalysis, "1-year model has technical analysis");
   assertMultiTimeframeAlignment(first.multiTimeframeAlignment);
   assertSetupSignals(first.setupSignals);
+  assertShortSqueezeSignal(first.shortSqueezeSignal);
   assert.ok(Array.isArray(result.sections?.top25OneDay), "has Top 25 1-day section");
   assert.ok(Array.isArray(result.sections?.top25SevenDay), "has Top 25 7-day section");
   assert.ok(Array.isArray(result.sections?.top25OneMonth), "has Top 25 1-month section");
@@ -144,6 +145,20 @@ function assertSetupSignals(setupSignals) {
   assert.ok(Number.isFinite(Number(setupSignals.setupScore)), "setupScore exists");
   assert.ok(["confirmed", "forming", "failed", "none"].includes(setupSignals.confirmationStatus), "confirmationStatus exists");
   assert.ok(typeof setupSignals.reasonSummary === "string", "setup reason summary exists");
+}
+
+function assertShortSqueezeSignal(shortSqueezeSignal) {
+  assert.ok(shortSqueezeSignal, "shortSqueezeSignal exists");
+  assert.ok(["low", "medium", "high", "extreme"].includes(shortSqueezeSignal.squeezeRisk), "squeezeRisk exists");
+  assert.ok(Number.isFinite(Number(shortSqueezeSignal.squeezeScore)), "squeezeScore exists");
+  assert.ok(shortSqueezeSignal.squeezeScore >= 0 && shortSqueezeSignal.squeezeScore <= 100, "squeezeScore is 0-100");
+  assert.ok(Number.isFinite(Number(shortSqueezeSignal.relativeVolume)), "relativeVolume exists");
+  assert.ok("shortInterest" in shortSqueezeSignal, "shortInterest optional field exists");
+  assert.ok("floatSize" in shortSqueezeSignal, "floatSize optional field exists");
+  assert.equal(typeof shortSqueezeSignal.priceReclaimingVWAP, "boolean", "priceReclaimingVWAP exists");
+  assert.equal(typeof shortSqueezeSignal.breakingKeyResistance, "boolean", "breakingKeyResistance exists");
+  assert.equal(typeof shortSqueezeSignal.failedBreakdowns, "boolean", "failedBreakdowns exists");
+  assert.ok(typeof shortSqueezeSignal.reasonSummary === "string", "short squeeze reason summary exists");
 }
 
 function assertMultiTimeframeAlignment(alignment) {

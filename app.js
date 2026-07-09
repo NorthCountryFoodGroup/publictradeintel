@@ -745,6 +745,7 @@ function renderPredictions() {
       const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
       const intradayAlignment = item.multiTimeframeAlignment || model?.multiTimeframeAlignment || {};
       const setup = item.setupSignals || model?.setupSignals || {};
+      const shortSqueeze = item.shortSqueezeSignal || {};
       return `
         <article class="prediction-card">
           <div class="stock-card-top">
@@ -805,6 +806,7 @@ function renderPredictions() {
             <span>Trend: ${escapeHtml(technical.trendDirection || "unknown")}</span>
             <span>2m/5m/15m alignment: ${escapeHtml(intradayAlignment.alignmentDirection || "unknown")} (${Number(intradayAlignment.alignmentScore) || 0}/100)</span>
             <span>Setup: ${escapeHtml(setup.setupDirection || "none")} ${escapeHtml(setup.confirmationStatus || "none")} (${Number(setup.setupScore) || 0}/100)</span>
+            <span>Short squeeze risk: ${escapeHtml(shortSqueeze.squeezeRisk || "low")} (${Number(shortSqueeze.squeezeScore) || 0}/100)</span>
             <span>Price vs 9/20 EMA: ${compactValue(technical.priceVs9Ema, "%")} / ${compactValue(technical.priceVs20Ema, "%")}</span>
             <span>Support / resistance: ${technical.nearestSupport ? `$${Number(technical.nearestSupport).toFixed(2)}` : "n/a"} / ${technical.nearestResistance ? `$${Number(technical.nearestResistance).toFixed(2)}` : "n/a"}</span>
             <span>${escapeHtml(predictionModelTitle(model))} upside: ${pct(model?.expectedUpside)}</span>
