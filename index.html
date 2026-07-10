@@ -414,55 +414,124 @@
         </article>
       </section>
 
-      <section class="stock-section dashboard-page" data-page="market">
+      <section class="dashboard-page market-intelligence-page" data-page="market">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Stock ideas</p>
-            <h2>AI-assisted watchlist from public-market signals</h2>
+            <p class="eyebrow">Market Intelligence</p>
+            <h2>What is driving today's market?</h2>
           </div>
+          <button type="button" data-run-prediction-scan>Run prediction scan</button>
         </div>
 
-        <div class="stock-controls">
-          <label>
-            <span>Risk comfort</span>
-            <select id="riskProfile">
-              <option value="cautious">Cautious</option>
-              <option value="balanced" selected>Balanced</option>
-              <option value="growth">Growth</option>
-            </select>
-          </label>
-          <label>
-            <span>Preferred holding time</span>
-            <select id="timeHorizon">
-              <option value="short">Weeks to months</option>
-              <option value="medium" selected>1 to 3 years</option>
-              <option value="long">3+ years</option>
-            </select>
-          </label>
-        </div>
+        <div class="market-intelligence-center">
+          <section class="dashboard-card market-section">
+            <div class="card-heading">
+              <span>Top Summary</span>
+              <strong id="marketIntelligenceStatus">Scanning</strong>
+            </div>
+            <div class="market-summary-grid" id="marketSummaryGrid"></div>
+          </section>
 
-        <div class="disclaimer-box">
-          These are educational stock ideas based on transparent signals, not guarantees or personalized financial advice.
-          Aggressive mode prioritizes opportunity signals, momentum, and public-market catalysts.
-        </div>
+          <section class="dashboard-card market-section">
+            <div class="card-heading">
+              <span>Market Breadth</span>
+              <strong>Participation</strong>
+            </div>
+            <div class="market-summary-grid" id="marketBreadthGrid"></div>
+          </section>
 
-        <div class="stock-grid" id="stockGrid"></div>
-      </section>
+          <section class="dashboard-card market-section">
+            <div class="card-heading">
+              <span>Sector Rotation</span>
+              <strong>Relative strength</strong>
+            </div>
+            <div class="sector-rotation-grid" id="sectorRotationGrid"></div>
+          </section>
 
-      <section class="best-section dashboard-page" data-page="market">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Fastest growth buy recommendations</p>
-            <h2>Ranked from congressional buying, catalysts, and momentum</h2>
+          <section class="dashboard-card market-section">
+            <div class="card-heading">
+              <span>Market Heat Map</span>
+              <strong id="selectedSectorLabel">All sectors</strong>
+            </div>
+            <div class="sector-heatmap-grid" id="sectorHeatmapGrid"></div>
+            <div class="sector-picks-panel" id="sectorPicksPanel"></div>
+          </section>
+
+          <div class="executive-two-column">
+            <section class="dashboard-card market-section">
+              <div class="card-heading">
+                <span>Congress Intelligence</span>
+                <strong>Disclosure read</strong>
+              </div>
+              <div class="market-summary-grid compact-executive-grid" id="marketCongressGrid"></div>
+            </section>
+
+            <section class="dashboard-card market-section">
+              <div class="card-heading">
+                <span>Policy Intelligence</span>
+                <strong>Catalyst read</strong>
+              </div>
+              <div class="market-summary-grid compact-executive-grid" id="marketPolicyGrid"></div>
+            </section>
           </div>
-        </div>
 
-        <div class="disclaimer-box">
-          This aggressive ranking weighs tracked congressional purchases, post-disclosure growth, press/catalysts,
-          committee relevance, market momentum, and quality. It is designed to surface fastest-growth candidates.
-        </div>
+          <section class="dashboard-card market-section">
+            <div class="card-heading">
+              <span>Economic Calendar</span>
+              <strong>Upcoming catalysts</strong>
+            </div>
+            <div class="economic-calendar-grid" id="economicCalendarGrid"></div>
+          </section>
 
-        <div class="stock-grid" id="bestStocksGrid"></div>
+          <section class="dashboard-card market-section">
+            <div class="card-heading">
+              <span>AI Market Summary</span>
+              <strong>Plain-English briefing</strong>
+            </div>
+            <div class="ai-market-summary" id="aiMarketSummary"></div>
+          </section>
+
+          <section class="dashboard-card market-section">
+            <div class="card-heading">
+              <span>Quick Navigation</span>
+              <strong>Next step</strong>
+            </div>
+            <div class="market-quick-nav">
+              <button type="button" data-page-target="predictions">Predictions</button>
+              <button type="button" data-page-target="briefs">Trade Briefs</button>
+              <button type="button" data-page-target="congress">Congress</button>
+              <button type="button" data-page-target="policy">Policy</button>
+              <button type="button" data-page-target="performance">Performance</button>
+            </div>
+          </section>
+
+          <details class="prediction-filter-panel">
+            <summary>Legacy stock idea tools</summary>
+            <div class="stock-controls">
+              <label>
+                <span>Risk comfort</span>
+                <select id="riskProfile">
+                  <option value="cautious">Cautious</option>
+                  <option value="balanced" selected>Balanced</option>
+                  <option value="growth">Growth</option>
+                </select>
+              </label>
+              <label>
+                <span>Preferred holding time</span>
+                <select id="timeHorizon">
+                  <option value="short">Weeks to months</option>
+                  <option value="medium" selected>1 to 3 years</option>
+                  <option value="long">3+ years</option>
+                </select>
+              </label>
+            </div>
+            <div class="disclaimer-box">
+              These are educational stock ideas based on transparent signals, not guarantees or personalized financial advice.
+            </div>
+            <div class="stock-grid" id="stockGrid"></div>
+            <div class="stock-grid" id="bestStocksGrid"></div>
+          </details>
+        </div>
       </section>
 
       <section class="daytrade-section dashboard-page" data-page="performance">
@@ -560,6 +629,7 @@
     <nav class="mobile-nav" aria-label="Mobile navigation">
       <button type="button" class="nav-link is-active" data-page-target="dashboard">Home</button>
       <button type="button" class="nav-link" data-page-target="predictions">Picks</button>
+      <button type="button" class="nav-link" data-page-target="market">Market</button>
       <button type="button" class="nav-link" data-page-target="briefs">Briefs</button>
       <button type="button" class="nav-link" data-page-target="watchlist">Lists</button>
       <button type="button" class="nav-link" data-page-target="performance">Perf</button>

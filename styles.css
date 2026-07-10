@@ -1636,6 +1636,202 @@ li {
   color: var(--text-primary);
 }
 
+.market-intelligence-center {
+  display: grid;
+  gap: var(--space-4, 16px);
+}
+
+.market-section {
+  display: grid;
+  gap: var(--space-4, 16px);
+}
+
+.market-summary-grid,
+.sector-rotation-grid,
+.sector-heatmap-grid,
+.economic-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3, 12px);
+}
+
+.market-metric-card,
+.sector-rotation-card,
+.sector-heat-card,
+.sector-picks-panel {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: rgba(255, 255, 255, 0.04);
+  padding: var(--space-3, 12px);
+}
+
+.market-metric-card {
+  display: grid;
+  gap: var(--space-1, 4px);
+}
+
+.market-metric-card span,
+.sector-rotation-card span,
+.sector-heat-card small {
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.market-metric-card strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-h3);
+  font-weight: 950;
+}
+
+.market-metric-card small,
+.sector-rotation-card p,
+.sector-picks-header span,
+.sector-pick-list span,
+.ai-market-summary p {
+  color: var(--text-secondary);
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.market-metric-card.good strong,
+.market-metric-card.success strong {
+  color: var(--color-success);
+}
+
+.market-metric-card.warn strong,
+.market-metric-card.warning strong {
+  color: var(--color-warning);
+}
+
+.market-metric-card.bad strong {
+  color: var(--color-danger);
+}
+
+.sector-rotation-card {
+  display: grid;
+  gap: var(--space-2, 8px);
+}
+
+.sector-rotation-card strong,
+.sector-heat-card strong,
+.sector-picks-header strong {
+  color: var(--text-primary);
+  font-weight: 950;
+}
+
+.sector-rotation-card div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-2, 8px);
+}
+
+.sector-rotation-card b {
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.sector-heat-card {
+  display: grid;
+  gap: var(--space-1, 4px);
+  width: 100%;
+  text-align: left;
+}
+
+.sector-heat-card span {
+  color: var(--text-primary);
+  font-size: var(--font-size-h2);
+  font-weight: 950;
+}
+
+.sector-heat-card.is-active {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.heat-strong {
+  border-color: rgba(69, 209, 154, 0.55);
+  background: rgba(69, 209, 154, 0.18);
+}
+
+.heat-positive {
+  border-color: rgba(69, 209, 154, 0.36);
+  background: rgba(69, 209, 154, 0.1);
+}
+
+.heat-mixed {
+  border-color: rgba(240, 184, 75, 0.38);
+  background: rgba(240, 184, 75, 0.11);
+}
+
+.heat-negative {
+  border-color: rgba(255, 122, 104, 0.42);
+  background: rgba(255, 122, 104, 0.11);
+}
+
+.heat-neutral {
+  border-color: rgba(157, 180, 170, 0.28);
+  background: rgba(157, 180, 170, 0.08);
+}
+
+.sector-picks-panel {
+  display: grid;
+  gap: var(--space-3, 12px);
+}
+
+.sector-picks-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.sector-pick-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2, 8px);
+}
+
+.sector-pick-list button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.ai-market-summary {
+  display: grid;
+  gap: var(--space-3, 12px);
+}
+
+.ai-market-summary p {
+  margin: 0;
+  border-left: 3px solid var(--color-primary);
+  padding-left: var(--space-3, 12px);
+}
+
+.ai-market-summary strong {
+  color: var(--text-primary);
+}
+
+.market-quick-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+}
+
+.market-quick-nav button {
+  width: auto;
+}
+
 @media (min-width: 1380px) {
   .prediction-grid {
     grid-template-columns: repeat(4, minmax(260px, 1fr));
@@ -1647,7 +1843,15 @@ li {
   .prediction-filter-grid,
   .performance-overview-grid,
   .performance-chart-grid,
-  .signal-analysis-grid {
+  .signal-analysis-grid,
+  .market-summary-grid,
+  .sector-rotation-grid,
+  .sector-heatmap-grid,
+  .economic-calendar-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sector-pick-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1677,6 +1881,11 @@ li {
   .performance-overview-grid,
   .performance-chart-grid,
   .signal-analysis-grid,
+  .market-summary-grid,
+  .sector-rotation-grid,
+  .sector-heatmap-grid,
+  .economic-calendar-grid,
+  .sector-pick-list,
   .prediction-audit-card {
     grid-template-columns: 1fr;
   }

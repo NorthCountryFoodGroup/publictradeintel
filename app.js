@@ -66,6 +66,17 @@ const output = {
   dashboardAlertCount: document.querySelector("#dashboardAlertCount"),
   marketOverviewTone: document.querySelector("#marketOverviewTone"),
   marketOverviewGrid: document.querySelector("#marketOverviewGrid"),
+  marketIntelligenceStatus: document.querySelector("#marketIntelligenceStatus"),
+  marketSummaryGrid: document.querySelector("#marketSummaryGrid"),
+  marketBreadthGrid: document.querySelector("#marketBreadthGrid"),
+  sectorRotationGrid: document.querySelector("#sectorRotationGrid"),
+  sectorHeatmapGrid: document.querySelector("#sectorHeatmapGrid"),
+  selectedSectorLabel: document.querySelector("#selectedSectorLabel"),
+  sectorPicksPanel: document.querySelector("#sectorPicksPanel"),
+  marketCongressGrid: document.querySelector("#marketCongressGrid"),
+  marketPolicyGrid: document.querySelector("#marketPolicyGrid"),
+  economicCalendarGrid: document.querySelector("#economicCalendarGrid"),
+  aiMarketSummary: document.querySelector("#aiMarketSummary"),
   predictionEngineGrid: document.querySelector("#predictionEngineGrid"),
   opportunityCount: document.querySelector("#opportunityCount"),
   todayOpportunitiesGrid: document.querySelector("#todayOpportunitiesGrid"),
@@ -192,6 +203,7 @@ let predictionView = "top25OneDay";
 let predictionLayout = "cards";
 let portfolio = [];
 let selectedBriefTicker = "";
+let selectedMarketSector = "All sectors";
 
 const pageLabels = {
   dashboard: "Dashboard",
@@ -282,6 +294,7 @@ function calculate() {
   renderMemberOptions();
   renderCongressTrades();
   renderDashboard();
+  renderMarketIntelligence();
   renderPerformanceCenter();
   renderTradeBrief();
 }
@@ -1909,6 +1922,210 @@ function renderPredictionAudit(records) {
     `;
 }
 
+const marketSectors = [
+  "Technology",
+  "Healthcare",
+  "Financials",
+  "Energy",
+  "Industrials",
+  "Consumer",
+  "Utilities",
+  "Real Estate",
+  "Materials",
+  "Communication",
+  "Consumer Staples",
+  "Consumer Discretionary",
+];
+
+function marketMetricCard(title, value, subtitle, tone = "neutral") {
+  return `
+    <article class="market-metric-card ${tone}">
+      <span>${escapeHtml(title)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(subtitle)}</small>
+    </article>
+  `;
+}
+
+function sectorForPrediction(item) {
+  const raw = String(item.sector || item.assetGroup || item.industry || "").toLowerCase();
+  if (raw.includes("tech") || raw.includes("software") || raw.includes("semiconductor")) return "Technology";
+  if (raw.includes("health") || raw.includes("biotech") || raw.includes("pharma")) return "Healthcare";
+  if (raw.includes("financial") || raw.includes("bank") || raw.includes("insurance")) return "Financials";
+  if (raw.includes("energy") || raw.includes("oil") || raw.includes("gas")) return "Energy";
+  if (raw.includes("industrial") || raw.includes("aerospace") || raw.includes("defense")) return "Industrials";
+  if (raw.includes("utility")) return "Utilities";
+  if (raw.includes("real estate") || raw.includes("reit")) return "Real Estate";
+  if (raw.includes("material") || raw.includes("mining") || raw.includes("chemical")) return "Materials";
+  if (raw.includes("communication") || raw.includes("media") || raw.includes("telecom")) return "Communication";
+  if (raw.includes("staple")) return "Consumer Staples";
+  if (raw.includes("discretionary") || raw.includes("retail") || raw.includes("auto")) return "Consumer Discretionary";
+  if (raw.includes("consumer")) return "Consumer";
+  return item.ticker ? "Technology" : "Consumer";
+}
+
+function sectorStats() {
+  const predictions = predictionEngine.predictions || [];
+  return marketSectors.map((sector) => {
+    const matches = predictions.filter((item) => sectorForPrediction(item) === sector);
+    const avgScore = matches.length ? Math.round(matches.reduce((sum, item) => sum + scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore), 0) / matches.length) : 0;
+    const bullish = matches.filter((item) => String(item.unifiedDirection || "").toLowerCase() === "bullish").length;
+    const bearish = matches.filter((item) => String(item.unifiedDirection || "").toLowerCase() === "bearish").length;
+    const direction = bullish > bearish ? "Bullish" : bearish > bullish ? "Bearish" : matches.length ? "Mixed" : "Neutral";
+    const relativeStrength = avgScore >= 75 ? "Strong" : avgScore >= 62 ? "Improving" : avgScore >= 45 ? "Neutral" : "Weak";
+    const outlook =
+      direction === "Bullish"
+        ? "AI signals favor upside leadership."
+        : direction === "Bearish"
+        ? "AI signals show elevated downside pressure."
+        : matches.length
+        ? "Signals are mixed; wait for cleaner confirmation."
+        : "Awaiting enough scan data.";
+    return { sector, matches, avgScore, direction, relativeStrength, outlook };
+  });
+}
+
+function sectorToneClass(stat) {
+  if (stat.direction === "Bullish" && stat.avgScore >= 70) return "heat-strong";
+  if (stat.direction === "Bullish") return "heat-positive";
+  if (stat.direction === "Bearish") return "heat-negative";
+  if (stat.direction === "Mixed") return "heat-mixed";
+  return "heat-neutral";
+}
+
+function largestTradeSummary(trades, type) {
+  const filtered = (trades || []).filter((trade) => trade.transaction === type);
+  if (!filtered.length) return "No recent data";
+  return filtered[0].company || filtered[0].ticker || filtered[0].representative || "Tracked";
+}
+
+function renderSectorPicks(stats) {
+  if (!output.sectorPicksPanel) return;
+  const sector = selectedMarketSector === "All sectors" ? stats[0]?.sector : selectedMarketSector;
+  const stat = stats.find((item) => item.sector === sector) || stats[0];
+  const picks = [...(stat?.matches || [])]
+    .sort((a, b) => scoreValue(b.unifiedPredictionScore || b.aiOpportunityScore) - scoreValue(a.unifiedPredictionScore || a.aiOpportunityScore))
+    .slice(0, 5);
+  if (output.selectedSectorLabel) output.selectedSectorLabel.textContent = stat ? stat.sector : "All sectors";
+  output.sectorPicksPanel.innerHTML = `
+    <div class="sector-picks-header">
+      <strong>${escapeHtml(stat?.sector || "All sectors")}</strong>
+      <span>${picks.length ? "Strongest predicted stocks in this sector" : "Run a prediction scan for sector picks"}</span>
+    </div>
+    <div class="sector-pick-list">
+      ${
+        picks.length
+          ? picks
+              .map(
+                (item) => `
+                  <button type="button" data-view-brief="${escapeHtml(item.ticker)}">
+                    <strong>${escapeHtml(item.ticker)}</strong>
+                    <span>${escapeHtml(item.name || item.ticker)} | ${scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore)}/100</span>
+                  </button>
+                `
+              )
+              .join("")
+          : `<p class="muted-copy">No sector-specific prediction candidates are available yet.</p>`
+      }
+    </div>
+  `;
+}
+
+function renderMarketIntelligence() {
+  if (!output.marketSummaryGrid) return;
+  const health = predictionEngine.predictionEngineHealth || {};
+  const predictions = predictionEngine.predictions || [];
+  const stats = sectorStats();
+  const strongestSector = [...stats].sort((a, b) => b.avgScore - a.avgScore)[0];
+  const weakestSector = [...stats].sort((a, b) => a.avgScore - b.avgScore)[0];
+  const bullishCount = predictions.filter((item) => String(item.unifiedDirection || "").toLowerCase() === "bullish").length;
+  const bearishCount = predictions.filter((item) => String(item.unifiedDirection || "").toLowerCase() === "bearish").length;
+  const breadthScore = predictions.length ? Math.round((bullishCount / predictions.length) * 100) : 0;
+  const signals = policySignals.signals || [];
+  const positiveSignals = signals.filter((signal) => signal.direction === "positive");
+  const negativeSignals = signals.filter((signal) => signal.direction === "negative");
+  const trades = settings.congressTrades || [];
+  const buys = trades.filter((trade) => trade.transaction === "Buy");
+  const sells = trades.filter((trade) => trade.transaction === "Sell");
+  const marketMood = predictionEngine.marketRegime?.primary || strongestSector?.direction || "Scanning";
+  if (output.marketIntelligenceStatus) output.marketIntelligenceStatus.textContent = marketMood;
+
+  output.marketSummaryGrid.innerHTML = [
+    marketMetricCard("Overall Market Sentiment", marketMood, strongestSector ? `${strongestSector.sector} leads sector strength` : "Run scan for a market read", statusTone(marketMood)),
+    marketMetricCard("S&P 500", "Tracking", "Live index provider placeholder"),
+    marketMetricCard("Nasdaq", "Tracking", "Live index provider placeholder"),
+    marketMetricCard("Dow", "Tracking", "Live index provider placeholder"),
+    marketMetricCard("Russell 2000", "Tracking", "Small-cap read placeholder"),
+    marketMetricCard("VIX", "Tracking", "Volatility read placeholder"),
+    marketMetricCard("Prediction Engine Status", health.predictionEngineStatus || health.status || "Not run", `${Number(health.predictionsGenerated) || predictions.length} predictions generated`, statusTone(health.predictionEngineStatus || health.status)),
+    marketMetricCard("Market Data Quality", health.dataQualityStatus || "Not run", `${Number(health.incompleteMarketDataPercent) || 0}% incomplete`, statusTone(health.dataQualityStatus)),
+  ].join("");
+
+  output.marketBreadthGrid.innerHTML = [
+    marketMetricCard("Advancers", String(bullishCount), "Bullish prediction direction"),
+    marketMetricCard("Decliners", String(bearishCount), "Bearish prediction direction", "warning"),
+    marketMetricCard("New Highs", "Tracking", "Market data provider placeholder"),
+    marketMetricCard("New Lows", "Tracking", "Market data provider placeholder"),
+    marketMetricCard("Volume Breadth", `${Math.max(0, Math.min(100, breadthScore))}/100`, "Proxy from bullish participation"),
+    marketMetricCard("Market Breadth Score", `${breadthScore}/100`, predictions.length ? "Derived from active scan directions" : "Run scan for breadth"),
+  ].join("");
+
+  output.sectorRotationGrid.innerHTML = stats
+    .map(
+      (stat) => `
+        <article class="sector-rotation-card ${sectorToneClass(stat)}">
+          <strong>${escapeHtml(stat.sector)}</strong>
+          <div><span>Direction</span><b>${escapeHtml(stat.direction)}</b></div>
+          <div><span>Relative Strength</span><b>${escapeHtml(stat.relativeStrength)} (${stat.avgScore}/100)</b></div>
+          <p>${escapeHtml(stat.outlook)}</p>
+        </article>
+      `
+    )
+    .join("");
+
+  output.sectorHeatmapGrid.innerHTML = stats
+    .map(
+      (stat) => `
+        <button type="button" class="sector-heat-card ${sectorToneClass(stat)} ${selectedMarketSector === stat.sector ? "is-active" : ""}" data-market-sector="${escapeHtml(stat.sector)}">
+          <strong>${escapeHtml(stat.sector)}</strong>
+          <span>${stat.avgScore}/100</span>
+          <small>${escapeHtml(stat.direction)}</small>
+        </button>
+      `
+    )
+    .join("");
+  renderSectorPicks(stats);
+
+  output.marketCongressGrid.innerHTML = [
+    marketMetricCard("Largest Purchases", largestTradeSummary(trades, "Buy"), `${buys.length} tracked buys`),
+    marketMetricCard("Largest Sales", largestTradeSummary(trades, "Sell"), `${sells.length} tracked sells`),
+    marketMetricCard("Most Active Members", mostActivePoliticians(trades), "Based on imported disclosures"),
+    marketMetricCard("Sector Concentration", strongestSector?.sector || "Tracking", "Matched against prediction sectors"),
+  ].join("");
+
+  output.marketPolicyGrid.innerHTML = [
+    marketMetricCard("Positive Catalysts", String(positiveSignals.length), "Policy/news signals marked positive", "success"),
+    marketMetricCard("Negative Catalysts", String(negativeSignals.length), "Policy/news signals marked negative", "warning"),
+    marketMetricCard("Upcoming Policy Events", "Tracking", "Calendar integration placeholder"),
+    marketMetricCard("Industries Impacted", String(new Set(signals.map((signal) => signal.industry || signal.sector || signal.ticker).filter(Boolean)).size), "Unique impacted groups"),
+  ].join("");
+
+  output.economicCalendarGrid.innerHTML = [
+    marketMetricCard("Fed Meetings", "Tracking", "Upcoming rate decision placeholder"),
+    marketMetricCard("Inflation", "Tracking", "CPI/PCE release placeholder"),
+    marketMetricCard("Jobs", "Tracking", "Payrolls and unemployment placeholder"),
+    marketMetricCard("GDP", "Tracking", "Growth report placeholder"),
+    marketMetricCard("Major Earnings Weeks", "Tracking", "Earnings calendar placeholder"),
+  ].join("");
+
+  output.aiMarketSummary.innerHTML = `
+    <p><strong>What is driving today's market?</strong> The app currently sees ${escapeHtml(marketMood)} conditions with ${bullishCount} bullish and ${bearishCount} bearish prediction reads across the active universe.</p>
+    <p><strong>Strongest sectors:</strong> ${escapeHtml(strongestSector?.sector || "Tracking")} shows the best relative score at ${Number(strongestSector?.avgScore) || 0}/100. Its current read is ${escapeHtml(strongestSector?.direction || "neutral")}.</p>
+    <p><strong>Weakest sectors:</strong> ${escapeHtml(weakestSector?.sector || "Tracking")} has the weakest sector score at ${Number(weakestSector?.avgScore) || 0}/100, so it deserves extra caution before chasing individual names.</p>
+    <p><strong>What to watch today:</strong> Watch breadth, market data quality, policy catalysts, congressional concentration, and whether top predictions stay aligned across the 1-day, 7-day, 1-month, and 1-year lists.</p>
+  `;
+}
+
 function renderPerformanceCenter() {
   if (!output.performanceOverviewGrid) return;
   const allRecords = predictionPerformanceRecords();
@@ -2005,6 +2222,7 @@ async function runPredictionScan() {
     const warningText = Array.isArray(result.warnings) && result.warnings.length ? ` Warnings: ${result.warnings.join(" ")}` : "";
     if (output.predictionScanMessage) output.predictionScanMessage.textContent = `Prediction scan complete. ${result.predictions?.length || 0} records generated.${warningText}`;
     renderPredictions();
+    renderMarketIntelligence();
     renderPerformanceCenter();
   } catch (error) {
     if (output.predictionScanMessage) output.predictionScanMessage.textContent = predictionErrorMessage(error);
@@ -2661,6 +2879,7 @@ function setPage(pageName) {
   if (output.pageBreadcrumb) output.pageBreadcrumb.textContent = label;
   if (output.pageTitle) output.pageTitle.textContent = label;
   if (target === "briefs") renderTradeBrief();
+  if (target === "market") renderMarketIntelligence();
   if (target === "performance") renderPerformanceCenter();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -2771,6 +2990,11 @@ document.addEventListener("click", (event) => {
   if (scanButton && !output.predictionGrid?.contains(scanButton)) runPredictionScan();
   const briefButton = event.target.closest("[data-view-brief]");
   if (briefButton && !output.predictionGrid?.contains(briefButton)) openTradeBrief(briefButton.dataset.viewBrief);
+  const sectorButton = event.target.closest("[data-market-sector]");
+  if (sectorButton) {
+    selectedMarketSector = sectorButton.dataset.marketSector || "All sectors";
+    renderMarketIntelligence();
+  }
 });
 output.portfolioList?.addEventListener("click", (event) => {
   const button = event.target.closest(".remove-position");
