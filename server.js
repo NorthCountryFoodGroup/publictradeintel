@@ -24,7 +24,8 @@ const PREDICTION_REFRESH_MS = Number(process.env.PREDICTION_REFRESH_MS || 60 * 6
 const SESSION_COOKIE = "pti_session";
 const sessions = new Map();
 const MAX_SCAN_UNIVERSE = 90;
-const MAX_MARKET_REFRESH_TICKERS = 35;
+const MARKET_QUOTE_BATCH_SIZE = 8;
+const MARKET_QUOTE_RETRY_DELAY_MS = 350;
 const SCAN_UNIVERSE_MODES = ["watchlist", "sp500", "nasdaq100", "etfs", "combined"];
 const BUILT_IN_UNIVERSES = {
   sp500: [
@@ -500,11 +501,27 @@ function uniqueTickers(config) {
   const tickers = new Set();
   for (const stock of buildScanUniverse(config)) tickers.add(stock.ticker);
   for (const trade of config.congressTrades || []) tickers.add(trade.ticker);
-  return [...tickers].filter(Boolean).slice(0, MAX_MARKET_REFRESH_TICKERS);
+  return [...tickers].filter(Boolean);
+}
+
+function scanUniverseTickers(config) {
+  return buildScanUniverse(config).map((stock) => stock.ticker).filter(Boolean);
+}
+
+function quoteTickerSymbol(ticker) {
+  return String(ticker || "").toUpperCase().replace(/[^A-Z.-]/g, "").slice(0, 12);
+}
+
+function yahooTickerSymbol(ticker) {
+  return quoteTickerSymbol(ticker).replace(/\./g, "-");
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function findCachedQuote(ticker) {
-  const symbol = String(ticker || "").toUpperCase().replace(/[^A-Z.-]/g, "").slice(0, 12);
+  const symbol = quoteTickerSymbol(ticker);
   const config = readJson(CONFIG_FILE, {});
   const candidates = [...(config.stockIdeas || []), ...(config.congressTrades || [])];
   const match = candidates.find((item) => item.ticker === symbol && Number(item.marketPrice) > 0);
@@ -521,27 +538,31 @@ function findCachedQuote(ticker) {
 }
 
 async function fetchAlphaVantageQuote(ticker) {
+  const symbol = quoteTickerSymbol(ticker);
   if (!MARKET_API_KEY) {
     throw new Error("Set ALPHA_VANTAGE_API_KEY before refreshing market data.");
   }
 
   const url = new URL("https://www.alphavantage.co/query");
   url.searchParams.set("function", "GLOBAL_QUOTE");
-  url.searchParams.set("symbol", ticker);
+  url.searchParams.set("symbol", symbol);
   url.searchParams.set("apikey", MARKET_API_KEY);
 
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`Market data failed for ${ticker}`);
+  if (!response.ok) throw new Error(`Market data failed for ${symbol}`);
 
   const data = await response.json();
   const quote = data["Global Quote"];
   if (!quote || !quote["05. price"]) {
-    const message = data.Note || data.Information || data["Error Message"] || `No quote returned for ${ticker}`;
+    const message = data.Note || data.Information || data["Error Message"] || `No quote returned for ${symbol}`;
     throw new Error(message);
   }
 
   return {
-    ticker,
+    ticker: symbol,
+    marketProviderSymbol: symbol,
+    marketQuoteRequested: true,
+    marketQuoteRetryCount: 0,
     marketPrice: Number(quote["05. price"]),
     marketChange: Number(quote["09. change"]) || null,
     marketVolume: Number(quote["06. volume"]) || null,
@@ -552,8 +573,9 @@ async function fetchAlphaVantageQuote(ticker) {
 }
 
 async function fetchYahooChartQuote(ticker) {
-  const symbol = String(ticker || "").toUpperCase().replace(/[^A-Z.-]/g, "").slice(0, 12);
-  const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
+  const originalSymbol = quoteTickerSymbol(ticker);
+  const providerSymbol = yahooTickerSymbol(ticker);
+  const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(providerSymbol)}`);
   url.searchParams.set("range", "1d");
   url.searchParams.set("interval", "1d");
 
@@ -563,19 +585,22 @@ async function fetchYahooChartQuote(ticker) {
       Accept: "application/json,*/*",
     },
   });
-  if (!response.ok) throw new Error(`Fallback quote failed for ${symbol}`);
+  if (!response.ok) throw new Error(`Fallback quote failed for ${providerSymbol} (${response.status})`);
 
   const data = await response.json();
   const meta = data?.chart?.result?.[0]?.meta;
   const price = Number(meta?.regularMarketPrice);
-  if (!price) throw new Error(`No fallback quote returned for ${symbol}`);
+  if (!price) throw new Error(`No fallback quote returned for ${providerSymbol}`);
 
   const previousClose = Number(meta.previousClose || meta.chartPreviousClose) || null;
   const marketChange = previousClose ? price - previousClose : null;
   const marketChangePercent = previousClose ? `${((marketChange / previousClose) * 100).toFixed(2)}%` : "";
 
   return {
-    ticker: symbol,
+    ticker: originalSymbol,
+    marketProviderSymbol: providerSymbol,
+    marketQuoteRequested: true,
+    marketQuoteRetryCount: 0,
     marketPrice: price,
     marketChange,
     marketVolume: Number(meta.regularMarketVolume) || null,
@@ -586,35 +611,69 @@ async function fetchYahooChartQuote(ticker) {
 }
 
 async function fetchMarketQuote(ticker) {
+  const symbol = quoteTickerSymbol(ticker);
   try {
-    return await fetchAlphaVantageQuote(ticker);
+    return { ...(await fetchAlphaVantageQuote(symbol)), ticker: symbol };
   } catch (alphaError) {
-    const fallback = await fetchYahooChartQuote(ticker);
+    const fallback = await fetchYahooChartQuote(symbol);
     return {
       ...fallback,
+      ticker: symbol,
       marketProvider: `${fallback.marketProvider} fallback`,
       marketNote: "Primary quote provider unavailable; fallback quote used.",
     };
   }
 }
 
+async function fetchMarketQuoteWithRetry(ticker, retryCount = 1) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+    try {
+      const quote = await fetchMarketQuote(ticker);
+      return {
+        ...quote,
+        marketQuoteRequested: true,
+        marketQuoteRetryCount: attempt,
+      };
+    } catch (error) {
+      lastError = error;
+      if (attempt < retryCount) await delay(MARKET_QUOTE_RETRY_DELAY_MS);
+    }
+  }
+  const symbol = quoteTickerSymbol(ticker);
+  return {
+    ticker: symbol,
+    marketQuoteRequested: true,
+    marketQuoteRetryCount: retryCount,
+    marketQuoteError: publicErrorMessage(lastError, "Quote provider did not return usable market data."),
+  };
+}
+
 async function refreshMarketData(config) {
   const quotes = [];
   const errors = [];
+  const requestedTickers = scanUniverseTickers(config);
+  const tickers = [...new Set(requestedTickers)].filter(Boolean);
 
-  for (const ticker of uniqueTickers(config)) {
-    try {
-      const quote = await fetchMarketQuote(ticker);
-      quotes.push(quote);
-    } catch (error) {
-      errors.push({ ticker, error: error.message });
+  for (let index = 0; index < tickers.length; index += MARKET_QUOTE_BATCH_SIZE) {
+    const batch = tickers.slice(index, index + MARKET_QUOTE_BATCH_SIZE);
+    const results = await Promise.all(batch.map((ticker) => fetchMarketQuoteWithRetry(ticker, 1)));
+    for (const result of results) {
+      quotes.push(result);
+      if (!Number(result.marketPrice)) {
+        errors.push({ ticker: result.ticker, error: result.marketQuoteError || "Quote provider did not return usable market data." });
+      }
     }
   }
 
   const byTicker = new Map(quotes.map((quote) => [quote.ticker, quote]));
+  const requested = new Set(tickers);
   const applyQuote = (item) => {
-    const quote = byTicker.get(item.ticker);
-    return quote ? { ...item, ...quote } : item;
+    const symbol = quoteTickerSymbol(item.ticker);
+    const quote = byTicker.get(symbol);
+    return quote
+      ? { ...item, ...quote, ticker: symbol, marketQuoteRequested: requested.has(symbol) }
+      : { ...item, ticker: symbol, marketQuoteRequested: requested.has(symbol) };
   };
 
   return {
@@ -625,6 +684,7 @@ async function refreshMarketData(config) {
     }),
     quotes,
     errors,
+    requestedTickers: tickers,
   };
 }
 
@@ -1521,11 +1581,12 @@ function dataQualityBreakdown({ price, stock, policy, congress, liquidity, volat
     { score: 100 - missingData, weight: 0.12 },
   ]);
   const dataQualityNotes = [
-    price ? "" : "Current market price is missing.",
+    price ? "" : stock.marketQuoteRequested === false ? "Market quote was not requested for this ticker." : "Current market price is missing after quote refresh.",
     stock.marketUpdatedAt ? "" : "Market update timestamp is missing.",
     staleMarketData ? `Market data is ${Math.round(marketAgeHours)} hours old.` : "",
     stock.marketChangePercent ? "" : "Market change percentage is missing.",
     Number(stock.marketVolume) ? "" : "Volume data is missing or unavailable.",
+    stock.marketQuoteError ? `Quote provider response: ${stock.marketQuoteError}` : "",
     policy.count ? "" : "No fresh policy/news signal matched this ticker.",
   ].filter(Boolean);
   const dataQualityStatus = !price
@@ -1946,6 +2007,11 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     assetGroup: assetGroup(stock),
     currentPrice: price,
     marketChangePercent: stock.marketChangePercent || "",
+    marketProvider: stock.marketProvider || "",
+    marketProviderSymbol: stock.marketProviderSymbol || ticker,
+    marketQuoteRequested: stock.marketQuoteRequested !== false,
+    marketQuoteRetryCount: Number(stock.marketQuoteRetryCount) || 0,
+    marketQuoteError: stock.marketQuoteError || "",
     technicalAnalysis,
     multiTimeframeAlignment,
     setupSignals,
@@ -2367,16 +2433,20 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
           ? "Missing unified prediction score."
           : "Missing final reason summary.",
     }));
-  const incompleteMarketDataTickers = predictions
+  const quoteRequestedPredictions = predictions.filter((item) => item.marketQuoteRequested !== false);
+  const incompleteMarketDataTickers = quoteRequestedPredictions
     .filter((item) => ["partial", "stale", "failed"].includes(item.dataQualityStatus))
     .map((item) => ({
       ticker: item.ticker,
       status: item.dataQualityStatus,
       reason: (item.dataQualityNotes || []).join(" ") || "Market data is incomplete.",
+      providerSymbol: item.marketProviderSymbol || item.ticker,
+      retryCount: Number(item.marketQuoteRetryCount) || 0,
+      providerResponse: item.marketQuoteError || item.marketProvider || "No provider detail available.",
     }));
-  const dataQualityStatusCounts = countBy(predictions, "dataQualityStatus", ["good", "partial", "stale", "failed"]);
+  const dataQualityStatusCounts = countBy(quoteRequestedPredictions, "dataQualityStatus", ["good", "partial", "stale", "failed"]);
   const incompleteMarketDataCount = dataQualityStatusCounts.partial + dataQualityStatusCounts.stale + dataQualityStatusCounts.failed;
-  const incompleteMarketDataPercent = predictions.length ? Number(((incompleteMarketDataCount / predictions.length) * 100).toFixed(1)) : 100;
+  const incompleteMarketDataPercent = quoteRequestedPredictions.length ? Number(((incompleteMarketDataCount / quoteRequestedPredictions.length) * 100).toFixed(1)) : 100;
   const dataQualityStatus =
     !predictions.length
       ? "Failed"
@@ -2408,6 +2478,9 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
     incompleteMarketDataCount,
     incompleteMarketDataPercent,
     incompleteMarketDataTickers,
+    marketQuotesRequested: quoteRequestedPredictions.length,
+    marketQuotesSucceeded: quoteRequestedPredictions.filter((item) => Number(item.currentPrice) > 0).length,
+    marketQuotesFailed: quoteRequestedPredictions.filter((item) => !Number(item.currentPrice)).length,
     scanCompletedAt: updatedAt,
     tickersScanned: predictions.length,
     predictionsGenerated: predictions.length,

@@ -197,6 +197,9 @@ function assertUnifiedPrediction(prediction) {
   assert.ok(typeof prediction.finalReasonSummary === "string", "finalReasonSummary exists");
   assert.ok(["good", "partial", "stale", "failed"].includes(prediction.dataQualityStatus), "dataQualityStatus exists");
   assert.ok(Array.isArray(prediction.dataQualityNotes), "dataQualityNotes exists");
+  assert.equal(typeof prediction.marketQuoteRequested, "boolean", "marketQuoteRequested exists");
+  assert.ok("marketProviderSymbol" in prediction, "marketProviderSymbol exists");
+  assert.ok("marketQuoteRetryCount" in prediction, "marketQuoteRetryCount exists");
   assert.ok(prediction.dataQuality?.dataQualityStatus === prediction.dataQualityStatus, "dataQuality includes matching status");
   assert.ok(Array.isArray(prediction.dataQuality?.dataQualityNotes), "dataQuality includes notes");
   if (prediction.unifiedDirection === "mixed") {
@@ -216,6 +219,10 @@ function assertPredictionEngineHealth(health) {
   assert.ok(Number.isFinite(Number(health.incompleteMarketDataCount)), "incomplete market data count exists");
   assert.ok(Number.isFinite(Number(health.incompleteMarketDataPercent)), "incomplete market data percent exists");
   assert.ok(Array.isArray(health.incompleteMarketDataTickers), "incomplete market data tickers exists");
+  assert.ok(Number.isFinite(Number(health.marketQuotesRequested)), "market quotes requested count exists");
+  assert.ok(Number.isFinite(Number(health.marketQuotesSucceeded)), "market quotes succeeded count exists");
+  assert.ok(Number.isFinite(Number(health.marketQuotesFailed)), "market quotes failed count exists");
+  assert.equal(health.marketQuotesRequested, health.predictionsGenerated, "every generated prediction was requested for market quote refresh");
   assert.ok(health.scanCompletedAt, "health scan completed timestamp exists");
   assert.ok(Number.isFinite(Number(health.tickersScanned)), "health tickers scanned exists");
   assert.ok(Number.isFinite(Number(health.predictionsGenerated)), "health predictions generated exists");
