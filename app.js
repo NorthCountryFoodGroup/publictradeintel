@@ -40,6 +40,18 @@ const output = {
   predictionSort: document.querySelector("#predictionSort"),
   runPredictionScan: document.querySelector("#runPredictionScan"),
   predictionScanMessage: document.querySelector("#predictionScanMessage"),
+  predictionSearch: document.querySelector("#predictionSearch"),
+  filterTimeframe: document.querySelector("#filterTimeframe"),
+  filterRecommendation: document.querySelector("#filterRecommendation"),
+  filterConfidence: document.querySelector("#filterConfidence"),
+  filterScoreMin: document.querySelector("#filterScoreMin"),
+  filterSector: document.querySelector("#filterSector"),
+  filterIndustry: document.querySelector("#filterIndustry"),
+  filterPattern: document.querySelector("#filterPattern"),
+  filterCongress: document.querySelector("#filterCongress"),
+  filterPolicy: document.querySelector("#filterPolicy"),
+  filterTrend: document.querySelector("#filterTrend"),
+  filterDataQuality: document.querySelector("#filterDataQuality"),
   alertsList: document.querySelector("#alertsList"),
   policySummary: document.querySelector("#policySummary"),
   policySignalsGrid: document.querySelector("#policySignalsGrid"),
@@ -170,6 +182,7 @@ let policySignals = { updatedAt: null, signals: [], errors: [] };
 let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null };
 let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
 let predictionView = "top25OneDay";
+let predictionLayout = "cards";
 let portfolio = [];
 let selectedBriefTicker = "";
 
@@ -831,15 +844,108 @@ function scoreValue(value) {
 }
 
 function sortedPredictionRows(rows) {
-  const sort = output.predictionSort?.value || "rank";
+  const sort = output.predictionSort?.value || "unifiedScore";
   const list = [...rows];
-  if (sort === "upside") return list.sort((a, b) => (Number(b.expectedUpside) || Number(b.forecasts?.sevenDay?.expectedUpside) || 0) - (Number(a.expectedUpside) || Number(a.forecasts?.sevenDay?.expectedUpside) || 0));
+  if (sort === "unifiedScore") return list.sort((a, b) => (Number(b.unifiedPredictionScore || b.aiOpportunityScore) || 0) - (Number(a.unifiedPredictionScore || a.aiOpportunityScore) || 0));
+  if (sort === "technicalScore") return list.sort((a, b) => technicalScoreForPrediction(b) - technicalScoreForPrediction(a));
   if (sort === "confidence") return list.sort((a, b) => (Number(b.confidenceScore) || 0) - (Number(a.confidenceScore) || 0));
-  if (sort === "risk") return list.sort((a, b) => (Number(a.riskScore) || 0) - (Number(b.riskScore) || 0));
-  if (sort === "riskReward") return list.sort((a, b) => (Number(b.riskRewardRatio) || 0) - (Number(a.riskRewardRatio) || 0));
-  if (sort === "improved") return list.sort((a, b) => (Number(b.scoreChange) || 0) - (Number(a.scoreChange) || 0));
-  if (sort === "smallAccount") return list.sort((a, b) => ((Number(b.confidenceScore) || 0) - (Number(b.riskScore) || 0)) - ((Number(a.confidenceScore) || 0) - (Number(a.riskScore) || 0)));
+  if (sort === "company") return list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  if (sort === "ticker") return list.sort((a, b) => String(a.ticker || "").localeCompare(String(b.ticker || "")));
+  if (sort === "timeframe") return list.sort((a, b) => String(a.bestTimeframe || a.timeframe || "").localeCompare(String(b.bestTimeframe || b.timeframe || "")));
+  if (sort === "predictionDate") return list.sort((a, b) => new Date(b.scannedAt || predictionEngine.updatedAt || 0) - new Date(a.scannedAt || predictionEngine.updatedAt || 0));
   return list.sort((a, b) => (Number(a.rank) || 999) - (Number(b.rank) || 999));
+}
+
+function technicalScoreForPrediction(item) {
+  const model = predictionModelForView(item);
+  const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+  return Number(technical.technicalSignalScore) || 0;
+}
+
+function recommendationCategory(item, model) {
+  const label = String(model?.label || item.label || "").toLowerCase();
+  const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+  if (label.includes("avoid") || score < 45) return "Avoid";
+  if (label.includes("speculative")) return "Speculative";
+  if (label.includes("watch") || score < 62) return "Watch";
+  if (label.includes("strong") || score >= 78) return "Strong Buy";
+  if (label.includes("buy") || label.includes("possible") || score >= 62) return "Buy";
+  return "Watch";
+}
+
+function confidenceCategory(item) {
+  const tier = String(item.confidenceTier || "").toLowerCase();
+  if (tier.includes("very")) return "Very High";
+  if (tier.includes("high")) return "High";
+  if (tier.includes("medium")) return "Medium";
+  return "Low";
+}
+
+function badgeClassForRecommendation(value) {
+  const normalized = String(value || "").toLowerCase().replace(/\s+/g, "-");
+  return `recommendation-${normalized || "watch"}`;
+}
+
+function badgeClassForConfidence(value) {
+  const normalized = String(value || "").toLowerCase().replace(/\s+/g, "-");
+  return `confidence-${normalized || "low"}`;
+}
+
+function dataQualityBadgeClass(value) {
+  const normalized = String(value || "partial").toLowerCase();
+  return `market-${normalized}`;
+}
+
+function policyToneForPrediction(item) {
+  const matching = (policySignals.signals || []).filter((signal) => signal.ticker === item.ticker);
+  if (matching.some((signal) => signal.direction === "positive")) return "positive";
+  if (matching.some((signal) => signal.direction === "negative")) return "negative";
+  return "neutral";
+}
+
+function filteredPredictionRows(rows) {
+  const search = String(output.predictionSearch?.value || "").trim().toLowerCase();
+  const timeframe = output.filterTimeframe?.value || "";
+  const recommendation = output.filterRecommendation?.value || "";
+  const confidence = output.filterConfidence?.value || "";
+  const minScore = Number(output.filterScoreMin?.value) || 0;
+  const sector = String(output.filterSector?.value || "").trim().toLowerCase();
+  const industry = String(output.filterIndustry?.value || "").trim().toLowerCase();
+  const pattern = String(output.filterPattern?.value || "").trim().toLowerCase();
+  const congress = output.filterCongress?.value || "";
+  const policy = output.filterPolicy?.value || "";
+  const trend = output.filterTrend?.value || "";
+  const dataQuality = output.filterDataQuality?.value || "";
+
+  return rows.filter((item) => {
+    const model = predictionModelForView(item);
+    const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+    const recommendationLabel = recommendationCategory(item, model);
+    const confidenceLabel = confidenceCategory(item);
+    const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+    const chartPattern = String(item.chartPatternSignal?.primaryPattern || "").toLowerCase();
+    const hasCongress = Number(item.congressionalSignal?.count || item.congressionalSignal?.buys || item.congressionalSignal?.sells) > 0;
+    const policyTone = policyToneForPrediction(item);
+    const itemText = `${item.ticker || ""} ${item.name || ""}`.toLowerCase();
+    const itemTimeframe = String(item.bestTimeframe || item.timeframe || model?.name || "").toLowerCase();
+    const itemSector = String(item.assetGroup || item.sector || "").toLowerCase();
+    const itemIndustry = String(item.industry || item.assetGroup || "").toLowerCase();
+    const itemTrend = String(technical.trendDirection || item.unifiedDirection || "").toLowerCase();
+    if (search && !itemText.includes(search)) return false;
+    if (timeframe && !itemTimeframe.includes(timeframe.toLowerCase())) return false;
+    if (recommendation && recommendationLabel !== recommendation) return false;
+    if (confidence && confidenceLabel.toLowerCase() !== confidence) return false;
+    if (score < minScore) return false;
+    if (sector && !itemSector.includes(sector)) return false;
+    if (industry && !itemIndustry.includes(industry)) return false;
+    if (pattern && !chartPattern.includes(pattern)) return false;
+    if (congress === "yes" && !hasCongress) return false;
+    if (congress === "no" && hasCongress) return false;
+    if (policy && policyTone !== policy) return false;
+    if (trend && !itemTrend.includes(trend)) return false;
+    if (dataQuality && String(item.dataQualityStatus || "").toLowerCase() !== dataQuality) return false;
+    return true;
+  });
 }
 
 function renderComparisonRows(rows) {
@@ -860,6 +966,211 @@ function renderComparisonRows(rows) {
     `)
     .join("");
 }
+
+function currentPriceForPrediction(item) {
+  return Number(item.currentPrice || item.marketPrice || item.price || item.quote?.price || 0);
+}
+
+function oneLineAiSummary(item, model) {
+  const summary =
+    item.finalReasonSummary ||
+    item.whatChanged ||
+    item.plainEnglish ||
+    item.predictionReason ||
+    model?.reason ||
+    model?.reasons?.[0] ||
+    "Signal stack is being monitored for a cleaner opportunity.";
+  return String(summary).replace(/\s+/g, " ").trim().slice(0, 132);
+}
+
+function normalizedTimeframeForPrediction(item, model) {
+  return item.timeframe || item.bestTimeframe || model?.name || "Selected timeframe";
+}
+
+function renderCompactPredictionCard(item) {
+  const model = predictionModelForView(item);
+  const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+  const chartPattern = item.chartPatternSignal || {};
+  const recommendation = recommendationCategory(item, model);
+  const confidence = confidenceCategory(item);
+  const dataQuality = item.dataQualityStatus || item.dataQuality?.dataQualityStatus || "partial";
+  const score = scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore);
+  const technicalScore = technicalScoreForPrediction(item);
+  const pattern = chartPattern.primaryPattern || "None";
+  const trend = technical.trendDirection || item.unifiedDirection || "neutral";
+  const price = currentPriceForPrediction(item);
+  const timeframe = normalizedTimeframeForPrediction(item, model);
+  return `
+    <article class="prediction-screener-card">
+      <header class="prediction-card-header">
+        <div>
+          <strong>${escapeHtml(item.ticker || "N/A")}</strong>
+          <span>${escapeHtml(item.name || item.ticker || "Unknown company")}</span>
+        </div>
+        <em>${moneyOrCalculating(price)}</em>
+      </header>
+      <div class="prediction-score-block">
+        <span>Unified Score</span>
+        <strong>${score}</strong>
+        <small>/100</small>
+      </div>
+      <div class="prediction-badge-row">
+        <span class="pti-badge ${badgeClassForRecommendation(recommendation)}">${escapeHtml(recommendation)}</span>
+        <span class="pti-badge ${badgeClassForConfidence(confidence)}">${escapeHtml(confidence)}</span>
+        <span class="pti-badge ${dataQualityBadgeClass(dataQuality)}">${escapeHtml(dataQuality)}</span>
+      </div>
+      <div class="prediction-metadata-grid">
+        <div><span>Timeframe</span><strong>${escapeHtml(timeframe)}</strong></div>
+        <div><span>Pattern</span><strong>${escapeHtml(pattern)}</strong></div>
+        <div><span>Trend</span><strong>${escapeHtml(trend)}</strong></div>
+        <div><span>Technical</span><strong>${scoreValue(technicalScore)}/100</strong></div>
+      </div>
+      <p class="prediction-ai-summary">${escapeHtml(oneLineAiSummary(item, model))}</p>
+      <footer class="prediction-actions">
+        <button type="button" class="pti-button" data-view-brief="${escapeHtml(item.ticker)}">View Trade Brief</button>
+        <button type="button" class="pti-button ghost" data-add-watchlist="${escapeHtml(item.ticker)}">Add to Watchlist</button>
+        <button type="button" class="pti-button ghost" data-quick-compare="${escapeHtml(item.ticker)}">Quick Compare</button>
+      </footer>
+    </article>
+  `;
+}
+
+function renderCompactPredictionTable(rows) {
+  return `
+    <div class="prediction-table-wrap">
+      <table class="pti-table prediction-screener-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th>Price</th>
+            <th>Score</th>
+            <th>Recommendation</th>
+            <th>Confidence</th>
+            <th>Timeframe</th>
+            <th>Pattern</th>
+            <th>Trend</th>
+            <th>Technical</th>
+            <th>Quality</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((item) => {
+              const model = predictionModelForView(item);
+              const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+              const chartPattern = item.chartPatternSignal || {};
+              const recommendation = recommendationCategory(item, model);
+              const confidence = confidenceCategory(item);
+              const dataQuality = item.dataQualityStatus || item.dataQuality?.dataQualityStatus || "partial";
+              return `
+                <tr>
+                  <td><strong>${escapeHtml(item.ticker || "N/A")}</strong></td>
+                  <td>${escapeHtml(item.name || item.ticker || "Unknown")}</td>
+                  <td>${moneyOrCalculating(currentPriceForPrediction(item))}</td>
+                  <td><strong>${scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore)}</strong></td>
+                  <td><span class="pti-badge ${badgeClassForRecommendation(recommendation)}">${escapeHtml(recommendation)}</span></td>
+                  <td><span class="pti-badge ${badgeClassForConfidence(confidence)}">${escapeHtml(confidence)}</span></td>
+                  <td>${escapeHtml(normalizedTimeframeForPrediction(item, model))}</td>
+                  <td>${escapeHtml(chartPattern.primaryPattern || "None")}</td>
+                  <td>${escapeHtml(technical.trendDirection || item.unifiedDirection || "neutral")}</td>
+                  <td>${scoreValue(technicalScoreForPrediction(item))}/100</td>
+                  <td><span class="pti-badge ${dataQualityBadgeClass(dataQuality)}">${escapeHtml(dataQuality)}</span></td>
+                  <td>
+                    <div class="table-action-row">
+                      <button type="button" class="pti-button" data-view-brief="${escapeHtml(item.ticker)}">Brief</button>
+                      <button type="button" class="pti-button ghost" data-add-watchlist="${escapeHtml(item.ticker)}">Watch</button>
+                      <button type="button" class="pti-button ghost" data-quick-compare="${escapeHtml(item.ticker)}">Compare</button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderScreenerPredictions() {
+  if (!output.predictionGrid || !output.predictionSummary) return;
+  const predictions = predictionEngine.predictions || [];
+  const active = predictionEngine.sections?.[predictionView] || predictions.slice(0, 25);
+  const health = predictionEngine.predictionEngineHealth || {};
+  const top25Counts = health.top25Counts || {};
+  const qualityCounts = health.dataQualityStatusCounts || {};
+  const scanUniverse = predictionEngine.scanUniverse || {};
+  const oneDayAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.oneDayScore || item.dailyScore), 0) / predictions.length)
+    : 0;
+  const threeDayAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.threeDayScore || item.weeklyScore), 0) / predictions.length)
+    : 0;
+  const sevenDayAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.sevenDayScore || item.weeklyScore), 0) / predictions.length)
+    : 0;
+  const thirtyDayAvg = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.thirtyDayScore || item.monthlyScore), 0) / predictions.length)
+    : 0;
+  const avgScore = predictions.length
+    ? Math.round(predictions.reduce((sum, item) => sum + Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0), 0) / predictions.length)
+    : 0;
+
+  output.predictionSummary.innerHTML = `
+    <div><span>Last scan</span><strong>${predictionEngine.updatedAt ? new Date(predictionEngine.updatedAt).toLocaleString() : "Not scanned yet"}</strong></div>
+    <div><span>Tracked assets</span><strong>${predictions.length}</strong></div>
+    <div><span>1-day avg</span><strong>${oneDayAvg}/100</strong></div>
+    <div><span>3-day avg</span><strong>${threeDayAvg}/100</strong></div>
+    <div><span>7-day avg</span><strong>${sevenDayAvg}/100</strong></div>
+    <div><span>30-day avg</span><strong>${thirtyDayAvg}/100</strong></div>
+    <div><span>Overall avg</span><strong>${avgScore}/100</strong></div>
+    <div><span>Prediction engine</span><strong>${escapeHtml(health.predictionEngineStatus || health.status || "Not run")}</strong></div>
+    <div><span>Data quality</span><strong>${escapeHtml(health.dataQualityStatus || "Not run")}</strong></div>
+    <div><span>Scan universe</span><strong>${escapeHtml(scanUniverse.mode || "watchlist")} (${Number(scanUniverse.candidateCount) || predictions.length})</strong></div>
+    <div><span>Top 25 counts</span><strong>${Number(top25Counts.top25OneDay) || 0}/${Number(top25Counts.top25SevenDay) || 0}/${Number(top25Counts.top25OneMonth) || 0}/${Number(top25Counts.top25OneYear) || 0}</strong></div>
+    <div><span>Quality counts</span><strong>G ${Number(qualityCounts.good) || 0} / P ${Number(qualityCounts.partial) || 0} / S ${Number(qualityCounts.stale) || 0} / F ${Number(qualityCounts.failed) || 0}</strong></div>
+  `;
+
+  output.predictionGrid.classList.toggle("is-table-view", predictionLayout === "table");
+
+  if (!active.length) {
+    output.predictionGrid.innerHTML = `
+      <article class="stock-card">
+        <span>No predictions yet</span>
+        <strong>Run a prediction scan</strong>
+        <p>The backend will load the active universe, refresh signals, score each ticker, save prediction records, and refresh this dashboard.</p>
+        <button type="button" class="inline-scan-button" data-run-prediction-scan>Run prediction scan</button>
+      </article>
+    `;
+    return;
+  }
+
+  if (predictionView === "comparisonView") {
+    renderComparisonRows(active);
+    return;
+  }
+
+  const rows = sortedPredictionRows(filteredPredictionRows(active));
+  if (!rows.length) {
+    output.predictionGrid.innerHTML = `
+      <article class="stock-card">
+        <span>No matches</span>
+        <strong>Adjust the screener filters</strong>
+        <p>No prediction in this list matches the current filter combination.</p>
+      </article>
+    `;
+    return;
+  }
+
+  output.predictionGrid.innerHTML =
+    predictionLayout === "table"
+      ? renderCompactPredictionTable(rows)
+      : rows.map(renderCompactPredictionCard).join("");
+}
+
+renderPredictions = renderScreenerPredictions;
 
 function renderPredictions() {
   if (!output.predictionGrid || !output.predictionSummary) return;
@@ -2130,11 +2441,65 @@ document.querySelectorAll("[data-prediction-view]").forEach((button) => {
   });
 });
 output.predictionSort?.addEventListener("change", renderPredictions);
+[
+  output.predictionSearch,
+  output.filterTimeframe,
+  output.filterRecommendation,
+  output.filterConfidence,
+  output.filterScoreMin,
+  output.filterSector,
+  output.filterIndustry,
+  output.filterPattern,
+  output.filterCongress,
+  output.filterPolicy,
+  output.filterTrend,
+  output.filterDataQuality,
+]
+  .filter(Boolean)
+  .forEach((control) => {
+    control.addEventListener("input", renderPredictions);
+    control.addEventListener("change", renderPredictions);
+  });
+document.querySelectorAll("[data-prediction-layout]").forEach((button) => {
+  button.addEventListener("click", () => {
+    predictionLayout = button.dataset.predictionLayout || "cards";
+    document.querySelectorAll("[data-prediction-layout]").forEach((toggle) => toggle.classList.toggle("is-active", toggle === button));
+    renderPredictions();
+  });
+});
 output.runPredictionScan?.addEventListener("click", runPredictionScan);
 output.predictionGrid?.addEventListener("click", (event) => {
   if (event.target.closest("[data-run-prediction-scan]")) runPredictionScan();
   const briefButton = event.target.closest("[data-view-brief]");
   if (briefButton) openTradeBrief(briefButton.dataset.viewBrief);
+  const watchButton = event.target.closest("[data-add-watchlist]");
+  if (watchButton) {
+    const ticker = String(watchButton.dataset.addWatchlist || "").toUpperCase();
+    if (!Array.isArray(settings.stockIdeas)) settings.stockIdeas = [];
+    if (ticker && !settings.stockIdeas.some((stock) => String(stock.ticker || "").toUpperCase() === ticker)) {
+      const prediction = findPredictionByTicker(ticker);
+      settings.stockIdeas.unshift({
+        ticker,
+        name: prediction?.name || ticker,
+        risk: "AI watchlist",
+        horizon: prediction?.bestTimeframe || prediction?.timeframe || "Research",
+        priceNote: prediction?.finalReasonSummary || prediction?.plainEnglish || "Added from Predictions screener.",
+      });
+      renderDashboard();
+    }
+    if (output.predictionScanMessage) output.predictionScanMessage.textContent = ticker ? `${ticker} added to the watchlist view on this device.` : "Watchlist action ready.";
+  }
+  const compareButton = event.target.closest("[data-quick-compare]");
+  if (compareButton) {
+    const ticker = String(compareButton.dataset.quickCompare || "").toUpperCase();
+    const rows = predictionEngine.sections?.comparisonView || [];
+    const match = rows.find((item) => String(item.ticker || "").toUpperCase() === ticker);
+    if (output.predictionScanMessage) {
+      output.predictionScanMessage.textContent = match
+        ? `${ticker} appears across ${match.lists.length} ranked list(s). Open the Comparison tab for the full view.`
+        : `${ticker} currently appears on this selected list only.`;
+    }
+  }
 });
 document.addEventListener("click", (event) => {
   const navButton = event.target.closest("[data-page-target]");

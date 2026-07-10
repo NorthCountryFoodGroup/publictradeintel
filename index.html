@@ -194,21 +194,119 @@
         </div>
 
         <div class="member-summary" id="predictionSummary"></div>
-        <div class="prediction-sort-bar">
+        <div class="prediction-toolbar">
           <button type="button" id="runPredictionScan">Run prediction scan</button>
+          <div class="view-toggle" role="group" aria-label="Prediction view">
+            <button type="button" class="is-active" data-prediction-layout="cards">Card View</button>
+            <button type="button" data-prediction-layout="table">Compact Table View</button>
+          </div>
           <label>
             <span>Sort current list by</span>
             <select id="predictionSort">
-              <option value="rank">Rank</option>
-              <option value="upside">Highest upside</option>
-              <option value="confidence">Highest confidence</option>
-              <option value="risk">Lowest risk</option>
-              <option value="riskReward">Best risk/reward</option>
-              <option value="improved">Most improved</option>
-              <option value="smallAccount">Best for small account</option>
+              <option value="unifiedScore">Unified Score</option>
+              <option value="technicalScore">Technical Score</option>
+              <option value="confidence">Confidence</option>
+              <option value="company">Company Name</option>
+              <option value="ticker">Ticker</option>
+              <option value="timeframe">Timeframe</option>
+              <option value="predictionDate">Prediction Date</option>
             </select>
           </label>
         </div>
+        <details class="prediction-filter-panel">
+          <summary>Filters</summary>
+          <div class="prediction-filter-grid">
+            <label>
+              <span>Search ticker/company</span>
+              <input id="predictionSearch" placeholder="NVDA, Microsoft..." autocomplete="off" />
+            </label>
+            <label>
+              <span>Timeframe</span>
+              <select id="filterTimeframe">
+                <option value="">All</option>
+                <option value="1-Day">1-Day</option>
+                <option value="3-Day">3-Day</option>
+                <option value="7-Day">7-Day</option>
+                <option value="1-Month">1-Month</option>
+                <option value="1-Year">1-Year</option>
+              </select>
+            </label>
+            <label>
+              <span>Recommendation</span>
+              <select id="filterRecommendation">
+                <option value="">All</option>
+                <option value="Strong Buy">Strong Buy</option>
+                <option value="Buy">Buy</option>
+                <option value="Watch">Watch</option>
+                <option value="Speculative">Speculative</option>
+                <option value="Avoid">Avoid</option>
+              </select>
+            </label>
+            <label>
+              <span>Confidence</span>
+              <select id="filterConfidence">
+                <option value="">All</option>
+                <option value="very high">Very High</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+            <label>
+              <span>Minimum score</span>
+              <input type="number" min="0" max="100" id="filterScoreMin" placeholder="0" />
+            </label>
+            <label>
+              <span>Sector</span>
+              <input id="filterSector" placeholder="Technology" />
+            </label>
+            <label>
+              <span>Industry</span>
+              <input id="filterIndustry" placeholder="Semiconductors" />
+            </label>
+            <label>
+              <span>Chart Pattern</span>
+              <input id="filterPattern" placeholder="Bull flag" />
+            </label>
+            <label>
+              <span>Congress Activity</span>
+              <select id="filterCongress">
+                <option value="">All</option>
+                <option value="yes">Has activity</option>
+                <option value="no">No activity</option>
+              </select>
+            </label>
+            <label>
+              <span>Policy Activity</span>
+              <select id="filterPolicy">
+                <option value="">All</option>
+                <option value="positive">Positive</option>
+                <option value="negative">Negative</option>
+                <option value="neutral">Neutral/none</option>
+              </select>
+            </label>
+            <label>
+              <span>Market Trend</span>
+              <select id="filterTrend">
+                <option value="">All</option>
+                <option value="bullish">Bullish</option>
+                <option value="bearish">Bearish</option>
+                <option value="neutral">Neutral</option>
+                <option value="mixed">Mixed</option>
+              </select>
+            </label>
+            <label>
+              <span>Data Quality</span>
+              <select id="filterDataQuality">
+                <option value="">All</option>
+                <option value="good">Good</option>
+                <option value="partial">Partial</option>
+                <option value="stale">Stale</option>
+                <option value="failed">Failed</option>
+              </select>
+            </label>
+          </div>
+        </details>
         <p class="scan-message" id="predictionScanMessage"></p>
         <div class="prediction-tabs">
           <button type="button" class="is-active" data-prediction-view="top25OneDay">Top 25 1-day</button>
