@@ -147,9 +147,114 @@
       <section class="portfolio-section portfolio-hud dashboard-page" data-page="watchlist">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Portfolio HUD</p>
-            <h2>Your original buy vs current value</h2>
+            <p class="eyebrow">Watchlists 2.0</p>
+            <h2>What changed and what needs attention?</h2>
           </div>
+        </div>
+
+        <div class="watchlist-workspace">
+          <section class="dashboard-card watchlist-section">
+            <div class="card-heading">
+              <span>Watchlist Overview</span>
+              <strong id="watchlistActiveName">All watchlists</strong>
+            </div>
+            <div class="watchlist-overview-grid" id="watchlistOverviewGrid"></div>
+          </section>
+
+          <section class="dashboard-card watchlist-section">
+            <div class="card-heading">
+              <span>Custom Watchlists</span>
+              <strong>Create, organize, monitor</strong>
+            </div>
+            <form class="watchlist-create-form" id="watchlistCreateForm">
+              <label>
+                <span>New watchlist name</span>
+                <input id="watchlistNameInput" placeholder="Daily Trades" autocomplete="off" />
+              </label>
+              <button type="submit">Create watchlist</button>
+            </form>
+            <div class="watchlist-card-grid" id="watchlistCardsGrid"></div>
+          </section>
+
+          <section class="dashboard-card watchlist-section">
+            <div class="card-heading">
+              <span>Watchlist Detail</span>
+              <strong id="watchlistDetailTitle">Select a watchlist</strong>
+            </div>
+            <div class="watchlist-toolbar">
+              <form class="watchlist-add-form" id="watchlistAddTickerForm">
+                <label>
+                  <span>Add ticker</span>
+                  <input id="watchlistTickerInput" placeholder="NVDA" autocomplete="off" />
+                </label>
+                <button type="submit">Add ticker</button>
+              </form>
+              <label>
+                <span>Filter</span>
+                <select id="watchlistFilter">
+                  <option value="">All stocks</option>
+                  <option value="Strong Buy">Strong Buy</option>
+                  <option value="Buy">Buy</option>
+                  <option value="Watch">Watch</option>
+                  <option value="Speculative">Speculative</option>
+                  <option value="Avoid">Avoid</option>
+                  <option value="changed">Changed since last scan</option>
+                  <option value="alert">Active alerts</option>
+                  <option value="dataIssue">Data-quality issues</option>
+                </select>
+              </label>
+              <label>
+                <span>Sort</span>
+                <select id="watchlistSort">
+                  <option value="score">Unified score</option>
+                  <option value="scoreChange">Score change</option>
+                  <option value="priceChange">Price change</option>
+                  <option value="confidence">Confidence</option>
+                  <option value="ticker">Ticker</option>
+                  <option value="company">Company</option>
+                  <option value="updated">Last updated</option>
+                </select>
+              </label>
+            </div>
+            <div class="watchlist-detail-grid" id="watchlistDetailGrid"></div>
+          </section>
+
+          <section class="dashboard-card watchlist-section">
+            <div class="card-heading">
+              <span>In-App Alerts</span>
+              <strong>Foundation</strong>
+            </div>
+            <form class="watchlist-alert-form" id="watchlistAlertForm">
+              <label>
+                <span>Ticker</span>
+                <input id="alertTickerInput" placeholder="NVDA" autocomplete="off" />
+              </label>
+              <label>
+                <span>Alert type</span>
+                <select id="alertTypeInput">
+                  <option value="scoreAbove">Unified score above threshold</option>
+                  <option value="recommendationChange">Recommendation change</option>
+                  <option value="confidenceChange">Confidence change</option>
+                  <option value="priceTarget">Price target reached</option>
+                  <option value="stopLevel">Stop level reached</option>
+                  <option value="trendReversal">Trend reversal</option>
+                  <option value="congressActivity">New congressional activity</option>
+                  <option value="policyCatalyst">New policy catalyst</option>
+                </select>
+              </label>
+              <label>
+                <span>Threshold / note</span>
+                <input id="alertThresholdInput" placeholder="75 or target note" autocomplete="off" />
+              </label>
+              <button type="submit">Create alert</button>
+            </form>
+            <div class="watchlist-alert-list" id="watchlistAlertsList"></div>
+          </section>
+
+          <details class="prediction-filter-panel">
+            <summary>Portfolio HUD</summary>
+            <p class="muted-copy">Track your actual buys, original cost, current value, and daily profit/loss.</p>
+          </details>
         </div>
 
         <form class="trade-form" id="tradeForm">

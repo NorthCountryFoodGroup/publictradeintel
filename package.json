@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "smoke:predictions": "node scripts/smoke-test-prediction-scan.js",
+    "smoke:watchlists": "node scripts/smoke-test-watchlists.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }

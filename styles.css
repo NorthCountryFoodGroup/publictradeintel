@@ -1832,6 +1832,200 @@ li {
   width: auto;
 }
 
+.watchlist-workspace,
+.watchlist-section {
+  display: grid;
+  gap: var(--space-4, 16px);
+}
+
+.watchlist-overview-grid,
+.watchlist-card-grid,
+.watchlist-detail-grid,
+.watchlist-alert-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3, 12px);
+}
+
+.watchlist-create-form,
+.watchlist-add-form,
+.watchlist-alert-form,
+.watchlist-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3, 12px);
+}
+
+.watchlist-create-form label,
+.watchlist-add-form label,
+.watchlist-alert-form label,
+.watchlist-toolbar label {
+  min-width: min(100%, 190px);
+  flex: 1;
+}
+
+.watchlist-create-form button,
+.watchlist-add-form button,
+.watchlist-alert-form button,
+.watchlist-toolbar button {
+  width: auto;
+}
+
+.watchlist-card,
+.watchlist-stock-card,
+.watchlist-alert-card,
+.watchlist-empty {
+  display: grid;
+  gap: var(--space-3, 12px);
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: rgba(255, 255, 255, 0.04);
+  padding: var(--space-3, 12px);
+}
+
+.watchlist-card.is-active {
+  border-color: rgba(69, 209, 154, 0.55);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.watchlist-card header,
+.watchlist-stock-card header,
+.watchlist-stock-card footer,
+.watchlist-alert-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.watchlist-card header input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-h3);
+  font-weight: 950;
+  padding: 4px 0;
+}
+
+.watchlist-health-pill {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  border-radius: var(--radius-md, 8px);
+  background: rgba(157, 180, 170, 0.12);
+  padding: var(--space-3, 12px);
+}
+
+.watchlist-health-pill strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-h2);
+  font-weight: 950;
+}
+
+.watchlist-health-pill.bullish strong {
+  color: var(--color-success);
+}
+
+.watchlist-health-pill.bearish strong {
+  color: var(--color-danger);
+}
+
+.watchlist-health-pill.mixed strong {
+  color: var(--color-warning);
+}
+
+.watchlist-card-stats,
+.watchlist-stock-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2, 8px);
+}
+
+.watchlist-card-stats span,
+.watchlist-stock-metrics div {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  background: rgba(255, 255, 255, 0.04);
+  padding: var(--space-2, 8px);
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: 800;
+}
+
+.watchlist-stock-card header strong {
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 950;
+}
+
+.watchlist-stock-card header span,
+.watchlist-alert-card span {
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: 800;
+}
+
+.watchlist-stock-metrics span {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.watchlist-stock-metrics strong {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 950;
+}
+
+.watchlist-stock-metrics small,
+.watchlist-stock-card small,
+.watchlist-card p,
+.watchlist-empty p,
+.watchlist-alert-card small {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.watchlist-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+}
+
+.watchlist-stock-card footer button,
+.watchlist-alert-card button {
+  width: auto;
+  padding: 9px 11px;
+  font-size: var(--font-size-caption);
+}
+
+.watchlist-move-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: auto;
+}
+
+.watchlist-move-control span {
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.watchlist-move-control select {
+  min-width: 130px;
+  padding: 9px 10px;
+}
+
 @media (min-width: 1380px) {
   .prediction-grid {
     grid-template-columns: repeat(4, minmax(260px, 1fr));
@@ -1847,7 +2041,11 @@ li {
   .market-summary-grid,
   .sector-rotation-grid,
   .sector-heatmap-grid,
-  .economic-calendar-grid {
+  .economic-calendar-grid,
+  .watchlist-overview-grid,
+  .watchlist-card-grid,
+  .watchlist-detail-grid,
+  .watchlist-alert-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1886,6 +2084,12 @@ li {
   .sector-heatmap-grid,
   .economic-calendar-grid,
   .sector-pick-list,
+  .watchlist-overview-grid,
+  .watchlist-card-grid,
+  .watchlist-detail-grid,
+  .watchlist-alert-list,
+  .watchlist-card-stats,
+  .watchlist-stock-metrics,
   .prediction-audit-card {
     grid-template-columns: 1fr;
   }

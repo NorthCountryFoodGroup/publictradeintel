@@ -35,6 +35,22 @@ const output = {
   portfolioMessage: document.querySelector("#portfolioMessage"),
   portfolioSummary: document.querySelector("#portfolioSummary"),
   portfolioList: document.querySelector("#portfolioList"),
+  watchlistActiveName: document.querySelector("#watchlistActiveName"),
+  watchlistOverviewGrid: document.querySelector("#watchlistOverviewGrid"),
+  watchlistCreateForm: document.querySelector("#watchlistCreateForm"),
+  watchlistNameInput: document.querySelector("#watchlistNameInput"),
+  watchlistCardsGrid: document.querySelector("#watchlistCardsGrid"),
+  watchlistDetailTitle: document.querySelector("#watchlistDetailTitle"),
+  watchlistAddTickerForm: document.querySelector("#watchlistAddTickerForm"),
+  watchlistTickerInput: document.querySelector("#watchlistTickerInput"),
+  watchlistFilter: document.querySelector("#watchlistFilter"),
+  watchlistSort: document.querySelector("#watchlistSort"),
+  watchlistDetailGrid: document.querySelector("#watchlistDetailGrid"),
+  watchlistAlertForm: document.querySelector("#watchlistAlertForm"),
+  alertTickerInput: document.querySelector("#alertTickerInput"),
+  alertTypeInput: document.querySelector("#alertTypeInput"),
+  alertThresholdInput: document.querySelector("#alertThresholdInput"),
+  watchlistAlertsList: document.querySelector("#watchlistAlertsList"),
   predictionSummary: document.querySelector("#predictionSummary"),
   predictionGrid: document.querySelector("#predictionGrid"),
   predictionSort: document.querySelector("#predictionSort"),
@@ -204,6 +220,9 @@ let predictionLayout = "cards";
 let portfolio = [];
 let selectedBriefTicker = "";
 let selectedMarketSector = "All sectors";
+let watchlists = [];
+let watchlistAlerts = [];
+let selectedWatchlistId = "core-holdings";
 
 const pageLabels = {
   dashboard: "Dashboard",
@@ -268,6 +287,7 @@ function closestPlan(amount) {
 }
 
 function calculate() {
+  if (!watchlists.length) loadWatchlists();
   const totals = portfolioTotals();
   const activeInvestAmount = Math.max(50, Math.round(totals.invested || 0));
   const recommendation = {
@@ -291,6 +311,7 @@ function calculate() {
   renderCongressAlerts();
   renderPolicySignals();
   renderPortfolio();
+  renderWatchlists();
   renderMemberOptions();
   renderCongressTrades();
   renderDashboard();
@@ -377,6 +398,239 @@ function mostActivePoliticians(trades) {
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "No activity";
 }
 
+function defaultWatchlists() {
+  const starterTickers = (settings.stockIdeas || []).slice(0, 8).map((stock) => stock.ticker).filter(Boolean);
+  return [
+    { id: "core-holdings", name: "Core Holdings", tickers: starterTickers },
+    { id: "daily-trades", name: "Daily Trades", tickers: [] },
+    { id: "swing-trades", name: "Swing Trades", tickers: [] },
+    { id: "long-term", name: "Long-Term", tickers: [] },
+    { id: "ai-technology", name: "AI & Technology", tickers: ["NVDA", "MSFT", "AMD"].filter(Boolean) },
+  ];
+}
+
+function normalizeTicker(value) {
+  return String(value || "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "").slice(0, 12);
+}
+
+function loadWatchlists() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("publicTradeIntelWatchlists") || "[]");
+    watchlists = Array.isArray(saved) && saved.length ? saved : defaultWatchlists();
+  } catch {
+    watchlists = defaultWatchlists();
+  }
+  if (!watchlists.some((list) => list.id === selectedWatchlistId)) selectedWatchlistId = watchlists[0]?.id || "core-holdings";
+  try {
+    const savedAlerts = JSON.parse(localStorage.getItem("publicTradeIntelWatchlistAlerts") || "[]");
+    watchlistAlerts = Array.isArray(savedAlerts) ? savedAlerts : [];
+  } catch {
+    watchlistAlerts = [];
+  }
+}
+
+function saveWatchlists() {
+  localStorage.setItem("publicTradeIntelWatchlists", JSON.stringify(watchlists));
+  localStorage.setItem("publicTradeIntelWatchlistAlerts", JSON.stringify(watchlistAlerts));
+}
+
+function predictionForTicker(ticker) {
+  const normalized = normalizeTicker(ticker);
+  return (predictionEngine.predictions || []).find((item) => normalizeTicker(item.ticker) === normalized) || null;
+}
+
+function watchlistTickerRecord(ticker) {
+  const prediction = predictionForTicker(ticker);
+  const model = prediction ? predictionModelForView(prediction) : null;
+  const technical = model?.technicalAnalysis || prediction?.technicalAnalysis?.oneDay || {};
+  const recommendation = prediction ? recommendationCategory(prediction, model) : "Watch";
+  const score = prediction ? scoreValue(prediction.unifiedPredictionScore || prediction.aiOpportunityScore) : 0;
+  const previousScore = Number(prediction?.previousUnifiedPredictionScore || prediction?.priorUnifiedPredictionScore || score);
+  const scoreChange = Number(prediction?.scoreChange ?? prediction?.rankMovement?.change ?? (score - previousScore)) || 0;
+  const confidence = prediction ? confidenceCategory(prediction) : "Low";
+  const trend = technical.trendDirection || prediction?.unifiedDirection || "neutral";
+  const pattern = prediction?.chartPatternSignal?.primaryPattern || "None";
+  const dataQuality = prediction?.dataQualityStatus || "partial";
+  const price = currentPriceForPrediction(prediction || {});
+  const priceChange = Number(prediction?.priceChangePercent || prediction?.changePercent || 0);
+  const activeAlerts = watchlistAlerts.filter((alert) => normalizeTicker(alert.ticker) === normalizeTicker(ticker) && alert.active !== false);
+  const badges = [];
+  if (!prediction) badges.push("Needs Attention");
+  if (scoreChange > 2) badges.push("Improving");
+  if (scoreChange < -2) badges.push("Weakening");
+  if (Number(prediction?.recommendationChanged)) badges.push("Changed");
+  if (Number(prediction?.newSetupDetected) || prediction?.setupSignals?.confirmationStatus === "confirmed") badges.push("New");
+  if (["partial", "stale", "failed"].includes(dataQuality)) badges.push("Needs Attention");
+  if (activeAlerts.length) badges.push("Alert");
+  return {
+    ticker: normalizeTicker(ticker),
+    name: prediction?.name || ticker,
+    prediction,
+    price,
+    priceChange,
+    score,
+    scoreChange,
+    recommendation,
+    confidence,
+    trend,
+    pattern,
+    dataQuality,
+    updatedAt: prediction?.scannedAt || predictionEngine.updatedAt || null,
+    activeAlerts,
+    badges,
+  };
+}
+
+function watchlistHealth(list) {
+  const rows = (list.tickers || []).map(watchlistTickerRecord);
+  const averageUnifiedScore = rows.length ? Math.round(rows.reduce((sum, row) => sum + row.score, 0) / rows.length) : 0;
+  const highConfidenceCount = rows.filter((row) => ["High", "Very High"].includes(row.confidence)).length;
+  const weakeningCount = rows.filter((row) => row.scoreChange < -2 || row.badges.includes("Weakening")).length;
+  const dataIssueCount = rows.filter((row) => ["partial", "stale", "failed"].includes(row.dataQuality)).length;
+  const bullish = rows.filter((row) => row.trend === "bullish").length;
+  const bearish = rows.filter((row) => row.trend === "bearish").length;
+  const direction = bullish > bearish ? "bullish" : bearish > bullish ? "bearish" : rows.length ? "mixed" : "neutral";
+  const healthScore = Math.max(0, Math.min(100, Math.round(averageUnifiedScore + highConfidenceCount * 3 - weakeningCount * 6 - dataIssueCount * 4)));
+  const reasonSummary = rows.length
+    ? `${list.name} averages ${averageUnifiedScore}/100 with ${highConfidenceCount} high-confidence pick(s), ${weakeningCount} weakening name(s), and ${dataIssueCount} data issue(s).`
+    : `${list.name} has no stocks yet. Add tickers to start monitoring.`;
+  return { healthScore, direction, averageUnifiedScore, highConfidenceCount, weakeningCount, dataIssueCount, reasonSummary, rows };
+}
+
+function renderWatchlists() {
+  if (!output.watchlistOverviewGrid) return;
+  if (!watchlists.length) watchlists = defaultWatchlists();
+  const selected = watchlists.find((list) => list.id === selectedWatchlistId) || watchlists[0];
+  selectedWatchlistId = selected?.id || selectedWatchlistId;
+  const allRows = watchlists.flatMap((list) => (list.tickers || []).map(watchlistTickerRecord));
+  const uniqueTickers = new Set(allRows.map((row) => row.ticker));
+  const highConfidence = allRows.filter((row) => ["High", "Very High"].includes(row.confidence)).length;
+  const bullishChanges = allRows.filter((row) => row.scoreChange > 2 || row.badges.includes("Improving")).length;
+  const bearishChanges = allRows.filter((row) => row.scoreChange < -2 || row.badges.includes("Weakening")).length;
+  const dataIssues = allRows.filter((row) => ["partial", "stale", "failed"].includes(row.dataQuality)).length;
+  const activeAlerts = watchlistAlerts.filter((alert) => alert.active !== false);
+  if (output.watchlistActiveName) output.watchlistActiveName.textContent = selected?.name || "All watchlists";
+  output.watchlistOverviewGrid.innerHTML = [
+    marketMetricCard("Number of watchlists", String(watchlists.length), "Custom monitoring groups", "neutral"),
+    marketMetricCard("Total tracked stocks", String(uniqueTickers.size), "Unique tickers monitored", "neutral"),
+    marketMetricCard("High-confidence opportunities", String(highConfidence), "High or very high confidence", "success"),
+    marketMetricCard("New bullish changes", String(bullishChanges), "Improving scores or setups", "success"),
+    marketMetricCard("New bearish changes", String(bearishChanges), "Weakening scores or trend", "warning"),
+    marketMetricCard("Data-quality issues", String(dataIssues), "Partial, stale, or failed data", dataIssues ? "warning" : "success"),
+    marketMetricCard("Recent alerts", String(activeAlerts.length), "In-app alert rules active", "neutral"),
+  ].join("");
+
+  output.watchlistCardsGrid.innerHTML = watchlists.length
+    ? watchlists
+        .map((list) => {
+          const health = watchlistHealth(list);
+          const highest = [...health.rows].sort((a, b) => b.score - a.score)[0];
+          const largestUp = [...health.rows].sort((a, b) => b.scoreChange - a.scoreChange)[0];
+          const largestDown = [...health.rows].sort((a, b) => a.scoreChange - b.scoreChange)[0];
+          const alerts = health.rows.reduce((sum, row) => sum + row.activeAlerts.length, 0);
+          return `
+            <article class="watchlist-card ${selectedWatchlistId === list.id ? "is-active" : ""}">
+              <header>
+                <input value="${escapeHtml(list.name)}" data-watchlist-rename="${escapeHtml(list.id)}" aria-label="Rename ${escapeHtml(list.name)}" />
+                <button type="button" class="pti-button ghost" data-watchlist-delete="${escapeHtml(list.id)}">Delete</button>
+              </header>
+              <div class="watchlist-health-pill ${health.direction}">
+                <strong>${health.healthScore}/100</strong>
+                <span>${escapeHtml(health.direction)}</span>
+              </div>
+              <div class="watchlist-card-stats">
+                <span>${health.rows.length} stocks</span>
+                <span>Avg ${health.averageUnifiedScore}/100</span>
+                <span>Top ${escapeHtml(highest?.ticker || "n/a")}</span>
+                <span>Up ${escapeHtml(largestUp?.ticker || "n/a")} ${largestUp ? percent(largestUp.scoreChange) : ""}</span>
+                <span>Down ${escapeHtml(largestDown?.ticker || "n/a")} ${largestDown ? percent(largestDown.scoreChange) : ""}</span>
+                <span>${alerts} alert(s)</span>
+              </div>
+              <p>${escapeHtml(health.reasonSummary)}</p>
+              <button type="button" data-watchlist-view="${escapeHtml(list.id)}">View Watchlist</button>
+            </article>
+          `;
+        })
+        .join("")
+    : `<article class="watchlist-empty"><strong>No watchlists yet</strong><p>Create a watchlist to start monitoring tickers.</p></article>`;
+
+  renderWatchlistDetail(selected);
+  renderWatchlistAlerts();
+}
+
+function renderWatchlistDetail(list) {
+  if (!output.watchlistDetailGrid || !list) return;
+  if (output.watchlistDetailTitle) output.watchlistDetailTitle.textContent = list.name;
+  let rows = (list.tickers || []).map(watchlistTickerRecord);
+  const filter = output.watchlistFilter?.value || "";
+  if (filter === "changed") rows = rows.filter((row) => row.badges.some((badge) => ["New", "Improving", "Weakening", "Changed"].includes(badge)));
+  else if (filter === "alert") rows = rows.filter((row) => row.activeAlerts.length);
+  else if (filter === "dataIssue") rows = rows.filter((row) => ["partial", "stale", "failed"].includes(row.dataQuality));
+  else if (filter) rows = rows.filter((row) => row.recommendation === filter || row.confidence === filter || row.trend === filter);
+  const sort = output.watchlistSort?.value || "score";
+  rows.sort((a, b) => {
+    if (sort === "scoreChange") return b.scoreChange - a.scoreChange;
+    if (sort === "priceChange") return b.priceChange - a.priceChange;
+    if (sort === "confidence") return ["Low", "Medium", "High", "Very High"].indexOf(b.confidence) - ["Low", "Medium", "High", "Very High"].indexOf(a.confidence);
+    if (sort === "ticker") return a.ticker.localeCompare(b.ticker);
+    if (sort === "company") return a.name.localeCompare(b.name);
+    if (sort === "updated") return new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+    return b.score - a.score;
+  });
+  output.watchlistDetailGrid.innerHTML = rows.length
+    ? rows
+        .map(
+          (row) => `
+            <article class="watchlist-stock-card">
+              <header>
+                <div><strong>${escapeHtml(row.ticker)}</strong><span>${escapeHtml(row.name)}</span></div>
+                <span class="pti-badge ${badgeClassForRecommendation(row.recommendation)}">${escapeHtml(row.recommendation)}</span>
+              </header>
+              <div class="watchlist-stock-metrics">
+                <div><span>Price</span><strong>${moneyOrCalculating(row.price)}</strong><small>${percent(row.priceChange)}</small></div>
+                <div><span>Score</span><strong>${row.score}/100</strong><small>${row.scoreChange ? percent(row.scoreChange) : "No change"}</small></div>
+                <div><span>Confidence</span><strong>${escapeHtml(row.confidence)}</strong></div>
+                <div><span>Trend</span><strong>${escapeHtml(row.trend)}</strong></div>
+                <div><span>Pattern</span><strong>${escapeHtml(row.pattern)}</strong></div>
+                <div><span>Data</span><strong>${escapeHtml(row.dataQuality)}</strong></div>
+              </div>
+              <div class="watchlist-badge-row">
+                ${row.badges.length ? row.badges.map((badge) => `<span class="pti-badge ${badge === "Weakening" || badge === "Needs Attention" ? "warning" : "info"}">${escapeHtml(badge)}</span>`).join("") : `<span class="pti-badge neutral">No recent changes</span>`}
+              </div>
+              <footer>
+                <button type="button" data-view-brief="${escapeHtml(row.ticker)}">View Trade Brief</button>
+                <button type="button" data-watchlist-alert-ticker="${escapeHtml(row.ticker)}">Create Alert</button>
+                <button type="button" data-quick-compare="${escapeHtml(row.ticker)}">Compare</button>
+                <label class="watchlist-move-control">
+                  <span>Move</span>
+                  <select data-watchlist-move="${escapeHtml(row.ticker)}">
+                    <option value="">Choose list</option>
+                    ${watchlists
+                      .filter((targetList) => targetList.id !== selectedWatchlistId)
+                      .map((targetList) => `<option value="${escapeHtml(targetList.id)}">${escapeHtml(targetList.name)}</option>`)
+                      .join("")}
+                  </select>
+                </label>
+                <button type="button" class="pti-button ghost" data-watchlist-remove="${escapeHtml(row.ticker)}">Remove</button>
+              </footer>
+              <small>Last updated: ${row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "Tracking"}</small>
+            </article>
+          `
+        )
+        .join("")
+    : `<article class="watchlist-empty"><strong>No stocks in this watchlist</strong><p>Add a ticker to start monitoring changes and alerts.</p><button type="button" data-focus-watchlist-add>Add ticker</button></article>`;
+}
+
+function renderWatchlistAlerts() {
+  if (!output.watchlistAlertsList) return;
+  const activeAlerts = watchlistAlerts.filter((alert) => alert.active !== false);
+  output.watchlistAlertsList.innerHTML = activeAlerts.length
+    ? activeAlerts
+        .map((alert) => `<article class="watchlist-alert-card"><strong>${escapeHtml(alert.ticker)}</strong><span>${escapeHtml(alert.type)}</span><small>${escapeHtml(alert.threshold || "No threshold")} | ${new Date(alert.createdAt).toLocaleDateString()}</small><button type="button" class="pti-button ghost" data-alert-delete="${escapeHtml(alert.id)}">Remove</button></article>`)
+        .join("")
+    : `<article class="watchlist-empty"><strong>No active alerts</strong><p>Create an in-app alert rule for score, recommendation, confidence, trend, congress, or policy changes.</p></article>`;
+}
+
 function renderDashboard() {
   if (!output.marketOverviewGrid) return;
   const health = predictionEngine.predictionEngineHealth || {};
@@ -398,8 +652,10 @@ function renderDashboard() {
   const signals = policySignals.signals || [];
   const positiveSignals = signals.filter((signal) => signal.direction === "positive");
   const negativeSignals = signals.filter((signal) => signal.direction === "negative");
-  const highConfidenceAlerts = predictions.filter((item) => ["high", "very high"].includes(item.confidenceTier)).length;
-  const movers = predictions.filter((item) => Number(item.scoreChange || 0) !== 0 || item.rankMovement).length;
+  const watchlistRows = watchlists.flatMap((list) => (list.tickers || []).map(watchlistTickerRecord));
+  const highConfidenceAlerts = watchlistRows.filter((item) => ["High", "Very High"].includes(item.confidence)).length || predictions.filter((item) => ["high", "very high"].includes(item.confidenceTier)).length;
+  const movers = watchlistRows.filter((item) => item.badges.some((badge) => ["New", "Improving", "Weakening", "Changed"].includes(badge))).length || predictions.filter((item) => Number(item.scoreChange || 0) !== 0 || item.rankMovement).length;
+  const needsAttention = watchlistRows.filter((item) => item.badges.includes("Needs Attention")).length;
 
   if (output.marketOverviewTone) output.marketOverviewTone.textContent = marketMood;
   output.marketOverviewGrid.innerHTML = [
@@ -437,10 +693,11 @@ function renderDashboard() {
   }
   if (output.dashboardAlertCount) output.dashboardAlertCount.textContent = alerts.length;
   output.watchlistSummaryGrid.innerHTML = [
-    metricCard("Number of Watchlists", "1", "Primary watchlist active", "watchlist"),
-    metricCard("Stocks on Watchlists", String((settings.stockIdeas || []).length), "Configured stock ideas", "watchlist"),
-    metricCard("High Confidence Alerts", String(highConfidenceAlerts), "High or very high confidence", "alerts"),
-    metricCard("Watchlist Movers", String(movers), "Rank or score movement", "alerts"),
+    metricCard("Watchlists", String(watchlists.length || 1), "Open Watchlists 2.0", "watchlist"),
+    metricCard("Tracked Stocks", String(new Set(watchlistRows.map((row) => row.ticker)).size || (settings.stockIdeas || []).length), "Unique monitored tickers", "watchlist"),
+    metricCard("New Changes", String(movers), "Improving, weakening, or changed", "watchlist"),
+    metricCard("High-Confidence Picks", String(highConfidenceAlerts), "High or very high confidence", "watchlist"),
+    metricCard("Needs Attention", String(needsAttention), "Data issues or weakening names", "watchlist"),
   ].join("");
 
   if (output.congressActivityCount) output.congressActivityCount.textContent = trades.length;
@@ -2914,6 +3171,115 @@ output.portfolioPin?.addEventListener("change", async () => {
   calculate();
   output.portfolioMessage.textContent = pin ? "Portfolio PIN saved on this device." : "Portfolio PIN removed. Saving on this device only.";
 });
+output.watchlistCreateForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const name = output.watchlistNameInput.value.trim();
+  if (!name) return;
+  const id = `${Date.now()}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "watchlist"}`;
+  watchlists.push({ id, name, tickers: [] });
+  selectedWatchlistId = id;
+  output.watchlistNameInput.value = "";
+  saveWatchlists();
+  renderWatchlists();
+  renderDashboard();
+});
+output.watchlistAddTickerForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const ticker = normalizeTicker(output.watchlistTickerInput.value);
+  const list = watchlists.find((item) => item.id === selectedWatchlistId);
+  if (!ticker || !list) return;
+  if (!list.tickers.includes(ticker)) list.tickers.push(ticker);
+  output.watchlistTickerInput.value = "";
+  saveWatchlists();
+  renderWatchlists();
+  renderDashboard();
+});
+output.watchlistAlertForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const ticker = normalizeTicker(output.alertTickerInput.value);
+  if (!ticker) return;
+  watchlistAlerts.unshift({
+    id: `${Date.now()}-${ticker}`,
+    ticker,
+    type: output.alertTypeInput.value,
+    threshold: output.alertThresholdInput.value.trim(),
+    active: true,
+    createdAt: new Date().toISOString(),
+  });
+  output.alertTickerInput.value = "";
+  output.alertThresholdInput.value = "";
+  saveWatchlists();
+  renderWatchlists();
+  renderDashboard();
+});
+output.watchlistFilter?.addEventListener("change", renderWatchlists);
+output.watchlistSort?.addEventListener("change", renderWatchlists);
+output.watchlistCardsGrid?.addEventListener("click", (event) => {
+  const viewButton = event.target.closest("[data-watchlist-view]");
+  if (viewButton) {
+    selectedWatchlistId = viewButton.dataset.watchlistView;
+    renderWatchlists();
+  }
+  const deleteButton = event.target.closest("[data-watchlist-delete]");
+  if (deleteButton) {
+    watchlists = watchlists.filter((list) => list.id !== deleteButton.dataset.watchlistDelete);
+    selectedWatchlistId = watchlists[0]?.id || "core-holdings";
+    saveWatchlists();
+    renderWatchlists();
+    renderDashboard();
+  }
+});
+output.watchlistCardsGrid?.addEventListener("change", (event) => {
+  const renameInput = event.target.closest("[data-watchlist-rename]");
+  if (!renameInput) return;
+  const list = watchlists.find((item) => item.id === renameInput.dataset.watchlistRename);
+  if (list && renameInput.value.trim()) {
+    list.name = renameInput.value.trim();
+    saveWatchlists();
+    renderWatchlists();
+    renderDashboard();
+  }
+});
+output.watchlistDetailGrid?.addEventListener("click", (event) => {
+  const removeButton = event.target.closest("[data-watchlist-remove]");
+  if (removeButton) {
+    const list = watchlists.find((item) => item.id === selectedWatchlistId);
+    if (list) list.tickers = list.tickers.filter((ticker) => ticker !== removeButton.dataset.watchlistRemove);
+    saveWatchlists();
+    renderWatchlists();
+    renderDashboard();
+  }
+  const alertButton = event.target.closest("[data-watchlist-alert-ticker]");
+  if (alertButton && output.alertTickerInput) {
+    output.alertTickerInput.value = alertButton.dataset.watchlistAlertTicker;
+    output.alertTickerInput.focus();
+  }
+  const focusButton = event.target.closest("[data-focus-watchlist-add]");
+  if (focusButton) output.watchlistTickerInput?.focus();
+});
+output.watchlistDetailGrid?.addEventListener("change", (event) => {
+  const moveSelect = event.target.closest("[data-watchlist-move]");
+  if (!moveSelect || !moveSelect.value) return;
+  const ticker = moveSelect.dataset.watchlistMove;
+  const source = watchlists.find((item) => item.id === selectedWatchlistId);
+  const target = watchlists.find((item) => item.id === moveSelect.value);
+  if (source && target && ticker) {
+    source.tickers = source.tickers.filter((item) => item !== ticker);
+    if (!target.tickers.includes(ticker)) target.tickers.push(ticker);
+    selectedWatchlistId = target.id;
+    saveWatchlists();
+    renderWatchlists();
+    renderDashboard();
+  }
+});
+output.watchlistAlertsList?.addEventListener("click", (event) => {
+  const deleteButton = event.target.closest("[data-alert-delete]");
+  if (!deleteButton) return;
+  watchlistAlerts = watchlistAlerts.filter((alert) => alert.id !== deleteButton.dataset.alertDelete);
+  saveWatchlists();
+  renderWatchlists();
+  renderDashboard();
+});
 document.querySelectorAll("[data-prediction-view]").forEach((button) => {
   button.addEventListener("click", () => {
     predictionView = button.dataset.predictionView;
@@ -2967,8 +3333,13 @@ output.predictionGrid?.addEventListener("click", (event) => {
         horizon: prediction?.bestTimeframe || prediction?.timeframe || "Research",
         priceNote: prediction?.finalReasonSummary || prediction?.plainEnglish || "Added from Predictions screener.",
       });
-      renderDashboard();
     }
+    if (!watchlists.length) loadWatchlists();
+    const list = watchlists.find((item) => item.id === selectedWatchlistId) || watchlists[0];
+    if (ticker && list && !list.tickers.includes(ticker)) list.tickers.push(ticker);
+    saveWatchlists();
+    renderWatchlists();
+    renderDashboard();
     if (output.predictionScanMessage) output.predictionScanMessage.textContent = ticker ? `${ticker} added to the watchlist view on this device.` : "Watchlist action ready.";
   }
   const compareButton = event.target.closest("[data-quick-compare]");
