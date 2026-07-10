@@ -47,6 +47,12 @@ const output = {
   memberSummary: document.querySelector("#memberSummary"),
   memberOptions: document.querySelector("#memberOptions"),
   logoutButton: document.querySelector("#logoutButton"),
+  dashboardSummaryGrid: document.querySelector("#dashboardSummaryGrid"),
+  dashboardScanTime: document.querySelector("#dashboardScanTime"),
+  dashboardScanSummary: document.querySelector("#dashboardScanSummary"),
+  dashboardAlerts: document.querySelector("#dashboardAlerts"),
+  dashboardAlertCount: document.querySelector("#dashboardAlertCount"),
+  tradeBriefPanel: document.querySelector("#tradeBriefPanel"),
 };
 
 const defaultPlans = [
@@ -152,6 +158,7 @@ let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source:
 let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
 let predictionView = "top25OneDay";
 let portfolio = [];
+let selectedBriefTicker = "";
 
 function dollars(value) {
   return new Intl.NumberFormat("en-US", {
@@ -228,6 +235,107 @@ function calculate() {
   renderPortfolio();
   renderMemberOptions();
   renderCongressTrades();
+  renderDashboard();
+  renderTradeBrief();
+}
+
+function statusTone(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized.includes("healthy") || normalized === "good") return "good";
+  if (normalized.includes("failed") || normalized === "failed") return "bad";
+  if (normalized.includes("partial") || normalized.includes("warning") || normalized.includes("stale")) return "warn";
+  return "neutral";
+}
+
+function firstFromSection(sectionName) {
+  const section = predictionEngine.sections?.[sectionName];
+  return Array.isArray(section) && section.length ? section[0] : null;
+}
+
+function compactPickCard(label, item) {
+  if (!item) {
+    return `
+      <article class="summary-tile empty-tile">
+        <span>${escapeHtml(label)}</span>
+        <strong>No pick yet</strong>
+        <small>Run a prediction scan.</small>
+      </article>
+    `;
+  }
+  const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+  return `
+    <article class="summary-tile pick-tile">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(item.ticker)} ${score}/100</strong>
+      <small>${escapeHtml(item.name || item.company || item.ticker)} | ${escapeHtml(item.confidenceTier || "confidence pending")}</small>
+      <button type="button" data-view-brief="${escapeHtml(item.ticker)}">View Trade Brief</button>
+    </article>
+  `;
+}
+
+function renderDashboard() {
+  if (!output.dashboardSummaryGrid) return;
+  const health = predictionEngine.predictionEngineHealth || {};
+  const totals = portfolioTotals();
+  const topToday = firstFromSection("top25OneDay");
+  const topWeek = firstFromSection("top25SevenDay");
+  const topMonth = firstFromSection("top25OneMonth");
+  const topYear = firstFromSection("top25OneYear");
+  const engineStatus = health.predictionEngineStatus || health.status || (predictionEngine.updatedAt ? "Healthy" : "Not run");
+  const dataStatus = health.dataQualityStatus || "Not run";
+  const marketMood = predictionEngine.marketRegime?.primary || topToday?.marketRegime?.primary || "Scanning";
+  const alerts = (settings.congressTrades || []).slice(0, 4);
+
+  output.dashboardSummaryGrid.innerHTML = `
+    <article class="summary-tile status-${statusTone(marketMood)}">
+      <span>Market mood</span>
+      <strong>${escapeHtml(marketMood)}</strong>
+      <small>${escapeHtml(predictionEngine.marketRegime?.riskTone || "Based on latest available scan.")}</small>
+    </article>
+    <article class="summary-tile status-${statusTone(engineStatus)}">
+      <span>Prediction engine status</span>
+      <strong>${escapeHtml(engineStatus)}</strong>
+      <small>${Number(health.predictionsGenerated) || predictionEngine.predictions?.length || 0} predictions generated</small>
+    </article>
+    <article class="summary-tile status-${statusTone(dataStatus)}">
+      <span>Data quality status</span>
+      <strong>${escapeHtml(dataStatus)}</strong>
+      <small>${Number(health.incompleteMarketDataPercent) || 0}% incomplete market data</small>
+    </article>
+    <article class="summary-tile">
+      <span>Portfolio value</span>
+      <strong>${dollarsPrecise(totals.currentValue)}</strong>
+      <small>${dollarsPrecise(totals.totalGain)} total P/L</small>
+    </article>
+    ${compactPickCard("Top pick today", topToday)}
+    ${compactPickCard("Best 7-day pick", topWeek)}
+    ${compactPickCard("Best 1-month pick", topMonth)}
+    ${compactPickCard("Best 1-year pick", topYear)}
+  `;
+
+  if (output.dashboardScanTime) {
+    output.dashboardScanTime.textContent = predictionEngine.updatedAt ? new Date(predictionEngine.updatedAt).toLocaleString() : "Not scanned yet";
+  }
+  if (output.dashboardScanSummary) {
+    const top25 = health.top25Counts || {};
+    output.dashboardScanSummary.innerHTML = `
+      <div><span>Tickers scanned</span><strong>${Number(health.tickersScanned) || 0}</strong></div>
+      <div><span>Predictions</span><strong>${Number(health.predictionsGenerated) || predictionEngine.predictions?.length || 0}</strong></div>
+      <div><span>Top 25 lists</span><strong>${Number(top25.top25OneDay) || 0}/${Number(top25.top25SevenDay) || 0}/${Number(top25.top25OneMonth) || 0}/${Number(top25.top25OneYear) || 0}</strong></div>
+      <div><span>Scan universe</span><strong>${escapeHtml(predictionEngine.scanUniverse?.mode || "watchlist")}</strong></div>
+    `;
+  }
+  if (output.dashboardAlertCount) output.dashboardAlertCount.textContent = alerts.length;
+  if (output.dashboardAlerts) {
+    output.dashboardAlerts.innerHTML = alerts.length
+      ? alerts.map((trade) => `
+          <article class="alert-row compact-row">
+            <strong>${escapeHtml(trade.ticker)} ${escapeHtml(trade.transaction || "")}</strong>
+            <span>${escapeHtml(trade.representative || "Congress disclosure")} | ${escapeHtml(trade.reportedDate || "date pending")}</span>
+          </article>
+        `).join("")
+      : `<p class="muted-copy">No watchlist alerts yet.</p>`;
+  }
 }
 
 function renderRecommendation(recommendation) {
@@ -834,9 +942,11 @@ function renderPredictions() {
           <div class="signal-list">
             <span>Direction: ${escapeHtml(item.unifiedDirection || "neutral")}</span>
             <span>Confidence: ${escapeHtml(item.confidenceTier || "low")}</span>
+            <span>Badge: ${escapeHtml(modelLabel)}</span>
+            <span>Timeframe: ${escapeHtml(item.timeframe || item.bestTimeframe || predictionModelTitle(model))}</span>
             <span>Data quality: ${escapeHtml(item.dataQualityStatus || quality.dataQualityStatus || "partial")}</span>
-            <span>Base AI score: ${Number(item.aiOpportunityScore) || 0}/100</span>
           </div>
+          <button type="button" class="brief-button" data-view-brief="${escapeHtml(item.ticker)}">View Trade Brief</button>
           <div class="timeframe-score-grid">
             <div>
               <span>Ranked score</span>
@@ -943,6 +1053,85 @@ function renderPredictions() {
       `;
     })
     .join("");
+}
+
+function findPredictionByTicker(ticker) {
+  const normalized = String(ticker || "").toUpperCase();
+  return (predictionEngine.predictions || []).find((item) => String(item.ticker || "").toUpperCase() === normalized) || null;
+}
+
+function renderTradeBrief() {
+  if (!output.tradeBriefPanel) return;
+  const firstPick = firstFromSection("top25OneDay") || firstFromSection("top25SevenDay") || (predictionEngine.predictions || [])[0];
+  const item = findPredictionByTicker(selectedBriefTicker) || firstPick;
+  if (!item) {
+    output.tradeBriefPanel.innerHTML = `
+      <article class="dashboard-card">
+        <span>No trade brief selected</span>
+        <h3>Run a prediction scan, then open a Trade Brief from any prediction card.</h3>
+        <button type="button" data-run-prediction-scan>Run prediction scan</button>
+      </article>
+    `;
+    return;
+  }
+
+  selectedBriefTicker = item.ticker;
+  const model = predictionModelForView(item);
+  const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+  const qualityNotes = item.dataQualityNotes || item.dataQuality?.dataQualityNotes || [];
+  const congressSignals = [item.congressionalSignal, item.congressSignal, item.policyCatalyst].filter(Boolean);
+  const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+
+  output.tradeBriefPanel.innerHTML = `
+    <article class="trade-brief-card">
+      <div class="brief-hero">
+        <div>
+          <span class="eyebrow">AI Trade Brief</span>
+          <h2>${escapeHtml(item.ticker)} | ${escapeHtml(item.name || item.company || item.ticker)}</h2>
+          <p>${escapeHtml(item.finalReasonSummary || item.reasonForRecommendation || item.predictionReason || "Signal summary pending.")}</p>
+        </div>
+        <div class="brief-score">
+          <span>Unified score</span>
+          <strong>${score}/100</strong>
+          <small>${escapeHtml(item.unifiedDirection || "neutral")} | ${escapeHtml(item.confidenceTier || "low")} confidence</small>
+        </div>
+      </div>
+      <div class="brief-grid">
+        <div><span>Recommendation</span><strong>${escapeHtml(item.label || item.recommendation || "Research candidate")}</strong></div>
+        <div><span>Entry zone</span><strong>${escapeHtml(model?.entryZone || item.suggestedEntryZone || "Needs market data")}</strong></div>
+        <div><span>Stop / invalidation</span><strong>${escapeHtml(model?.stopLevel || item.suggestedStopLevel || "Needs market data")}</strong></div>
+        <div><span>Target</span><strong>${escapeHtml(model?.profitTarget || item.suggestedProfitTarget || "Needs market data")}</strong></div>
+        <div><span>Risk / reward</span><strong>${Number(item.riskRewardRatio || 0).toFixed(2)}</strong></div>
+        <div><span>Data quality</span><strong>${escapeHtml(item.dataQualityStatus || item.dataQuality?.dataQualityStatus || "partial")}</strong></div>
+      </div>
+      <div class="brief-columns">
+        <section>
+          <h3>Why this pick</h3>
+          ${(item.strongestSignals || [item.whyTop25 || item.reasonForRecommendation || "Ranked by available AI signal strength."]).map((signal) => `<p>${escapeHtml(signal)}</p>`).join("")}
+        </section>
+        <section>
+          <h3>Risk factors</h3>
+          ${(item.conflictingSignals || [item.whyMayBeWrong || item.failureRisk || "The prediction can fail if market conditions change."]).map((signal) => `<p>${escapeHtml(signal)}</p>`).join("")}
+        </section>
+        <section>
+          <h3>Technical summary</h3>
+          <p>Trend: ${escapeHtml(technical.trendDirection || "unknown")}</p>
+          <p>Price vs 9/20 EMA: ${compactValue(technical.priceVs9Ema, "%")} / ${compactValue(technical.priceVs20Ema, "%")}</p>
+          <p>Support / resistance: ${technical.nearestSupport ? `$${Number(technical.nearestSupport).toFixed(2)}` : "n/a"} / ${technical.nearestResistance ? `$${Number(technical.nearestResistance).toFixed(2)}` : "n/a"}</p>
+        </section>
+        <section>
+          <h3>Congress / policy / news</h3>
+          ${congressSignals.length ? congressSignals.map((signal) => `<p>${escapeHtml(typeof signal === "string" ? signal : signal.reason || signal.summary || JSON.stringify(signal))}</p>`).join("") : "<p>No dedicated Congress or policy signal attached to this record yet.</p>"}
+        </section>
+      </div>
+      <details class="why-pick" open>
+        <summary>Data quality notes</summary>
+        <div class="signal-list">
+          ${qualityNotes.length ? qualityNotes.map((note) => `<span>${escapeHtml(note)}</span>`).join("") : "<span>No data quality warnings for this record.</span>"}
+        </div>
+      </details>
+    </article>
+  `;
 }
 
 function predictionErrorMessage(error, fallback = "Prediction scan failed") {
@@ -1624,6 +1813,24 @@ function recordRecommendation(recommendation) {
   }).catch(() => {});
 }
 
+function setPage(pageName) {
+  const target = pageName || "dashboard";
+  document.querySelectorAll("[data-page]").forEach((section) => {
+    section.classList.toggle("is-active", section.dataset.page === target);
+  });
+  document.querySelectorAll("[data-page-target]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.pageTarget === target);
+  });
+  if (target === "briefs") renderTradeBrief();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function openTradeBrief(ticker) {
+  selectedBriefTicker = String(ticker || "").toUpperCase();
+  renderTradeBrief();
+  setPage("briefs");
+}
+
 Object.values(fields).filter(Boolean).forEach((field) => {
   field.addEventListener("input", calculate);
 });
@@ -1659,6 +1866,16 @@ output.predictionSort?.addEventListener("change", renderPredictions);
 output.runPredictionScan?.addEventListener("click", runPredictionScan);
 output.predictionGrid?.addEventListener("click", (event) => {
   if (event.target.closest("[data-run-prediction-scan]")) runPredictionScan();
+  const briefButton = event.target.closest("[data-view-brief]");
+  if (briefButton) openTradeBrief(briefButton.dataset.viewBrief);
+});
+document.addEventListener("click", (event) => {
+  const navButton = event.target.closest("[data-page-target]");
+  if (navButton) setPage(navButton.dataset.pageTarget);
+  const scanButton = event.target.closest("[data-run-prediction-scan]");
+  if (scanButton && !output.predictionGrid?.contains(scanButton)) runPredictionScan();
+  const briefButton = event.target.closest("[data-view-brief]");
+  if (briefButton && !output.predictionGrid?.contains(briefButton)) openTradeBrief(briefButton.dataset.viewBrief);
 });
 output.portfolioList?.addEventListener("click", (event) => {
   const button = event.target.closest(".remove-position");

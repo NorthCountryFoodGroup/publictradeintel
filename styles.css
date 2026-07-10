@@ -11,6 +11,10 @@
   --accent: #247b86;
   --accent-soft: #def3f5;
   --shadow: 0 16px 40px rgba(23, 36, 29, 0.1);
+  --nav: #102019;
+  --nav-muted: #9fb4aa;
+  --warning: #9a6a1f;
+  --danger: #a33a34;
 }
 
 * {
@@ -41,6 +45,375 @@ textarea {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
   padding: 32px 0 48px;
+}
+
+.dashboard-frame {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.dashboard-main {
+  width: min(1240px, calc(100% - 32px));
+}
+
+.side-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 100vh;
+  padding: 22px 16px;
+  background: var(--nav);
+  color: white;
+}
+
+.brand-block {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+}
+
+.brand-block span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 900;
+}
+
+.brand-block strong {
+  font-size: 0.98rem;
+}
+
+.side-nav nav {
+  display: grid;
+  gap: 7px;
+}
+
+.nav-link,
+.admin-nav-link,
+.admin-link {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--nav-muted);
+  padding: 11px 12px;
+  font-weight: 800;
+  text-align: left;
+  text-decoration: none;
+}
+
+.nav-link.is-active,
+.admin-nav-link.is-active,
+.nav-link:hover,
+.admin-nav-link:hover,
+.admin-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.admin-link {
+  display: block;
+  margin-top: auto;
+}
+
+.dashboard-page,
+.admin-section-block {
+  display: none;
+}
+
+.dashboard-page.is-active,
+.admin-section-block.is-active {
+  display: block;
+}
+
+.mobile-nav {
+  display: none;
+}
+
+.dashboard-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.summary-tile,
+.dashboard-card,
+.trade-brief-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.summary-tile {
+  display: grid;
+  gap: 8px;
+  min-height: 138px;
+  padding: 16px;
+}
+
+.summary-tile span,
+.summary-tile small,
+.card-heading span,
+.brief-grid span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.summary-tile strong {
+  font-size: 1.35rem;
+  line-height: 1.05;
+}
+
+.summary-tile button,
+.brief-button {
+  width: fit-content;
+  min-width: 0;
+  margin-top: auto;
+  padding: 9px 11px;
+  font-size: 0.86rem;
+}
+
+.status-good {
+  border-color: #abd8bd;
+  background: #f1fbf5;
+}
+
+.status-warn {
+  border-color: #ecd19b;
+  background: #fff9ec;
+}
+
+.status-bad {
+  border-color: #efb1ad;
+  background: #fff4f2;
+}
+
+.dashboard-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.dashboard-card,
+.trade-brief-card {
+  padding: 18px;
+}
+
+.card-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.compact-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-alerts {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-row {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.prediction-card {
+  display: grid;
+  gap: 12px;
+}
+
+.prediction-card h3 {
+  margin-bottom: 0;
+}
+
+.prediction-card .timeframe-score-grid,
+.prediction-card > .trade-levels,
+.prediction-card > .model-reasons,
+.prediction-card > .research-grid,
+.prediction-card > .rank-change,
+.prediction-card > small {
+  display: none;
+}
+
+.prediction-card .why-pick .signal-list,
+.prediction-card .why-pick .model-reasons {
+  display: grid;
+}
+
+.brief-button {
+  background: var(--green);
+}
+
+.trade-brief-panel:empty::before {
+  content: "Open a prediction card and choose View Trade Brief.";
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  padding: 18px;
+  font-weight: 800;
+}
+
+.brief-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 18px;
+  align-items: start;
+}
+
+.brief-score {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  padding: 14px;
+  text-align: center;
+}
+
+.brief-score strong {
+  font-size: 2rem;
+}
+
+.brief-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.brief-grid div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.brief-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.brief-columns section {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+@media (max-width: 980px) {
+  .dashboard-frame {
+    display: block;
+  }
+
+  .side-nav {
+    display: none;
+  }
+
+  .dashboard-main {
+    width: min(100% - 24px, 760px);
+    padding-bottom: 86px;
+  }
+
+  .mobile-nav {
+    position: fixed;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: var(--nav);
+    box-shadow: var(--shadow);
+    padding: 8px;
+  }
+
+  .mobile-nav .nav-link,
+  .mobile-nav .admin-nav-link {
+    padding: 9px 6px;
+    text-align: center;
+    font-size: 0.78rem;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 18px;
+  }
+
+  h1 {
+    font-size: 2.35rem;
+    line-height: 1;
+  }
+
+  .dashboard-summary-grid,
+  .dashboard-split,
+  .brief-grid,
+  .brief-columns,
+  .brief-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-tile {
+    min-height: auto;
+  }
+
+  .prediction-tabs {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+
+  .prediction-tabs button {
+    flex: 0 0 auto;
+  }
+}
+
+@media (min-width: 981px) {
+  .admin-shell .calculator-grid {
+    grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  }
+}
+
+/* V2 final layout overrides */
+body .dashboard-page,
+body .admin-section-block {
+  display: none;
+}
+
+body .dashboard-page.is-active,
+body .admin-section-block.is-active {
+  display: block;
+}
+
+body .mobile-nav {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  body .mobile-nav {
+    display: grid;
+  }
 }
 
 .login-shell {

@@ -8,13 +8,30 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app-shell admin-shell">
+    <div class="dashboard-frame">
+      <aside class="side-nav admin-side-nav" aria-label="Admin navigation">
+        <div class="brand-block">
+          <span>PTI</span>
+          <strong>Admin backend</strong>
+        </div>
+        <nav>
+          <button type="button" class="admin-nav-link is-active" data-admin-target="engine">Prediction Engine</button>
+          <button type="button" class="admin-nav-link" data-admin-target="universe">Scan Universe</button>
+          <button type="button" class="admin-nav-link" data-admin-target="market">Market Data</button>
+          <button type="button" class="admin-nav-link" data-admin-target="congress">Congress Feed</button>
+          <button type="button" class="admin-nav-link" data-admin-target="policy">Policy Feed</button>
+          <button type="button" class="admin-nav-link" data-admin-target="health">System Health</button>
+        </nav>
+        <a class="admin-link" href="index.html">Back to app</a>
+      </aside>
+
+      <main class="app-shell admin-shell dashboard-main">
       <section class="hero admin-hero">
         <div>
           <p class="eyebrow">Admin backend</p>
-          <h1>Manage the beginner money app</h1>
+          <h1>Manage PublicTradeIntel</h1>
           <p class="hero-copy">
-            Update weekly paths, milestone goals, and safety thresholds without touching the app code.
+            Control prediction scans, market data, Congress and policy feeds, and system health without one giant scroll.
           </p>
         </div>
         <div class="comfort-note">
@@ -67,15 +84,15 @@
       </section>
 
       <section class="admin-panel" id="adminPanel" hidden>
-        <div class="section-heading">
+        <div class="section-heading admin-section-block is-active" data-admin-section="engine">
           <div>
-            <p class="eyebrow">Settings</p>
-            <h2>Safety rules and content</h2>
+            <p class="eyebrow">Prediction Engine</p>
+            <h2>Model content and app settings</h2>
           </div>
           <button type="button" id="saveConfig">Save changes</button>
         </div>
 
-        <div class="admin-editor">
+        <div class="admin-editor admin-section-block is-active" data-admin-section="engine">
           <label>
             <span>First emergency layer target</span>
             <input type="number" min="0" step="1" id="firstEmergencyTarget" />
@@ -90,34 +107,34 @@
           </label>
         </div>
 
-        <div class="section-heading editor-heading">
+        <div class="section-heading editor-heading admin-section-block is-active" data-admin-section="engine">
           <h2>Starter paths</h2>
         </div>
-        <div class="admin-list" id="plansEditor"></div>
+        <div class="admin-list admin-section-block is-active" data-admin-section="engine" id="plansEditor"></div>
 
-        <div class="section-heading editor-heading">
+        <div class="section-heading editor-heading admin-section-block is-active" data-admin-section="engine">
           <h2>Micro-goals</h2>
         </div>
-        <div class="admin-list" id="goalsEditor"></div>
+        <div class="admin-list admin-section-block is-active" data-admin-section="engine" id="goalsEditor"></div>
 
-        <div class="section-heading editor-heading">
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="market">
           <div>
             <h2>Stock idea watchlist</h2>
             <p class="muted-copy">Use public information to maintain signal scores from 0 to 100. The public app ranks these against the user's safe invest amount.</p>
           </div>
           <button type="button" id="refreshMarket">Refresh market data</button>
         </div>
-        <p class="form-message" id="marketMessage"></p>
-        <div class="admin-list" id="stocksEditor"></div>
+        <p class="form-message admin-section-block" data-admin-section="market" id="marketMessage"></p>
+        <div class="admin-list admin-section-block" data-admin-section="market" id="stocksEditor"></div>
 
-        <div class="section-heading editor-heading">
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="universe">
           <div>
             <h2>Prediction Scan Settings</h2>
             <p class="muted-copy">Choose how broad the prediction engine scans before it builds Top 25 rankings.</p>
           </div>
           <button type="button" id="saveScanSettings">Save settings</button>
         </div>
-        <div class="admin-editor scan-settings-panel">
+        <div class="admin-editor scan-settings-panel admin-section-block" data-admin-section="universe">
           <label>
             <span>Scan universe</span>
             <select id="scanUniverse">
@@ -141,36 +158,36 @@
             <textarea id="customTickers" rows="4" placeholder="Example: PLTR, SOFI, RKLB, TSM"></textarea>
           </label>
         </div>
-        <p class="form-message" id="scanSettingsMessage"></p>
+        <p class="form-message admin-section-block" data-admin-section="universe" id="scanSettingsMessage"></p>
 
-        <div class="section-heading editor-heading">
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="health">
           <div>
             <h2>Prediction engine health</h2>
             <p class="muted-copy">Run an authenticated production validation scan and review ranking sanity checks.</p>
           </div>
           <button type="button" id="refreshPredictions">Run prediction scan</button>
         </div>
-        <p class="form-message" id="predictionHealthMessage"></p>
-        <div class="admin-list" id="predictionHealthPanel"></div>
+        <p class="form-message admin-section-block" data-admin-section="health" id="predictionHealthMessage"></p>
+        <div class="admin-list admin-section-block" data-admin-section="health" id="predictionHealthPanel"></div>
 
-        <div class="section-heading editor-heading">
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="policy">
           <div>
             <h2>Policy catalyst monitor</h2>
             <p class="muted-copy">The server scans configured public sources hourly. Use this button to refresh immediately.</p>
           </div>
           <button type="button" id="refreshPolicy">Refresh policy signals</button>
         </div>
-        <p class="form-message" id="policyMessage"></p>
+        <p class="form-message admin-section-block" data-admin-section="policy" id="policyMessage"></p>
 
-        <div class="section-heading editor-heading">
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="congress">
           <div>
             <h2>Congress trade tracker</h2>
             <p class="muted-copy">Track public STOCK Act disclosures. Use source links back to the official House or Senate disclosure search when possible.</p>
           </div>
           <button type="button" id="refreshCongressFeed">Refresh congress feed</button>
         </div>
-        <p class="form-message" id="congressFeedMessage"></p>
-        <div class="import-panel">
+        <p class="form-message admin-section-block" data-admin-section="congress" id="congressFeedMessage"></p>
+        <div class="import-panel admin-section-block" data-admin-section="congress">
           <label>
             <span>Bulk import trades as JSON</span>
             <textarea id="congressImport" rows="8" spellcheck="false">[
@@ -198,11 +215,19 @@
           </div>
           <p class="form-message" id="importMessage"></p>
         </div>
-        <div class="admin-list" id="congressEditor"></div>
+        <div class="admin-list admin-section-block" data-admin-section="congress" id="congressEditor"></div>
 
         <p class="form-message" id="saveMessage"></p>
       </section>
-    </main>
+      </main>
+    </div>
+
+    <nav class="mobile-nav" aria-label="Admin mobile navigation">
+      <button type="button" class="admin-nav-link is-active" data-admin-target="engine">Engine</button>
+      <button type="button" class="admin-nav-link" data-admin-target="universe">Universe</button>
+      <button type="button" class="admin-nav-link" data-admin-target="market">Market</button>
+      <button type="button" class="admin-nav-link" data-admin-target="health">Health</button>
+    </nav>
 
     <script src="admin.js"></script>
   </body>

@@ -11,14 +11,33 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app-shell">
+    <div class="dashboard-frame">
+      <aside class="side-nav" aria-label="Main navigation">
+        <div class="brand-block">
+          <span>PTI</span>
+          <strong>PublicTradeIntel</strong>
+        </div>
+        <nav>
+          <button type="button" class="nav-link is-active" data-page-target="dashboard">Dashboard</button>
+          <button type="button" class="nav-link" data-page-target="predictions">Predictions</button>
+          <button type="button" class="nav-link" data-page-target="briefs">AI Trade Briefs</button>
+          <button type="button" class="nav-link" data-page-target="watchlist">Watchlist</button>
+          <button type="button" class="nav-link" data-page-target="congress">Congress</button>
+          <button type="button" class="nav-link" data-page-target="policy">Policy</button>
+          <button type="button" class="nav-link" data-page-target="performance">Performance</button>
+          <button type="button" class="nav-link" data-page-target="settings">Settings</button>
+        </nav>
+        <a class="admin-link" href="admin.html">Admin backend</a>
+      </aside>
+
+      <main class="app-shell dashboard-main">
       <section class="hero">
         <div>
           <p class="eyebrow">PublicTradeIntel</p>
-          <h1>Portfolio heads-up display</h1>
+          <h1>AI market intelligence dashboard</h1>
           <p class="hero-copy">
-            Track the stocks and financial purchases you made, compare original buy value against current value,
-            and watch daily profit or loss from one phone-friendly dashboard.
+            Scan predictions, track your positions, monitor Congress and policy signals, and open clean trade briefs
+            without digging through a long admin-style page.
           </p>
         </div>
         <div class="comfort-note">
@@ -31,7 +50,34 @@
         </div>
       </section>
 
-      <section class="portfolio-section portfolio-hud">
+      <section class="dashboard-page is-active" data-page="dashboard">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Command center</p>
+            <h2>Today at a glance</h2>
+          </div>
+          <button type="button" data-run-prediction-scan>Run prediction scan</button>
+        </div>
+        <div class="dashboard-summary-grid" id="dashboardSummaryGrid"></div>
+        <div class="dashboard-split">
+          <article class="dashboard-card">
+            <div class="card-heading">
+              <span>Recent scan summary</span>
+              <strong id="dashboardScanTime">Not scanned yet</strong>
+            </div>
+            <div class="member-summary compact-summary" id="dashboardScanSummary"></div>
+          </article>
+          <article class="dashboard-card">
+            <div class="card-heading">
+              <span>Watchlist alerts</span>
+              <strong id="dashboardAlertCount">0</strong>
+            </div>
+            <div class="alerts-list compact-alerts" id="dashboardAlerts"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="portfolio-section portfolio-hud dashboard-page" data-page="watchlist">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Portfolio HUD</p>
@@ -72,17 +118,12 @@
         <div class="portfolio-list" id="portfolioList"></div>
       </section>
 
-      <section class="prediction-section">
+      <section class="prediction-section dashboard-page" data-page="predictions">
         <div class="section-heading">
           <div>
             <p class="eyebrow">AI Prediction Engine</p>
-            <h2>Hedge-fund-style multi-horizon AI research engine</h2>
+          <h2>Top 25 rankings by timeframe</h2>
           </div>
-        </div>
-
-        <div class="disclaimer-box">
-          The engine builds separate Top 25 lists for 1-day trades, 7-day trades, 1-month trades, and 1-year holds.
-          Each list uses different weights, rank movement, evidence, failure risks, and list-overlap labels.
         </div>
 
         <div class="member-summary" id="predictionSummary"></div>
@@ -119,7 +160,17 @@
         <div class="prediction-grid" id="predictionGrid"></div>
       </section>
 
-      <section class="stock-section">
+      <section class="dashboard-page" data-page="briefs">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">AI Trade Briefs</p>
+            <h2>Full analysis for the selected stock</h2>
+          </div>
+        </div>
+        <div class="trade-brief-panel" id="tradeBriefPanel"></div>
+      </section>
+
+      <section class="stock-section dashboard-page" data-page="settings">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Stock ideas</p>
@@ -154,7 +205,7 @@
         <div class="stock-grid" id="stockGrid"></div>
       </section>
 
-      <section class="best-section">
+      <section class="best-section dashboard-page" data-page="settings">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Fastest growth buy recommendations</p>
@@ -170,7 +221,7 @@
         <div class="stock-grid" id="bestStocksGrid"></div>
       </section>
 
-      <section class="daytrade-section">
+      <section class="daytrade-section dashboard-page" data-page="performance">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Buy today / sell today</p>
@@ -186,7 +237,7 @@
         <div class="stock-grid" id="dayTradeGrid"></div>
       </section>
 
-      <section class="alerts-section">
+      <section class="alerts-section dashboard-page" data-page="congress">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Congress trade alerts</p>
@@ -197,7 +248,7 @@
         <div class="alerts-list" id="alertsList"></div>
       </section>
 
-      <section class="policy-section">
+      <section class="policy-section dashboard-page" data-page="policy">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Policy catalyst monitor</p>
@@ -214,7 +265,7 @@
         <div class="stock-grid" id="policySignalsGrid"></div>
       </section>
 
-      <section class="congress-section">
+      <section class="congress-section dashboard-page" data-page="congress">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Congress trade tracker</p>
@@ -247,7 +298,7 @@
         <div class="congress-grid" id="congressGrid"></div>
       </section>
 
-      <section class="learn-section">
+      <section class="learn-section dashboard-page" data-page="performance">
         <div>
           <p class="eyebrow">Trading intelligence</p>
           <h2>What this app keeps visible</h2>
@@ -259,7 +310,16 @@
           <li>Plain-English reasons, scores, and risk notes for buy ideas.</li>
         </ul>
       </section>
-    </main>
+      </main>
+    </div>
+
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+      <button type="button" class="nav-link is-active" data-page-target="dashboard">Home</button>
+      <button type="button" class="nav-link" data-page-target="predictions">Picks</button>
+      <button type="button" class="nav-link" data-page-target="briefs">Briefs</button>
+      <button type="button" class="nav-link" data-page-target="watchlist">List</button>
+      <button type="button" class="nav-link" data-page-target="congress">Intel</button>
+    </nav>
 
     <script src="app.js"></script>
   </body>

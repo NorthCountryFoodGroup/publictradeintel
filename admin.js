@@ -45,6 +45,11 @@ const universeBaseCounts = {
   combined: 90,
 };
 
+document.addEventListener("click", (event) => {
+  const navButton = event.target.closest("[data-admin-target]");
+  if (navButton) setAdminSection(navButton.dataset.adminTarget);
+});
+
 function adminHeaders() {
   return {
     "Content-Type": "application/json",
@@ -154,6 +159,17 @@ function renderPredictionHealth(health) {
       </label>
     </article>
   `;
+}
+
+function setAdminSection(sectionName) {
+  const target = sectionName || "engine";
+  document.querySelectorAll("[data-admin-section]").forEach((section) => {
+    section.classList.toggle("is-active", section.dataset.adminSection === target);
+  });
+  document.querySelectorAll("[data-admin-target]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.adminTarget === target);
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function planRow(plan, index) {
