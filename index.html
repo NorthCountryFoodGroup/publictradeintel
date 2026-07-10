@@ -658,12 +658,116 @@
       <section class="alerts-section dashboard-page" data-page="alerts">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Congress trade alerts</p>
-            <h2>Recent buy and sell disclosures</h2>
+            <p class="eyebrow">Alerts Center</p>
+            <h2>What needs my attention right now?</h2>
           </div>
         </div>
 
-        <div class="alerts-list" id="alertsList"></div>
+        <div class="alerts-center">
+          <section class="dashboard-card alerts-section-card">
+            <div class="card-heading">
+              <span>Alerts Dashboard</span>
+              <strong id="alertsDashboardStatus">Monitoring</strong>
+            </div>
+            <div class="alerts-overview-grid" id="alertsOverviewGrid"></div>
+          </section>
+
+          <section class="dashboard-card alerts-section-card">
+            <div class="card-heading">
+              <span>Alert Rules</span>
+              <strong>Create active monitors</strong>
+            </div>
+            <form class="alert-rule-form" id="alertRuleForm">
+              <label>
+                <span>Ticker / Sector</span>
+                <input id="alertRuleTicker" placeholder="NVDA or Technology" autocomplete="off" />
+              </label>
+              <label>
+                <span>Alert type</span>
+                <select id="alertRuleType">
+                  <option value="scoreIncrease">Unified Score Increase</option>
+                  <option value="scoreDecrease">Unified Score Decrease</option>
+                  <option value="recommendationChange">Recommendation Change</option>
+                  <option value="confidenceChange">Confidence Change</option>
+                  <option value="trendReversal">Trend Reversal</option>
+                  <option value="newChartPattern">New Chart Pattern</option>
+                  <option value="newSetupDetected">New Setup Detected</option>
+                  <option value="targetReached">Target Reached</option>
+                  <option value="stopLossReached">Stop Loss Reached</option>
+                  <option value="priceAbove">Price Above Threshold</option>
+                  <option value="priceBelow">Price Below Threshold</option>
+                  <option value="congressBuy">Congress Buy</option>
+                  <option value="congressSell">Congress Sell</option>
+                  <option value="policyCatalyst">Policy Catalyst</option>
+                  <option value="marketBreadthChange">Market Breadth Change</option>
+                  <option value="sectorRotation">Sector Rotation</option>
+                  <option value="watchlistHealth">Watchlist Health Change</option>
+                  <option value="predictionEngineIssue">Prediction Engine Issue</option>
+                  <option value="marketDataIssue">Market Data Issue</option>
+                </select>
+              </label>
+              <label>
+                <span>Priority</span>
+                <select id="alertRulePriority">
+                  <option value="High">High</option>
+                  <option value="Critical">Critical</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+              </label>
+              <label>
+                <span>Threshold / note</span>
+                <input id="alertRuleThreshold" placeholder="75, 5%, target, or note" autocomplete="off" />
+              </label>
+              <button type="submit">Create rule</button>
+            </form>
+            <div class="alert-rule-list" id="alertRuleList"></div>
+          </section>
+
+          <section class="dashboard-card alerts-section-card">
+            <div class="card-heading">
+              <span>Alert Filters</span>
+              <strong>Fast triage</strong>
+            </div>
+            <div class="alert-filter-grid">
+              <label><span>Status</span><select id="alertFilterStatus"><option value="">All</option><option value="unread">Unread</option><option value="resolved">Resolved</option><option value="muted">Muted</option></select></label>
+              <label><span>Priority</span><select id="alertFilterPriority"><option value="">All</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label>
+              <label><span>Ticker</span><input id="alertFilterTicker" placeholder="NVDA" autocomplete="off" /></label>
+              <label><span>Watchlist</span><select id="alertFilterWatchlist"><option value="">All watchlists</option></select></label>
+              <label><span>Sector</span><input id="alertFilterSector" placeholder="Technology" autocomplete="off" /></label>
+              <label><span>Date</span><input id="alertFilterDate" type="date" /></label>
+              <label><span>Alert Type</span><input id="alertFilterType" placeholder="Policy, score, congress..." autocomplete="off" /></label>
+            </div>
+          </section>
+
+          <section class="dashboard-card alerts-section-card">
+            <div class="card-heading">
+              <span>Alert Feed</span>
+              <strong id="alertFeedCount">0</strong>
+            </div>
+            <div class="alert-feed" id="alertsList"></div>
+          </section>
+
+          <section class="dashboard-card alerts-section-card">
+            <div class="card-heading">
+              <span>Delivery Preferences</span>
+              <strong>Future ready</strong>
+            </div>
+            <div class="delivery-preferences-grid" id="deliveryPreferencesGrid"></div>
+          </section>
+
+          <section class="dashboard-card alerts-section-card">
+            <div class="card-heading">
+              <span>Alert History</span>
+              <strong>Search and export</strong>
+            </div>
+            <div class="alert-history-toolbar">
+              <label><span>Search history</span><input id="alertHistorySearch" placeholder="ticker, type, reason..." autocomplete="off" /></label>
+              <button type="button" id="exportAlertsButton">Export alerts</button>
+            </div>
+            <div class="alert-history-list" id="alertHistoryList"></div>
+          </section>
+        </div>
       </section>
 
       <section class="policy-section dashboard-page" data-page="policy">

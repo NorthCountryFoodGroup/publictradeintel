@@ -69,6 +69,26 @@ const output = {
   filterTrend: document.querySelector("#filterTrend"),
   filterDataQuality: document.querySelector("#filterDataQuality"),
   alertsList: document.querySelector("#alertsList"),
+  alertsDashboardStatus: document.querySelector("#alertsDashboardStatus"),
+  alertsOverviewGrid: document.querySelector("#alertsOverviewGrid"),
+  alertRuleForm: document.querySelector("#alertRuleForm"),
+  alertRuleTicker: document.querySelector("#alertRuleTicker"),
+  alertRuleType: document.querySelector("#alertRuleType"),
+  alertRulePriority: document.querySelector("#alertRulePriority"),
+  alertRuleThreshold: document.querySelector("#alertRuleThreshold"),
+  alertRuleList: document.querySelector("#alertRuleList"),
+  alertFilterStatus: document.querySelector("#alertFilterStatus"),
+  alertFilterPriority: document.querySelector("#alertFilterPriority"),
+  alertFilterTicker: document.querySelector("#alertFilterTicker"),
+  alertFilterWatchlist: document.querySelector("#alertFilterWatchlist"),
+  alertFilterSector: document.querySelector("#alertFilterSector"),
+  alertFilterDate: document.querySelector("#alertFilterDate"),
+  alertFilterType: document.querySelector("#alertFilterType"),
+  alertFeedCount: document.querySelector("#alertFeedCount"),
+  deliveryPreferencesGrid: document.querySelector("#deliveryPreferencesGrid"),
+  alertHistorySearch: document.querySelector("#alertHistorySearch"),
+  exportAlertsButton: document.querySelector("#exportAlertsButton"),
+  alertHistoryList: document.querySelector("#alertHistoryList"),
   policySummary: document.querySelector("#policySummary"),
   policySignalsGrid: document.querySelector("#policySignalsGrid"),
   congressGrid: document.querySelector("#congressGrid"),
@@ -222,6 +242,7 @@ let selectedBriefTicker = "";
 let selectedMarketSector = "All sectors";
 let watchlists = [];
 let watchlistAlerts = [];
+let alertHistory = [];
 let selectedWatchlistId = "core-holdings";
 
 const pageLabels = {
@@ -308,7 +329,7 @@ function calculate() {
   renderBestStocks(activeInvestAmount);
   renderPredictions();
   renderDayTrades();
-  renderCongressAlerts();
+  renderAlertsCenter();
   renderPolicySignals();
   renderPortfolio();
   renderWatchlists();
@@ -427,11 +448,18 @@ function loadWatchlists() {
   } catch {
     watchlistAlerts = [];
   }
+  try {
+    const savedHistory = JSON.parse(localStorage.getItem("publicTradeIntelAlertHistory") || "[]");
+    alertHistory = Array.isArray(savedHistory) ? savedHistory : [];
+  } catch {
+    alertHistory = [];
+  }
 }
 
 function saveWatchlists() {
   localStorage.setItem("publicTradeIntelWatchlists", JSON.stringify(watchlists));
   localStorage.setItem("publicTradeIntelWatchlistAlerts", JSON.stringify(watchlistAlerts));
+  localStorage.setItem("publicTradeIntelAlertHistory", JSON.stringify(alertHistory));
 }
 
 function predictionForTicker(ticker) {
@@ -621,6 +649,325 @@ function renderWatchlistDetail(list) {
     : `<article class="watchlist-empty"><strong>No stocks in this watchlist</strong><p>Add a ticker to start monitoring changes and alerts.</p><button type="button" data-focus-watchlist-add>Add ticker</button></article>`;
 }
 
+function alertTypeLabel(type) {
+  return String(type || "alert")
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (char) => char.toUpperCase())
+    .trim();
+}
+
+function createAlertRule({ ticker = "", type = "scoreIncrease", priority = "High", threshold = "", source = "alerts" }) {
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}-${normalizeTicker(ticker) || "market"}`,
+    ticker: normalizeTicker(ticker) || String(ticker || "Market").trim(),
+    type,
+    priority,
+    threshold: String(threshold || "").trim(),
+    active: true,
+    source,
+    delivery: {
+      inApp: true,
+      email: false,
+      sms: false,
+      push: false,
+      slack: false,
+      discord: false,
+      webhook: false,
+    },
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function alertPriorityScore(priority) {
+  return { Critical: 4, High: 3, Medium: 2, Low: 1 }[priority] || 1;
+}
+
+function alertIcon(type) {
+  const normalized = String(type || "").toLowerCase();
+  if (normalized.includes("congress")) return "$";
+  if (normalized.includes("policy")) return "P";
+  if (normalized.includes("market") || normalized.includes("sector")) return "M";
+  if (normalized.includes("data") || normalized.includes("engine")) return "!";
+  if (normalized.includes("stop") || normalized.includes("decrease")) return "-";
+  return "+";
+}
+
+function alertWatchlistName(ticker) {
+  const normalized = normalizeTicker(ticker);
+  return watchlists.find((list) => (list.tickers || []).includes(normalized))?.name || "Unassigned";
+}
+
+function alertSector(ticker) {
+  const prediction = predictionForTicker(ticker);
+  return prediction ? sectorForPrediction(prediction) : "";
+}
+
+function alertEventId(parts) {
+  return parts.map((part) => String(part || "").replace(/\s+/g, "-")).join(":");
+}
+
+function upsertAlertHistory(event) {
+  if (!event?.id) return;
+  const existing = alertHistory.find((item) => item.id === event.id);
+  if (existing) {
+    Object.assign(existing, { ...event, read: existing.read, resolved: existing.resolved, snoozedUntil: existing.snoozedUntil });
+  } else {
+    alertHistory.unshift({
+      read: false,
+      resolved: false,
+      muted: false,
+      ...event,
+    });
+  }
+  alertHistory = alertHistory.slice(0, 250);
+}
+
+function evaluateAlertRules() {
+  const now = new Date().toISOString();
+  (watchlistAlerts || [])
+    .filter((rule) => rule.active !== false)
+    .forEach((rule) => {
+      const prediction = predictionForTicker(rule.ticker);
+      const record = prediction ? watchlistTickerRecord(rule.ticker) : null;
+      const threshold = Number(rule.threshold);
+      let triggered = false;
+      let explanation = "";
+      let action = "Review the signal before taking action.";
+      if (rule.type === "scoreAbove" || rule.type === "scoreIncrease") {
+        triggered = record ? (Number.isFinite(threshold) ? record.score >= threshold : record.scoreChange > 2) : false;
+        explanation = record ? `${record.ticker} score is ${record.score}/100 with ${percent(record.scoreChange)} score change.` : "Waiting for prediction data.";
+        action = "Open the Trade Brief and confirm the setup.";
+      } else if (rule.type === "scoreDecrease") {
+        triggered = record ? (Number.isFinite(threshold) ? record.score <= threshold : record.scoreChange < -2) : false;
+        explanation = record ? `${record.ticker} score weakened to ${record.score}/100.` : "Waiting for prediction data.";
+        action = "Check risk factors and support levels.";
+      } else if (["recommendationChange", "confidenceChange", "trendReversal", "newChartPattern", "newSetupDetected"].includes(rule.type)) {
+        triggered = record ? record.badges.some((badge) => ["New", "Changed", "Improving", "Weakening"].includes(badge)) : false;
+        explanation = record ? `${record.ticker} has status badges: ${record.badges.join(", ") || "none"}.` : "Waiting for prediction data.";
+      } else if (rule.type === "priceAbove") {
+        triggered = record ? Number.isFinite(threshold) && record.price >= threshold : false;
+        explanation = record ? `${record.ticker} price is ${moneyOrCalculating(record.price)}.` : "Waiting for price data.";
+      } else if (rule.type === "priceBelow") {
+        triggered = record ? Number.isFinite(threshold) && record.price > 0 && record.price <= threshold : false;
+        explanation = record ? `${record.ticker} price is ${moneyOrCalculating(record.price)}.` : "Waiting for price data.";
+      } else if (["congressBuy", "congressSell"].includes(rule.type)) {
+        const actionType = rule.type === "congressBuy" ? "Buy" : "Sell";
+        triggered = (settings.congressTrades || []).some((trade) => normalizeTicker(trade.ticker) === normalizeTicker(rule.ticker) && trade.transaction === actionType);
+        explanation = `${rule.ticker || "Ticker"} has tracked congressional ${actionType.toLowerCase()} activity.`;
+        action = "Open Congress tracker and review disclosure context.";
+      } else if (rule.type === "policyCatalyst") {
+        triggered = (policySignals.signals || []).some((signal) => normalizeTicker(signal.ticker) === normalizeTicker(rule.ticker));
+        explanation = `${rule.ticker || "Ticker"} has a matching policy/news catalyst.`;
+        action = "Open Policy monitor and review catalyst direction.";
+      } else if (rule.type === "watchlistHealth") {
+        const list = watchlists.find((item) => item.name === rule.ticker || item.id === rule.ticker) || watchlists[0];
+        const health = list ? watchlistHealth(list) : null;
+        triggered = health ? health.weakeningCount > 0 || health.dataIssueCount > 0 || health.healthScore < (threshold || 60) : false;
+        explanation = health ? `${list.name} health is ${health.healthScore}/100. ${health.reasonSummary}` : "No watchlist available.";
+        action = "Open Watchlists and review names needing attention.";
+      }
+      if (triggered) {
+        upsertAlertHistory({
+          id: alertEventId(["rule", rule.id, rule.ticker, rule.type, new Date().toISOString().slice(0, 10)]),
+          ruleId: rule.id,
+          icon: alertIcon(rule.type),
+          priority: rule.priority || "Medium",
+          timestamp: now,
+          ticker: rule.ticker || "Market",
+          type: alertTypeLabel(rule.type),
+          explanation,
+          suggestedAction: action,
+          watchlist: alertWatchlistName(rule.ticker),
+          sector: alertSector(rule.ticker),
+          source: "Rule",
+        });
+      }
+    });
+
+  const health = predictionEngine.predictionEngineHealth || {};
+  if (health.predictionEngineStatus === "Failed") {
+    upsertAlertHistory({
+      id: alertEventId(["system", "prediction-engine", new Date().toISOString().slice(0, 10)]),
+      icon: "!",
+      priority: "Critical",
+      timestamp: now,
+      ticker: "System",
+      type: "Prediction Engine Issue",
+      explanation: "Prediction engine reported a failed status.",
+      suggestedAction: "Open Admin System Health and inspect the latest scan.",
+      watchlist: "System",
+      sector: "System",
+      source: "System",
+    });
+  }
+  if (["partial", "stale", "failed"].includes(health.dataQualityStatus)) {
+    upsertAlertHistory({
+      id: alertEventId(["system", "market-data", health.dataQualityStatus, new Date().toISOString().slice(0, 10)]),
+      icon: "!",
+      priority: health.dataQualityStatus === "failed" ? "High" : "Medium",
+      timestamp: now,
+      ticker: "Market",
+      type: "Market Data Issue",
+      explanation: `Market data quality is ${health.dataQualityStatus}.`,
+      suggestedAction: "Review Market Intelligence before trusting short-term signals.",
+      watchlist: "System",
+      sector: "Market",
+      source: "System",
+    });
+  }
+  (settings.congressTrades || [])
+    .slice(0, 4)
+    .forEach((trade) => {
+      if (!["Buy", "Sell"].includes(trade.transaction)) return;
+      upsertAlertHistory({
+        id: alertEventId(["congress", trade.ticker, trade.transaction, trade.reportedDate]),
+        icon: "$",
+        priority: trade.transaction === "Buy" ? "High" : "Medium",
+        timestamp: trade.reportedDate || now,
+        ticker: trade.ticker,
+        type: `Congress ${trade.transaction}`,
+        explanation: `${trade.representative} reported a ${trade.transaction.toLowerCase()} in ${trade.company || trade.ticker}.`,
+        suggestedAction: "Review Congress tracker and compare with current prediction score.",
+        watchlist: alertWatchlistName(trade.ticker),
+        sector: alertSector(trade.ticker),
+        source: "Congress",
+      });
+    });
+  (policySignals.signals || [])
+    .slice(0, 4)
+    .forEach((signal) => {
+      upsertAlertHistory({
+        id: alertEventId(["policy", signal.ticker, signal.direction, signal.updatedAt || policySignals.updatedAt]),
+        icon: "P",
+        priority: signal.direction === "negative" ? "High" : "Medium",
+        timestamp: signal.updatedAt || policySignals.updatedAt || now,
+        ticker: signal.ticker || "Policy",
+        type: "Policy Catalyst",
+        explanation: `${signal.ticker || "A tracked industry"} has a ${signal.direction || "neutral"} policy/news catalyst.`,
+        suggestedAction: "Open Policy monitor and check catalyst details.",
+        watchlist: alertWatchlistName(signal.ticker),
+        sector: alertSector(signal.ticker),
+        source: "Policy",
+      });
+    });
+  saveWatchlists();
+}
+
+function visibleAlerts() {
+  evaluateAlertRules();
+  const status = output.alertFilterStatus?.value || "";
+  const priority = output.alertFilterPriority?.value || "";
+  const ticker = normalizeTicker(output.alertFilterTicker?.value);
+  const watchlist = output.alertFilterWatchlist?.value || "";
+  const sector = String(output.alertFilterSector?.value || "").trim().toLowerCase();
+  const date = output.alertFilterDate?.value || "";
+  const type = String(output.alertFilterType?.value || "").trim().toLowerCase();
+  return [...alertHistory]
+    .filter((alert) => {
+      if (status === "unread" && alert.read) return false;
+      if (status === "resolved" && !alert.resolved) return false;
+      if (status === "muted" && !alert.muted && !alert.snoozedUntil) return false;
+      if (!status && alert.resolved) return false;
+      if (priority && alert.priority !== priority) return false;
+      if (ticker && normalizeTicker(alert.ticker) !== ticker) return false;
+      if (watchlist && alert.watchlist !== watchlist) return false;
+      if (sector && !String(alert.sector || "").toLowerCase().includes(sector)) return false;
+      if (date && String(alert.timestamp || "").slice(0, 10) !== date) return false;
+      if (type && !`${alert.type} ${alert.explanation}`.toLowerCase().includes(type)) return false;
+      return true;
+    })
+    .sort((a, b) => alertPriorityScore(b.priority) - alertPriorityScore(a.priority) || new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+}
+
+function renderAlertsCenter() {
+  if (!output.alertsList) return;
+  const alerts = visibleAlerts();
+  const today = new Date().toISOString().slice(0, 10);
+  const active = alertHistory.filter((alert) => !alert.resolved);
+  const unread = active.filter((alert) => !alert.read);
+  const muted = active.filter((alert) => alert.muted || alert.snoozedUntil);
+  const resolved = alertHistory.filter((alert) => alert.resolved);
+  const highest = active.sort((a, b) => alertPriorityScore(b.priority) - alertPriorityScore(a.priority))[0];
+  if (output.alertsDashboardStatus) output.alertsDashboardStatus.textContent = highest ? `${highest.priority} priority` : "Monitoring";
+  if (output.alertsOverviewGrid) {
+    output.alertsOverviewGrid.innerHTML = [
+      marketMetricCard("Active Alerts", String(active.length), "Open in-app alerts"),
+      marketMetricCard("Triggered Today", String(alertHistory.filter((alert) => String(alert.timestamp || "").slice(0, 10) === today).length), "Generated today"),
+      marketMetricCard("High Priority", String(active.filter((alert) => ["Critical", "High"].includes(alert.priority)).length), "Critical or high", "warning"),
+      marketMetricCard("Unread", String(unread.length), "Need review", unread.length ? "warning" : "success"),
+      marketMetricCard("Muted", String(muted.length), "Snoozed alerts"),
+      marketMetricCard("Resolved", String(resolved.length), "Closed history"),
+    ].join("");
+  }
+  if (output.alertFeedCount) output.alertFeedCount.textContent = `${alerts.length} visible`;
+  if (output.alertFilterWatchlist) {
+    const current = output.alertFilterWatchlist.value;
+    output.alertFilterWatchlist.innerHTML = `<option value="">All watchlists</option>${watchlists.map((list) => `<option value="${escapeHtml(list.name)}">${escapeHtml(list.name)}</option>`).join("")}`;
+    output.alertFilterWatchlist.value = current;
+  }
+  output.alertsList.innerHTML = alerts.length
+    ? alerts
+        .map(
+          (alert) => `
+            <article class="alert-feed-card priority-${String(alert.priority || "Low").toLowerCase()} ${alert.read ? "is-read" : "is-unread"}">
+              <div class="alert-icon">${escapeHtml(alert.icon || "!")}</div>
+              <div class="alert-feed-body">
+                <div class="alert-feed-top">
+                  <span class="pti-badge ${alert.priority === "Critical" ? "danger" : alert.priority === "High" ? "warning" : "neutral"}">${escapeHtml(alert.priority || "Low")}</span>
+                  <strong>${escapeHtml(alert.ticker || "Market")} | ${escapeHtml(alert.type || "Alert")}</strong>
+                  <small>${alert.timestamp ? new Date(alert.timestamp).toLocaleString() : "Now"}</small>
+                </div>
+                <p>${escapeHtml(alert.explanation || "Alert triggered.")}</p>
+                <small>Suggested action: ${escapeHtml(alert.suggestedAction || "Review the related dashboard.")}</small>
+                <footer>
+                  <button type="button" data-view-brief="${escapeHtml(alert.ticker)}">View Trade Brief</button>
+                  <button type="button" data-alert-read="${escapeHtml(alert.id)}">${alert.read ? "Mark Unread" : "Mark Read"}</button>
+                  <button type="button" data-alert-snooze="${escapeHtml(alert.id)}">Snooze</button>
+                  <button type="button" data-alert-dismiss="${escapeHtml(alert.id)}">Dismiss</button>
+                </footer>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : `<article class="watchlist-empty"><strong>No alerts match these filters</strong><p>Create a rule or clear filters to see active alerts.</p></article>`;
+
+  if (output.alertRuleList) {
+    output.alertRuleList.innerHTML = watchlistAlerts.length
+      ? watchlistAlerts
+          .map((rule) => `<article class="alert-rule-card"><strong>${escapeHtml(rule.ticker || "Market")}</strong><span>${escapeHtml(alertTypeLabel(rule.type))} | ${escapeHtml(rule.priority || "Medium")}</span><small>${escapeHtml(rule.threshold || "No threshold")} | In-App active</small><button type="button" class="pti-button ghost" data-alert-rule-delete="${escapeHtml(rule.id)}">Delete</button></article>`)
+          .join("")
+      : `<article class="watchlist-empty"><strong>No alert rules yet</strong><p>Create a rule to make the app actively monitor a ticker, sector, watchlist, or system condition.</p></article>`;
+  }
+  if (output.deliveryPreferencesGrid) {
+    output.deliveryPreferencesGrid.innerHTML = [
+      ["In-App", "Active"],
+      ["Email", "Coming Soon"],
+      ["SMS", "Coming Soon"],
+      ["Push Notification", "Coming Soon"],
+      ["Slack", "Coming Soon"],
+      ["Discord", "Coming Soon"],
+      ["Webhook", "Coming Soon"],
+    ]
+      .map(([name, status]) => `<article class="delivery-card ${status === "Active" ? "active" : ""}"><strong>${name}</strong><span>${status}</span></article>`)
+      .join("");
+  }
+  renderAlertHistory();
+}
+
+function renderAlertHistory() {
+  if (!output.alertHistoryList) return;
+  const search = String(output.alertHistorySearch?.value || "").trim().toLowerCase();
+  const rows = alertHistory
+    .filter((alert) => !search || `${alert.ticker} ${alert.type} ${alert.explanation} ${alert.suggestedAction}`.toLowerCase().includes(search))
+    .slice(0, 80);
+  output.alertHistoryList.innerHTML = rows.length
+    ? rows
+        .map((alert) => `<article class="alert-history-card"><strong>${escapeHtml(alert.ticker)} | ${escapeHtml(alert.type)}</strong><span>${escapeHtml(alert.priority)} | ${alert.timestamp ? new Date(alert.timestamp).toLocaleString() : "Now"}</span><small>${escapeHtml(alert.resolved ? "Resolved" : alert.read ? "Read" : "Unread")}</small></article>`)
+        .join("")
+    : `<article class="watchlist-empty"><strong>No alert history yet</strong><p>Triggered alerts will remain searchable here.</p></article>`;
+}
+
 function renderWatchlistAlerts() {
   if (!output.watchlistAlertsList) return;
   const activeAlerts = watchlistAlerts.filter((alert) => alert.active !== false);
@@ -649,6 +996,11 @@ function renderDashboard() {
   const buys = trades.filter((trade) => trade.transaction === "Buy");
   const sells = trades.filter((trade) => trade.transaction === "Sell");
   const alerts = trades.filter((trade) => ["Buy", "Sell"].includes(trade.transaction)).slice(0, 8);
+  evaluateAlertRules();
+  const activeAppAlerts = alertHistory.filter((alert) => !alert.resolved);
+  const unreadAppAlerts = activeAppAlerts.filter((alert) => !alert.read);
+  const highestPriorityAlert = [...activeAppAlerts].sort((a, b) => alertPriorityScore(b.priority) - alertPriorityScore(a.priority))[0];
+  const recentAppAlert = [...alertHistory].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0];
   const signals = policySignals.signals || [];
   const positiveSignals = signals.filter((signal) => signal.direction === "positive");
   const negativeSignals = signals.filter((signal) => signal.direction === "negative");
@@ -691,7 +1043,7 @@ function renderDashboard() {
   if (output.dashboardScanTime) {
     output.dashboardScanTime.textContent = predictionEngine.updatedAt ? new Date(predictionEngine.updatedAt).toLocaleString() : "Not scanned yet";
   }
-  if (output.dashboardAlertCount) output.dashboardAlertCount.textContent = alerts.length;
+  if (output.dashboardAlertCount) output.dashboardAlertCount.textContent = unreadAppAlerts.length;
   output.watchlistSummaryGrid.innerHTML = [
     metricCard("Watchlists", String(watchlists.length || 1), "Open Watchlists 2.0", "watchlist"),
     metricCard("Tracked Stocks", String(new Set(watchlistRows.map((row) => row.ticker)).size || (settings.stockIdeas || []).length), "Unique monitored tickers", "watchlist"),
@@ -699,6 +1051,14 @@ function renderDashboard() {
     metricCard("High-Confidence Picks", String(highConfidenceAlerts), "High or very high confidence", "watchlist"),
     metricCard("Needs Attention", String(needsAttention), "Data issues or weakening names", "watchlist"),
   ].join("");
+
+  if (output.dashboardAlerts) {
+    output.dashboardAlerts.innerHTML = [
+      metricCard("Unread Alerts", String(unreadAppAlerts.length), "Open Alerts Center", "alerts"),
+      metricCard("Highest Priority", highestPriorityAlert?.priority || "None", highestPriorityAlert?.ticker || "No active priority alert", "alerts"),
+      metricCard("Recent Alert", recentAppAlert?.type || "None", recentAppAlert?.ticker || "No alert history yet", "alerts"),
+    ].join("");
+  }
 
   if (output.congressActivityCount) output.congressActivityCount.textContent = trades.length;
   output.congressActivityGrid.innerHTML = [
@@ -1851,6 +2211,7 @@ function renderTradeBrief() {
   const targetTwo = Number(item.currentPrice) && Number(item.forecasts?.thirtyDay?.expectedUpside)
     ? dollarsPrecise(Number(item.currentPrice) * (1 + Number(item.forecasts.thirtyDay.expectedUpside) / 100))
     : "";
+  const relatedAlerts = alertHistory.filter((alert) => normalizeTicker(alert.ticker) === normalizeTicker(item.ticker)).slice(0, 5);
 
   output.tradeBriefPanel.innerHTML = `
     <article class="trade-brief-report">
@@ -1970,6 +2331,22 @@ function renderTradeBrief() {
 
         <section class="brief-section brief-wide">
           <div class="brief-section-heading">
+            <span>Related Alerts</span>
+            <strong>${relatedAlerts.length}</strong>
+          </div>
+          <div class="alert-brief-list">
+            ${
+              relatedAlerts.length
+                ? relatedAlerts
+                    .map((alert) => `<article><span class="pti-badge ${alert.priority === "Critical" ? "danger" : alert.priority === "High" ? "warning" : "neutral"}">${escapeHtml(alert.priority)}</span><strong>${escapeHtml(alert.type)}</strong><small>${alert.timestamp ? new Date(alert.timestamp).toLocaleString() : "Now"} | ${escapeHtml(alert.resolved ? "Resolved" : alert.read ? "Read" : "Unread")}</small><p>${escapeHtml(alert.explanation)}</p></article>`)
+                    .join("")
+                : `<article><strong>No related alerts yet</strong><p>Create an alert to track score, trend, congress, policy, or price changes for ${escapeHtml(item.ticker)}.</p></article>`
+            }
+          </div>
+        </section>
+
+        <section class="brief-section brief-wide">
+          <div class="brief-section-heading">
             <span>Historical Performance</span>
             <strong>Coming online</strong>
           </div>
@@ -1980,7 +2357,7 @@ function renderTradeBrief() {
       <footer class="brief-actions">
         <button type="button" data-page-target="predictions">Return to Predictions</button>
         <button type="button" data-page-target="watchlist">Add to Watchlist</button>
-        <button type="button">Create Alert</button>
+        <button type="button" data-create-alert-for="${escapeHtml(item.ticker)}">Create Alert</button>
         <button type="button">Share Report</button>
       </footer>
     </article>
@@ -2481,6 +2858,7 @@ async function runPredictionScan() {
     renderPredictions();
     renderMarketIntelligence();
     renderPerformanceCenter();
+    renderAlertsCenter();
   } catch (error) {
     if (output.predictionScanMessage) output.predictionScanMessage.textContent = predictionErrorMessage(error);
   } finally {
@@ -3138,6 +3516,7 @@ function setPage(pageName) {
   if (target === "briefs") renderTradeBrief();
   if (target === "market") renderMarketIntelligence();
   if (target === "performance") renderPerformanceCenter();
+  if (target === "alerts") renderAlertsCenter();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -3198,18 +3577,86 @@ output.watchlistAlertForm?.addEventListener("submit", (event) => {
   event.preventDefault();
   const ticker = normalizeTicker(output.alertTickerInput.value);
   if (!ticker) return;
-  watchlistAlerts.unshift({
-    id: `${Date.now()}-${ticker}`,
+  watchlistAlerts.unshift(createAlertRule({
     ticker,
     type: output.alertTypeInput.value,
+    priority: "High",
     threshold: output.alertThresholdInput.value.trim(),
-    active: true,
-    createdAt: new Date().toISOString(),
-  });
+    source: "watchlist",
+  }));
   output.alertTickerInput.value = "";
   output.alertThresholdInput.value = "";
   saveWatchlists();
   renderWatchlists();
+  renderAlertsCenter();
+  renderDashboard();
+});
+output.alertRuleForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  watchlistAlerts.unshift(createAlertRule({
+    ticker: output.alertRuleTicker.value,
+    type: output.alertRuleType.value,
+    priority: output.alertRulePriority.value,
+    threshold: output.alertRuleThreshold.value,
+    source: "alerts",
+  }));
+  output.alertRuleTicker.value = "";
+  output.alertRuleThreshold.value = "";
+  saveWatchlists();
+  renderAlertsCenter();
+  renderWatchlists();
+  renderDashboard();
+});
+[
+  output.alertFilterStatus,
+  output.alertFilterPriority,
+  output.alertFilterTicker,
+  output.alertFilterWatchlist,
+  output.alertFilterSector,
+  output.alertFilterDate,
+  output.alertFilterType,
+].filter(Boolean).forEach((control) => {
+  control.addEventListener("input", renderAlertsCenter);
+  control.addEventListener("change", renderAlertsCenter);
+});
+output.alertHistorySearch?.addEventListener("input", renderAlertHistory);
+output.exportAlertsButton?.addEventListener("click", () => {
+  const payload = JSON.stringify({ exportedAt: new Date().toISOString(), alerts: alertHistory }, null, 2);
+  const blob = new Blob([payload], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "publictradeintel-alert-history.json";
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+output.alertRuleList?.addEventListener("click", (event) => {
+  const deleteButton = event.target.closest("[data-alert-rule-delete]");
+  if (!deleteButton) return;
+  watchlistAlerts = watchlistAlerts.filter((rule) => rule.id !== deleteButton.dataset.alertRuleDelete);
+  saveWatchlists();
+  renderAlertsCenter();
+  renderWatchlists();
+  renderDashboard();
+});
+output.alertsList?.addEventListener("click", (event) => {
+  const readButton = event.target.closest("[data-alert-read]");
+  const dismissButton = event.target.closest("[data-alert-dismiss]");
+  const snoozeButton = event.target.closest("[data-alert-snooze]");
+  const id = readButton?.dataset.alertRead || dismissButton?.dataset.alertDismiss || snoozeButton?.dataset.alertSnooze;
+  const alert = alertHistory.find((item) => item.id === id);
+  if (!alert) return;
+  if (readButton) alert.read = !alert.read;
+  if (dismissButton) {
+    alert.read = true;
+    alert.resolved = true;
+  }
+  if (snoozeButton) {
+    alert.read = true;
+    alert.muted = true;
+    alert.snoozedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  }
+  saveWatchlists();
+  renderAlertsCenter();
   renderDashboard();
 });
 output.watchlistFilter?.addEventListener("change", renderWatchlists);
@@ -3365,6 +3812,13 @@ document.addEventListener("click", (event) => {
   if (sectorButton) {
     selectedMarketSector = sectorButton.dataset.marketSector || "All sectors";
     renderMarketIntelligence();
+  }
+  const createAlertButton = event.target.closest("[data-create-alert-for]");
+  if (createAlertButton) {
+    const ticker = normalizeTicker(createAlertButton.dataset.createAlertFor);
+    setPage("alerts");
+    if (output.alertRuleTicker) output.alertRuleTicker.value = ticker;
+    output.alertRuleTicker?.focus();
   }
 });
 output.portfolioList?.addEventListener("click", (event) => {

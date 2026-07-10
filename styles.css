@@ -2026,6 +2026,188 @@ li {
   padding: 9px 10px;
 }
 
+.alerts-center,
+.alerts-section-card {
+  display: grid;
+  gap: var(--space-4, 16px);
+}
+
+.alerts-overview-grid,
+.alert-filter-grid,
+.delivery-preferences-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3, 12px);
+}
+
+.alert-rule-form,
+.alert-history-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3, 12px);
+}
+
+.alert-rule-form label,
+.alert-history-toolbar label {
+  min-width: min(100%, 180px);
+  flex: 1;
+}
+
+.alert-rule-form button,
+.alert-history-toolbar button {
+  width: auto;
+}
+
+.alert-rule-list,
+.alert-feed,
+.alert-history-list {
+  display: grid;
+  gap: var(--space-3, 12px);
+}
+
+.alert-rule-card,
+.alert-feed-card,
+.alert-history-card,
+.delivery-card {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: rgba(255, 255, 255, 0.04);
+  padding: var(--space-3, 12px);
+}
+
+.alert-rule-card,
+.alert-history-card,
+.delivery-card {
+  display: grid;
+  gap: var(--space-1, 4px);
+}
+
+.alert-rule-card strong,
+.alert-history-card strong,
+.delivery-card strong {
+  color: var(--text-primary);
+  font-weight: 950;
+}
+
+.alert-rule-card span,
+.alert-history-card span,
+.delivery-card span {
+  color: var(--text-secondary);
+  font-weight: 800;
+}
+
+.alert-rule-card small,
+.alert-history-card small {
+  color: var(--text-muted);
+  font-weight: 800;
+}
+
+.delivery-card.active {
+  border-color: rgba(69, 209, 154, 0.45);
+  background: rgba(69, 209, 154, 0.12);
+}
+
+.alert-feed-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: var(--space-3, 12px);
+  border-left: 4px solid var(--color-border);
+}
+
+.alert-feed-card.priority-critical {
+  border-left-color: var(--color-danger);
+}
+
+.alert-feed-card.priority-high {
+  border-left-color: var(--color-warning);
+}
+
+.alert-feed-card.priority-medium {
+  border-left-color: var(--color-info);
+}
+
+.alert-feed-card.is-read {
+  opacity: 0.76;
+}
+
+.alert-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: rgba(69, 209, 154, 0.13);
+  color: var(--color-success);
+  font-weight: 950;
+}
+
+.alert-feed-body {
+  display: grid;
+  gap: var(--space-2, 8px);
+}
+
+.alert-feed-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.alert-feed-top strong {
+  color: var(--text-primary);
+  font-weight: 950;
+}
+
+.alert-feed-top small,
+.alert-feed-body small {
+  color: var(--text-secondary);
+  font-weight: 800;
+}
+
+.alert-feed-body p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.alert-feed-card footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+}
+
+.alert-feed-card footer button {
+  width: auto;
+  padding: 9px 11px;
+  font-size: var(--font-size-caption);
+}
+
+.alert-brief-list {
+  display: grid;
+  gap: var(--space-2, 8px);
+}
+
+.alert-brief-list article {
+  display: grid;
+  gap: var(--space-1, 4px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  background: rgba(255, 255, 255, 0.04);
+  padding: var(--space-3, 12px);
+}
+
+.alert-brief-list strong {
+  color: var(--text-primary);
+}
+
+.alert-brief-list p,
+.alert-brief-list small {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
 @media (min-width: 1380px) {
   .prediction-grid {
     grid-template-columns: repeat(4, minmax(260px, 1fr));
@@ -2045,7 +2227,10 @@ li {
   .watchlist-overview-grid,
   .watchlist-card-grid,
   .watchlist-detail-grid,
-  .watchlist-alert-list {
+  .watchlist-alert-list,
+  .alerts-overview-grid,
+  .alert-filter-grid,
+  .delivery-preferences-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2088,9 +2273,16 @@ li {
   .watchlist-card-grid,
   .watchlist-detail-grid,
   .watchlist-alert-list,
+  .alerts-overview-grid,
+  .alert-filter-grid,
+  .delivery-preferences-grid,
   .watchlist-card-stats,
   .watchlist-stock-metrics,
   .prediction-audit-card {
+    grid-template-columns: 1fr;
+  }
+
+  .alert-feed-card {
     grid-template-columns: 1fr;
   }
 
