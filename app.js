@@ -53,6 +53,8 @@ const output = {
   dashboardAlerts: document.querySelector("#dashboardAlerts"),
   dashboardAlertCount: document.querySelector("#dashboardAlertCount"),
   tradeBriefPanel: document.querySelector("#tradeBriefPanel"),
+  pageBreadcrumb: document.querySelector("#pageBreadcrumb"),
+  pageTitle: document.querySelector("#pageTitle"),
 };
 
 const defaultPlans = [
@@ -159,6 +161,19 @@ let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVe
 let predictionView = "top25OneDay";
 let portfolio = [];
 let selectedBriefTicker = "";
+
+const pageLabels = {
+  dashboard: "Dashboard",
+  predictions: "Predictions",
+  briefs: "AI Trade Briefs",
+  watchlist: "Watchlists",
+  market: "Market",
+  congress: "Congress",
+  policy: "Policy",
+  performance: "Performance",
+  alerts: "Alerts",
+  settings: "Settings",
+};
 
 function dollars(value) {
   return new Intl.NumberFormat("en-US", {
@@ -1815,12 +1830,15 @@ function recordRecommendation(recommendation) {
 
 function setPage(pageName) {
   const target = pageName || "dashboard";
+  const label = pageLabels[target] || "Dashboard";
   document.querySelectorAll("[data-page]").forEach((section) => {
     section.classList.toggle("is-active", section.dataset.page === target);
   });
   document.querySelectorAll("[data-page-target]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.pageTarget === target);
   });
+  if (output.pageBreadcrumb) output.pageBreadcrumb.textContent = label;
+  if (output.pageTitle) output.pageTitle.textContent = label;
   if (target === "briefs") renderTradeBrief();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }

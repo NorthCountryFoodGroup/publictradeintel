@@ -28,6 +28,8 @@ const scanUniverse = document.querySelector("#scanUniverse");
 const customTickers = document.querySelector("#customTickers");
 const activeScanUniverse = document.querySelector("#activeScanUniverse");
 const scanCandidateCount = document.querySelector("#scanCandidateCount");
+const adminBreadcrumb = document.querySelector("#adminBreadcrumb");
+const adminPageTitle = document.querySelector("#adminPageTitle");
 
 const universeLabels = {
   watchlist: "Watchlist only",
@@ -35,6 +37,16 @@ const universeLabels = {
   nasdaq100: "Nasdaq-100",
   etfs: "ETFs",
   combined: "Combined universe",
+};
+
+const adminSectionLabels = {
+  engine: "Prediction Engine",
+  market: "Market Data",
+  universe: "Scan Universe",
+  users: "Users",
+  congress: "Congress Feed",
+  policy: "Policy Feed",
+  health: "System Health",
 };
 
 const universeBaseCounts = {
@@ -163,12 +175,15 @@ function renderPredictionHealth(health) {
 
 function setAdminSection(sectionName) {
   const target = sectionName || "engine";
+  const label = adminSectionLabels[target] || "Prediction Engine";
   document.querySelectorAll("[data-admin-section]").forEach((section) => {
     section.classList.toggle("is-active", section.dataset.adminSection === target);
   });
   document.querySelectorAll("[data-admin-target]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.adminTarget === target);
   });
+  if (adminBreadcrumb) adminBreadcrumb.textContent = label;
+  if (adminPageTitle) adminPageTitle.textContent = label;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 

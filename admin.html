@@ -8,16 +8,17 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="dashboard-frame">
-      <aside class="side-nav admin-side-nav" aria-label="Admin navigation">
+    <div class="dashboard-frame app-layout">
+      <aside class="side-nav admin-side-nav app-sidebar" aria-label="Admin navigation">
         <div class="brand-block">
           <span>PTI</span>
           <strong>Admin backend</strong>
         </div>
         <nav>
           <button type="button" class="admin-nav-link is-active" data-admin-target="engine">Prediction Engine</button>
-          <button type="button" class="admin-nav-link" data-admin-target="universe">Scan Universe</button>
           <button type="button" class="admin-nav-link" data-admin-target="market">Market Data</button>
+          <button type="button" class="admin-nav-link" data-admin-target="universe">Scan Universe</button>
+          <button type="button" class="admin-nav-link" data-admin-target="users">Users</button>
           <button type="button" class="admin-nav-link" data-admin-target="congress">Congress Feed</button>
           <button type="button" class="admin-nav-link" data-admin-target="policy">Policy Feed</button>
           <button type="button" class="admin-nav-link" data-admin-target="health">System Health</button>
@@ -26,6 +27,27 @@
       </aside>
 
       <main class="app-shell admin-shell dashboard-main">
+      <header class="app-topbar">
+        <div>
+          <nav class="breadcrumbs" aria-label="Breadcrumb">
+            <span>Admin</span>
+            <span id="adminBreadcrumb">Prediction Engine</span>
+          </nav>
+          <strong id="adminPageTitle">Prediction Engine</strong>
+        </div>
+        <label class="global-search">
+          <span>Search</span>
+          <input id="adminGlobalSearch" placeholder="Search admin settings..." autocomplete="off" />
+        </label>
+        <div class="topbar-actions">
+          <button type="button" class="icon-button" aria-label="Notifications">!</button>
+          <button type="button" class="profile-button" aria-label="User profile menu">
+            <span>A</span>
+            <strong>Admin</strong>
+          </button>
+        </div>
+      </header>
+
       <section class="hero admin-hero">
         <div>
           <p class="eyebrow">Admin backend</p>
@@ -160,6 +182,21 @@
         </div>
         <p class="form-message admin-section-block" data-admin-section="universe" id="scanSettingsMessage"></p>
 
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="users">
+          <div>
+            <h2>Users</h2>
+            <p class="muted-copy">User accounts and subscriptions are planned for a later sprint. Existing private login remains unchanged.</p>
+          </div>
+        </div>
+        <div class="admin-list admin-section-block" data-admin-section="users">
+          <article class="editor-row">
+            <label class="wide-field">
+              <span>Current access model</span>
+              <input readonly value="Private app login with configured Render environment variables" />
+            </label>
+          </article>
+        </div>
+
         <div class="section-heading editor-heading admin-section-block" data-admin-section="health">
           <div>
             <h2>Prediction engine health</h2>
@@ -226,6 +263,7 @@
       <button type="button" class="admin-nav-link is-active" data-admin-target="engine">Engine</button>
       <button type="button" class="admin-nav-link" data-admin-target="universe">Universe</button>
       <button type="button" class="admin-nav-link" data-admin-target="market">Market</button>
+      <button type="button" class="admin-nav-link" data-admin-target="users">Users</button>
       <button type="button" class="admin-nav-link" data-admin-target="health">Health</button>
     </nav>
 

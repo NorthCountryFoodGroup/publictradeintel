@@ -11,26 +11,49 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="dashboard-frame">
-      <aside class="side-nav" aria-label="Main navigation">
+    <div class="dashboard-frame app-layout">
+      <aside class="side-nav app-sidebar" aria-label="Main navigation">
         <div class="brand-block">
           <span>PTI</span>
-          <strong>PublicTradeIntel</strong>
+          <strong>Public Trade Intel</strong>
         </div>
         <nav>
           <button type="button" class="nav-link is-active" data-page-target="dashboard">Dashboard</button>
           <button type="button" class="nav-link" data-page-target="predictions">Predictions</button>
           <button type="button" class="nav-link" data-page-target="briefs">AI Trade Briefs</button>
-          <button type="button" class="nav-link" data-page-target="watchlist">Watchlist</button>
+          <button type="button" class="nav-link" data-page-target="watchlist">Watchlists</button>
+          <button type="button" class="nav-link" data-page-target="market">Market</button>
           <button type="button" class="nav-link" data-page-target="congress">Congress</button>
           <button type="button" class="nav-link" data-page-target="policy">Policy</button>
           <button type="button" class="nav-link" data-page-target="performance">Performance</button>
+          <button type="button" class="nav-link" data-page-target="alerts">Alerts</button>
           <button type="button" class="nav-link" data-page-target="settings">Settings</button>
         </nav>
         <a class="admin-link" href="admin.html">Admin backend</a>
       </aside>
 
       <main class="app-shell dashboard-main">
+      <header class="app-topbar">
+        <div>
+          <nav class="breadcrumbs" aria-label="Breadcrumb">
+            <span>Public Trade Intel</span>
+            <span id="pageBreadcrumb">Dashboard</span>
+          </nav>
+          <strong id="pageTitle">Dashboard</strong>
+        </div>
+        <label class="global-search">
+          <span>Search</span>
+          <input id="globalSearch" placeholder="Search ticker, member, signal..." autocomplete="off" />
+        </label>
+        <div class="topbar-actions">
+          <button type="button" class="icon-button" aria-label="Notifications">!</button>
+          <button type="button" class="profile-button" aria-label="User profile menu">
+            <span>R</span>
+            <strong>Profile</strong>
+          </button>
+        </div>
+      </header>
+
       <section class="hero">
         <div>
           <p class="eyebrow">PublicTradeIntel</p>
@@ -170,7 +193,23 @@
         <div class="trade-brief-panel" id="tradeBriefPanel"></div>
       </section>
 
-      <section class="stock-section dashboard-page" data-page="settings">
+      <section class="dashboard-page" data-page="settings">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Settings</p>
+            <h2>Workspace settings</h2>
+          </div>
+        </div>
+        <article class="dashboard-card">
+          <h3>Private app settings</h3>
+          <p class="muted-copy">Your login, API keys, scan universe, and backend controls are managed in the admin backend.</p>
+          <div class="hero-links">
+            <a href="admin.html">Open admin backend</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="stock-section dashboard-page" data-page="market">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Stock ideas</p>
@@ -205,7 +244,7 @@
         <div class="stock-grid" id="stockGrid"></div>
       </section>
 
-      <section class="best-section dashboard-page" data-page="settings">
+      <section class="best-section dashboard-page" data-page="market">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Fastest growth buy recommendations</p>
@@ -237,7 +276,7 @@
         <div class="stock-grid" id="dayTradeGrid"></div>
       </section>
 
-      <section class="alerts-section dashboard-page" data-page="congress">
+      <section class="alerts-section dashboard-page" data-page="alerts">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Congress trade alerts</p>
@@ -317,8 +356,8 @@
       <button type="button" class="nav-link is-active" data-page-target="dashboard">Home</button>
       <button type="button" class="nav-link" data-page-target="predictions">Picks</button>
       <button type="button" class="nav-link" data-page-target="briefs">Briefs</button>
-      <button type="button" class="nav-link" data-page-target="watchlist">List</button>
-      <button type="button" class="nav-link" data-page-target="congress">Intel</button>
+      <button type="button" class="nav-link" data-page-target="watchlist">Lists</button>
+      <button type="button" class="nav-link" data-page-target="alerts">Alerts</button>
     </nav>
 
     <script src="app.js"></script>
