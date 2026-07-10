@@ -4,6 +4,8 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
+const adminJs = fs.readFileSync(path.join(root, "admin.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 function hexToRgb(hex) {
@@ -43,6 +45,17 @@ assert.match(html, /id="alertsMenuButton"/, "alerts menu button exists");
 assert.match(html, /id="alertsDropdown"/, "alerts dropdown exists");
 assert.match(html, /Admin Area/, "admin navigation exists for authenticated admin users");
 assert.match(html, /Prediction Scan Settings/, "prediction scan settings remains visible in admin navigation");
+assert.match(html, /styles\.css\?v=20260710-ux-acceptance/, "main stylesheet is cache-busted");
+assert.match(html, /app\.js\?v=20260710-ux-acceptance/, "main app script is cache-busted");
+assert.match(adminHtml, /styles\.css\?v=20260710-ux-acceptance/, "admin stylesheet is cache-busted");
+assert.match(adminHtml, /admin\.js\?v=20260710-ux-acceptance/, "admin script is cache-busted");
+assert.match(adminHtml, /data-admin-target="overview">Admin Dashboard/, "admin dashboard navigation exists");
+assert.match(adminHtml, /data-admin-section="overview"/, "admin dashboard panel exists");
+assert.match(adminHtml, /id="adminProfileMenuButton"/, "admin profile menu button exists");
+assert.match(adminHtml, /id="adminAlertsMenuButton"/, "admin alerts menu button exists");
+assert.match(adminJs, /adminHashTargets/, "admin hash routing map exists");
+assert.match(adminJs, /"scan-universe":\s*"universe"/, "scan-universe hash opens prediction scan settings");
+assert.match(adminJs, /setAdminSection\(adminSectionFromHash\(\)\)/, "admin page initializes from hash");
 assert.match(css, /Version 2\.0 Visual Recovery Hotfix/, "visual recovery override exists");
 assert.match(css, /Public Trade Intel UX Reset - Hybrid C/, "Hybrid C visual reset override exists");
 assert.match(css, /\.dashboard-main\.app-shell\s*{[^}]*max-width:\s*none/s, "main content is not capped to a narrow column");

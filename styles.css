@@ -4421,7 +4421,8 @@ button:disabled,
 .performance-center,
 .market-intelligence-center,
 .watchlist-workspace,
-.alerts-center {
+.alerts-center,
+.admin-overview-grid {
   display: grid;
   gap: 16px;
 }
@@ -4441,7 +4442,8 @@ button:disabled,
 .watchlist-card-grid,
 .watchlist-detail-grid,
 .alert-filter-grid,
-.delivery-preferences-grid {
+.delivery-preferences-grid,
+.admin-overview-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
 }
 

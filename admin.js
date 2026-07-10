@@ -30,6 +30,10 @@ const activeScanUniverse = document.querySelector("#activeScanUniverse");
 const scanCandidateCount = document.querySelector("#scanCandidateCount");
 const adminBreadcrumb = document.querySelector("#adminBreadcrumb");
 const adminPageTitle = document.querySelector("#adminPageTitle");
+const adminProfileMenuButton = document.querySelector("#adminProfileMenuButton");
+const adminProfileDropdown = document.querySelector("#adminProfileDropdown");
+const adminAlertsMenuButton = document.querySelector("#adminAlertsMenuButton");
+const adminAlertsDropdown = document.querySelector("#adminAlertsDropdown");
 
 const universeLabels = {
   watchlist: "Watchlist only",
@@ -40,13 +44,27 @@ const universeLabels = {
 };
 
 const adminSectionLabels = {
+  overview: "Admin Dashboard",
   engine: "Prediction Engine",
   market: "Market Data",
-  universe: "Scan Universe",
+  universe: "Prediction Scan Settings",
   users: "Users",
   congress: "Congress Feed",
   policy: "Policy Feed",
   health: "System Health",
+};
+
+const adminHashTargets = {
+  "admin-dashboard": "overview",
+  "prediction-engine": "engine",
+  "prediction-scan-settings": "universe",
+  "scan-universe": "universe",
+  "market-data": "market",
+  users: "users",
+  "congress-feed": "congress",
+  "policy-feed": "policy",
+  "system-health": "health",
+  health: "health",
 };
 
 const universeBaseCounts = {
@@ -60,7 +78,31 @@ const universeBaseCounts = {
 document.addEventListener("click", (event) => {
   const navButton = event.target.closest("[data-admin-target]");
   if (navButton) setAdminSection(navButton.dataset.adminTarget);
+  if (!event.target.closest(".topbar-menu-wrap")) closeAdminTopbarMenus();
 });
+
+function closeAdminTopbarMenus() {
+  if (adminProfileDropdown) adminProfileDropdown.hidden = true;
+  if (adminAlertsDropdown) adminAlertsDropdown.hidden = true;
+  adminProfileMenuButton?.setAttribute("aria-expanded", "false");
+  adminAlertsMenuButton?.setAttribute("aria-expanded", "false");
+}
+
+function toggleAdminTopbarMenu(menuName) {
+  const isProfile = menuName === "profile";
+  const dropdown = isProfile ? adminProfileDropdown : adminAlertsDropdown;
+  const button = isProfile ? adminProfileMenuButton : adminAlertsMenuButton;
+  if (!dropdown || !button) return;
+  const willOpen = dropdown.hidden;
+  closeAdminTopbarMenus();
+  dropdown.hidden = !willOpen;
+  button.setAttribute("aria-expanded", String(willOpen));
+}
+
+function adminSectionFromHash() {
+  const key = String(location.hash || "").replace("#", "").trim().toLowerCase();
+  return adminHashTargets[key] || "overview";
+}
 
 function adminHeaders() {
   return {
@@ -174,8 +216,8 @@ function renderPredictionHealth(health) {
 }
 
 function setAdminSection(sectionName) {
-  const target = sectionName || "engine";
-  const label = adminSectionLabels[target] || "Prediction Engine";
+  const target = sectionName || "overview";
+  const label = adminSectionLabels[target] || "Admin Dashboard";
   document.querySelectorAll("[data-admin-section]").forEach((section) => {
     section.classList.toggle("is-active", section.dataset.adminSection === target);
   });
@@ -184,6 +226,7 @@ function setAdminSection(sectionName) {
   });
   if (adminBreadcrumb) adminBreadcrumb.textContent = label;
   if (adminPageTitle) adminPageTitle.textContent = label;
+  closeAdminTopbarMenus();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -462,6 +505,7 @@ loginForm.addEventListener("submit", async (event) => {
     ]);
     renderConfig(config);
     renderSummary(summary);
+    setAdminSection(adminSectionFromHash());
     loginMessage.textContent = "Admin loaded.";
   } catch (error) {
     loginMessage.textContent = error.message;
@@ -591,3 +635,33 @@ async function importCongress(mode) {
 
 document.querySelector("#appendCongress").addEventListener("click", () => importCongress("append"));
 document.querySelector("#replaceCongress").addEventListener("click", () => importCongress("replace"));
+
+adminProfileMenuButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleAdminTopbarMenu("profile");
+});
+
+adminProfileDropdown?.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+
+adminAlertsMenuButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleAdminTopbarMenu("alerts");
+});
+
+adminAlertsDropdown?.addEventListener("click", (event) => {
+  const navButton = event.target.closest("[data-admin-target]");
+  if (navButton) setAdminSection(navButton.dataset.adminTarget);
+  event.stopPropagation();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeAdminTopbarMenus();
+});
+
+window.addEventListener("hashchange", () => {
+  setAdminSection(adminSectionFromHash());
+});
+
+setAdminSection(adminSectionFromHash());

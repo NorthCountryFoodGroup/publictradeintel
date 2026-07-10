@@ -1,5 +1,14 @@
 # Public Trade Intel Changelog
 
+## Public Trade Intel UX Acceptance Pass
+
+- Added cache-busting query strings for `styles.css`, `app.js`, and `admin.js`.
+- Added `UX_ACCEPTANCE.md` with page, viewport, interaction, and validation results.
+- Added a real Admin Dashboard overview panel.
+- Added admin deep-link routing for Prediction Engine, Prediction Scan Settings, Market Data, Congress Feed, Policy Feed, and System Health.
+- Added functional admin topbar profile and alerts dropdowns.
+- Confirmed Hybrid C light-shell checks through syntax and smoke tests.
+
 ## Completed Major Phases
 
 ### Prediction Scan Flow
@@ -74,4 +83,3 @@
 - Added custom ticker textarea.
 - Added active universe and candidate count display.
 - Added save settings action.
-

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#276a4b" />
     <title>Steady Start Admin</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260710-ux-acceptance" />
   </head>
   <body>
     <div class="dashboard-frame app-layout">
@@ -15,9 +15,10 @@
           <strong>Admin backend</strong>
         </div>
         <nav>
-          <button type="button" class="admin-nav-link is-active" data-admin-target="engine">Prediction Engine</button>
+          <button type="button" class="admin-nav-link is-active" data-admin-target="overview">Admin Dashboard</button>
+          <button type="button" class="admin-nav-link" data-admin-target="engine">Prediction Engine</button>
+          <button type="button" class="admin-nav-link" data-admin-target="universe">Prediction Scan Settings</button>
           <button type="button" class="admin-nav-link" data-admin-target="market">Market Data</button>
-          <button type="button" class="admin-nav-link" data-admin-target="universe">Scan Universe</button>
           <button type="button" class="admin-nav-link" data-admin-target="users">Users</button>
           <button type="button" class="admin-nav-link" data-admin-target="congress">Congress Feed</button>
           <button type="button" class="admin-nav-link" data-admin-target="policy">Policy Feed</button>
@@ -31,20 +32,51 @@
         <div>
           <nav class="breadcrumbs" aria-label="Breadcrumb">
             <span>Admin</span>
-            <span id="adminBreadcrumb">Prediction Engine</span>
+            <span id="adminBreadcrumb">Admin Dashboard</span>
           </nav>
-          <strong id="adminPageTitle">Prediction Engine</strong>
+          <strong id="adminPageTitle">Admin Dashboard</strong>
         </div>
         <label class="global-search">
           <span>Search</span>
           <input id="adminGlobalSearch" placeholder="Search admin settings..." autocomplete="off" />
         </label>
         <div class="topbar-actions">
-          <button type="button" class="icon-button" aria-label="Notifications">!</button>
-          <button type="button" class="profile-button" aria-label="User profile menu">
-            <span>A</span>
-            <strong>Admin</strong>
-          </button>
+          <div class="topbar-menu-wrap">
+            <button type="button" class="icon-button alerts-button" id="adminAlertsMenuButton" aria-label="Open admin alerts menu" aria-expanded="false" aria-controls="adminAlertsDropdown">
+              <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+                <path d="M10 21h4" />
+              </svg>
+              <em>0</em>
+            </button>
+            <div class="topbar-dropdown alerts-dropdown" id="adminAlertsDropdown" hidden>
+              <div class="dropdown-heading">
+                <strong>Admin Alerts</strong>
+                <span>0 unread</span>
+              </div>
+              <p>No new alerts.</p>
+              <button type="button" data-admin-target="health">View System Health</button>
+            </div>
+          </div>
+          <div class="topbar-menu-wrap">
+            <button type="button" class="profile-button" id="adminProfileMenuButton" aria-label="Open admin profile menu" aria-expanded="false" aria-controls="adminProfileDropdown">
+              <span>A</span>
+              <strong>Admin</strong>
+            </button>
+            <div class="topbar-dropdown profile-dropdown" id="adminProfileDropdown" hidden>
+              <div class="dropdown-heading profile-heading">
+                <span>A</span>
+                <div>
+                  <strong>Admin</strong>
+                  <small>Authenticated backend</small>
+                </div>
+              </div>
+              <button type="button" disabled>Profile <small>Coming Soon</small></button>
+              <button type="button" disabled>Preferences <small>Coming Soon</small></button>
+              <button type="button" disabled>Help &amp; Support <small>Coming Soon</small></button>
+              <a class="dropdown-action" href="index.html">Back to App</a>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -106,7 +138,37 @@
       </section>
 
       <section class="admin-panel" id="adminPanel" hidden>
-        <div class="section-heading admin-section-block is-active" data-admin-section="engine">
+        <div class="section-heading admin-section-block is-active" data-admin-section="overview">
+          <div>
+            <p class="eyebrow">Admin Dashboard</p>
+            <h2>Backend control center</h2>
+            <p class="muted-copy">Jump to prediction scans, market data, feed status, or system health in one click.</p>
+          </div>
+        </div>
+        <div class="admin-overview-grid admin-section-block is-active" data-admin-section="overview">
+          <article class="dashboard-card">
+            <div class="card-heading"><span>Prediction Engine</span><strong>Models</strong></div>
+            <p class="muted-copy">Edit model content and starter settings.</p>
+            <button type="button" data-admin-target="engine">Open Prediction Engine</button>
+          </article>
+          <article class="dashboard-card">
+            <div class="card-heading"><span>Scan Settings</span><strong>Universe</strong></div>
+            <p class="muted-copy">Choose watchlist, S&P 500, Nasdaq-100, ETFs, combined, or custom tickers.</p>
+            <button type="button" data-admin-target="universe">Open Prediction Scan Settings</button>
+          </article>
+          <article class="dashboard-card">
+            <div class="card-heading"><span>Market Data</span><strong>Quotes</strong></div>
+            <p class="muted-copy">Refresh market data and review current provider status.</p>
+            <button type="button" data-admin-target="market">Open Market Data</button>
+          </article>
+          <article class="dashboard-card">
+            <div class="card-heading"><span>System Health</span><strong>Validation</strong></div>
+            <p class="muted-copy">Run prediction scans and inspect engine health checks.</p>
+            <button type="button" data-admin-target="health">Open System Health</button>
+          </article>
+        </div>
+
+        <div class="section-heading admin-section-block" data-admin-section="engine">
           <div>
             <p class="eyebrow">Prediction Engine</p>
             <h2>Model content and app settings</h2>
@@ -114,7 +176,7 @@
           <button type="button" id="saveConfig">Save changes</button>
         </div>
 
-        <div class="admin-editor admin-section-block is-active" data-admin-section="engine">
+        <div class="admin-editor admin-section-block" data-admin-section="engine">
           <label>
             <span>First emergency layer target</span>
             <input type="number" min="0" step="1" id="firstEmergencyTarget" />
@@ -129,15 +191,15 @@
           </label>
         </div>
 
-        <div class="section-heading editor-heading admin-section-block is-active" data-admin-section="engine">
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="engine">
           <h2>Starter paths</h2>
         </div>
-        <div class="admin-list admin-section-block is-active" data-admin-section="engine" id="plansEditor"></div>
+        <div class="admin-list admin-section-block" data-admin-section="engine" id="plansEditor"></div>
 
-        <div class="section-heading editor-heading admin-section-block is-active" data-admin-section="engine">
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="engine">
           <h2>Micro-goals</h2>
         </div>
-        <div class="admin-list admin-section-block is-active" data-admin-section="engine" id="goalsEditor"></div>
+        <div class="admin-list admin-section-block" data-admin-section="engine" id="goalsEditor"></div>
 
         <div class="section-heading editor-heading admin-section-block" data-admin-section="market">
           <div>
@@ -267,6 +329,6 @@
       <button type="button" class="admin-nav-link" data-admin-target="health">Health</button>
     </nav>
 
-    <script src="admin.js"></script>
+    <script src="admin.js?v=20260710-ux-acceptance"></script>
   </body>
 </html>
