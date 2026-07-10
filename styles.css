@@ -319,6 +319,67 @@ textarea {
   padding-top: 14px;
 }
 
+.executive-dashboard {
+  display: grid;
+  gap: 16px;
+}
+
+.executive-section {
+  display: grid;
+  gap: 14px;
+}
+
+.executive-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.compact-executive-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.opportunity-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.executive-two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.metric-tile,
+.pick-tile,
+.empty-tile {
+  min-height: 126px;
+}
+
+.clickable-card {
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.clickable-card:hover {
+  border-color: rgba(69, 209, 154, 0.55);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22);
+  transform: translateY(-1px);
+}
+
+.executive-section .card-heading {
+  margin-bottom: 0;
+}
+
+.executive-section .summary-tile strong {
+  font-size: 1.18rem;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 980px) {
   .dashboard-frame {
     display: block;
@@ -368,6 +429,10 @@ textarea {
 
   .dashboard-summary-grid,
   .dashboard-split,
+  .executive-card-grid,
+  .compact-executive-grid,
+  .opportunity-grid,
+  .executive-two-column,
   .brief-grid,
   .brief-columns,
   .brief-hero {

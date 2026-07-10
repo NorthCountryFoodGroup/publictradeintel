@@ -76,27 +76,71 @@
       <section class="dashboard-page is-active" data-page="dashboard">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Command center</p>
-            <h2>Today at a glance</h2>
+            <p class="eyebrow">Executive dashboard</p>
+            <h2>What should I know about the market today?</h2>
           </div>
           <button type="button" data-run-prediction-scan>Run prediction scan</button>
         </div>
-        <div class="dashboard-summary-grid" id="dashboardSummaryGrid"></div>
-        <div class="dashboard-split">
-          <article class="dashboard-card">
+        <div class="executive-dashboard">
+          <section class="dashboard-card executive-section">
             <div class="card-heading">
-              <span>Recent scan summary</span>
+              <span>Market Overview</span>
+              <strong id="marketOverviewTone">Scanning</strong>
+            </div>
+            <div class="executive-card-grid" id="marketOverviewGrid"></div>
+          </section>
+
+          <section class="dashboard-card executive-section">
+            <div class="card-heading">
+              <span>AI Prediction Engine</span>
               <strong id="dashboardScanTime">Not scanned yet</strong>
             </div>
-            <div class="member-summary compact-summary" id="dashboardScanSummary"></div>
-          </article>
-          <article class="dashboard-card">
+            <div class="executive-card-grid" id="predictionEngineGrid"></div>
+          </section>
+
+          <section class="dashboard-card executive-section">
             <div class="card-heading">
-              <span>Watchlist alerts</span>
-              <strong id="dashboardAlertCount">0</strong>
+              <span>Today's Opportunities</span>
+              <strong id="opportunityCount">0</strong>
             </div>
-            <div class="alerts-list compact-alerts" id="dashboardAlerts"></div>
-          </article>
+            <div class="opportunity-grid" id="todayOpportunitiesGrid"></div>
+          </section>
+
+          <div class="executive-two-column">
+            <section class="dashboard-card executive-section">
+              <div class="card-heading">
+                <span>Watchlist Summary</span>
+                <strong id="dashboardAlertCount">0</strong>
+              </div>
+              <div class="executive-card-grid compact-executive-grid" id="watchlistSummaryGrid"></div>
+            </section>
+
+            <section class="dashboard-card executive-section">
+              <div class="card-heading">
+                <span>Congress Activity</span>
+                <strong id="congressActivityCount">0</strong>
+              </div>
+              <div class="executive-card-grid compact-executive-grid" id="congressActivityGrid"></div>
+            </section>
+          </div>
+
+          <div class="executive-two-column">
+            <section class="dashboard-card executive-section">
+              <div class="card-heading">
+                <span>Policy Activity</span>
+                <strong id="policyActivityCount">0</strong>
+              </div>
+              <div class="executive-card-grid compact-executive-grid" id="policyActivityGrid"></div>
+            </section>
+
+            <section class="dashboard-card executive-section">
+              <div class="card-heading">
+                <span>Prediction Performance</span>
+                <strong>Tracking</strong>
+              </div>
+              <div class="executive-card-grid compact-executive-grid" id="predictionPerformanceGrid"></div>
+            </section>
+          </div>
         </div>
       </section>
 

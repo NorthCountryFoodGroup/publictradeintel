@@ -52,6 +52,17 @@ const output = {
   dashboardScanSummary: document.querySelector("#dashboardScanSummary"),
   dashboardAlerts: document.querySelector("#dashboardAlerts"),
   dashboardAlertCount: document.querySelector("#dashboardAlertCount"),
+  marketOverviewTone: document.querySelector("#marketOverviewTone"),
+  marketOverviewGrid: document.querySelector("#marketOverviewGrid"),
+  predictionEngineGrid: document.querySelector("#predictionEngineGrid"),
+  opportunityCount: document.querySelector("#opportunityCount"),
+  todayOpportunitiesGrid: document.querySelector("#todayOpportunitiesGrid"),
+  watchlistSummaryGrid: document.querySelector("#watchlistSummaryGrid"),
+  congressActivityCount: document.querySelector("#congressActivityCount"),
+  congressActivityGrid: document.querySelector("#congressActivityGrid"),
+  policyActivityCount: document.querySelector("#policyActivityCount"),
+  policyActivityGrid: document.querySelector("#policyActivityGrid"),
+  predictionPerformanceGrid: document.querySelector("#predictionPerformanceGrid"),
   tradeBriefPanel: document.querySelector("#tradeBriefPanel"),
   pageBreadcrumb: document.querySelector("#pageBreadcrumb"),
   pageTitle: document.querySelector("#pageTitle"),
@@ -270,7 +281,7 @@ function firstFromSection(sectionName) {
 function compactPickCard(label, item) {
   if (!item) {
     return `
-      <article class="summary-tile empty-tile">
+      <article class="summary-tile empty-tile clickable-card" data-page-target="predictions">
         <span>${escapeHtml(label)}</span>
         <strong>No pick yet</strong>
         <small>Run a prediction scan.</small>
@@ -279,78 +290,148 @@ function compactPickCard(label, item) {
   }
   const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
   return `
-    <article class="summary-tile pick-tile">
+    <article class="summary-tile pick-tile clickable-card">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(item.ticker)} ${score}/100</strong>
-      <small>${escapeHtml(item.name || item.company || item.ticker)} | ${escapeHtml(item.confidenceTier || "confidence pending")}</small>
+      <small>${escapeHtml(item.name || item.company || item.ticker)}</small>
+      <small>${escapeHtml(item.label || item.recommendation || "Research candidate")} | ${escapeHtml(item.confidenceTier || "confidence pending")}</small>
       <button type="button" data-view-brief="${escapeHtml(item.ticker)}">View Trade Brief</button>
     </article>
   `;
 }
 
+function metricCard(label, value, note = "", target = "") {
+  const targetAttr = target ? ` data-page-target="${escapeHtml(target)}"` : "";
+  return `
+    <article class="summary-tile metric-tile clickable-card"${targetAttr}>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${note ? `<small>${escapeHtml(note)}</small>` : ""}
+    </article>
+  `;
+}
+
+function averageUnifiedScore(rows) {
+  const values = (rows || []).map((item) => Number(item.unifiedPredictionScore || item.aiOpportunityScore)).filter(Number.isFinite);
+  return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
+}
+
+function strongestBy(items, getter) {
+  return [...(items || [])].sort((a, b) => Number(getter(b) || 0) - Number(getter(a) || 0))[0] || null;
+}
+
+function sectorStrengthSummary(predictions) {
+  const groups = {};
+  (predictions || []).forEach((item) => {
+    const group = item.assetGroup || "Market";
+    if (!groups[group]) groups[group] = { total: 0, count: 0 };
+    groups[group].total += Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+    groups[group].count += 1;
+  });
+  const best = Object.entries(groups)
+    .map(([name, value]) => ({ name, score: value.count ? Math.round(value.total / value.count) : 0 }))
+    .sort((a, b) => b.score - a.score)[0];
+  return best ? `${best.name} leads at ${best.score}/100` : "Run scan for sector read";
+}
+
+function mostActivePoliticians(trades) {
+  const counts = {};
+  (trades || []).forEach((trade) => {
+    const name = trade.representative || "Unknown";
+    counts[name] = (counts[name] || 0) + 1;
+  });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "No activity";
+}
+
 function renderDashboard() {
-  if (!output.dashboardSummaryGrid) return;
+  if (!output.marketOverviewGrid) return;
   const health = predictionEngine.predictionEngineHealth || {};
   const totals = portfolioTotals();
+  const predictions = predictionEngine.predictions || [];
   const topToday = firstFromSection("top25OneDay");
   const topWeek = firstFromSection("top25SevenDay");
   const topMonth = firstFromSection("top25OneMonth");
   const topYear = firstFromSection("top25OneYear");
+  const mostImproved = strongestBy(predictions, (item) => item.scoreChange || item.rankMovement?.change || 0);
+  const highestConfidence = strongestBy(predictions, (item) => item.confidenceScore || item.unifiedPredictionScore || 0);
   const engineStatus = health.predictionEngineStatus || health.status || (predictionEngine.updatedAt ? "Healthy" : "Not run");
   const dataStatus = health.dataQualityStatus || "Not run";
   const marketMood = predictionEngine.marketRegime?.primary || topToday?.marketRegime?.primary || "Scanning";
-  const alerts = (settings.congressTrades || []).slice(0, 4);
+  const trades = settings.congressTrades || [];
+  const buys = trades.filter((trade) => trade.transaction === "Buy");
+  const sells = trades.filter((trade) => trade.transaction === "Sell");
+  const alerts = trades.filter((trade) => ["Buy", "Sell"].includes(trade.transaction)).slice(0, 8);
+  const signals = policySignals.signals || [];
+  const positiveSignals = signals.filter((signal) => signal.direction === "positive");
+  const negativeSignals = signals.filter((signal) => signal.direction === "negative");
+  const highConfidenceAlerts = predictions.filter((item) => ["high", "very high"].includes(item.confidenceTier)).length;
+  const movers = predictions.filter((item) => Number(item.scoreChange || 0) !== 0 || item.rankMovement).length;
 
-  output.dashboardSummaryGrid.innerHTML = `
-    <article class="summary-tile status-${statusTone(marketMood)}">
-      <span>Market mood</span>
-      <strong>${escapeHtml(marketMood)}</strong>
-      <small>${escapeHtml(predictionEngine.marketRegime?.riskTone || "Based on latest available scan.")}</small>
-    </article>
-    <article class="summary-tile status-${statusTone(engineStatus)}">
-      <span>Prediction engine status</span>
-      <strong>${escapeHtml(engineStatus)}</strong>
-      <small>${Number(health.predictionsGenerated) || predictionEngine.predictions?.length || 0} predictions generated</small>
-    </article>
-    <article class="summary-tile status-${statusTone(dataStatus)}">
-      <span>Data quality status</span>
-      <strong>${escapeHtml(dataStatus)}</strong>
-      <small>${Number(health.incompleteMarketDataPercent) || 0}% incomplete market data</small>
-    </article>
-    <article class="summary-tile">
-      <span>Portfolio value</span>
-      <strong>${dollarsPrecise(totals.currentValue)}</strong>
-      <small>${dollarsPrecise(totals.totalGain)} total P/L</small>
-    </article>
-    ${compactPickCard("Top pick today", topToday)}
-    ${compactPickCard("Best 7-day pick", topWeek)}
-    ${compactPickCard("Best 1-month pick", topMonth)}
-    ${compactPickCard("Best 1-year pick", topYear)}
-  `;
+  if (output.marketOverviewTone) output.marketOverviewTone.textContent = marketMood;
+  output.marketOverviewGrid.innerHTML = [
+    metricCard("Overall market sentiment", marketMood, "Based on latest prediction scan", "market"),
+    metricCard("Fear / Greed", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "Pending", "Proxy until live index is connected", "market"),
+    metricCard("S&P 500", "Proxy", "Broad-market quote connection planned", "market"),
+    metricCard("Nasdaq", "Proxy", "Growth/tech tape from candidates", "market"),
+    metricCard("Dow", "Proxy", "Large-cap industrial read pending", "market"),
+    metricCard("VIX", "Proxy", "Volatility detail pending", "market"),
+    metricCard("Sector strength", sectorStrengthSummary(predictions), "Top scoring asset group", "market"),
+  ].join("");
+
+  output.predictionEngineGrid.innerHTML = [
+    metricCard("Prediction Engine Status", engineStatus, `${Number(health.predictionsGenerated) || predictions.length} predictions generated`, "predictions"),
+    metricCard("Market Data Status", dataStatus, `${Number(health.marketQuotesSucceeded) || 0}/${Number(health.marketQuotesRequested) || 0} quotes succeeded`, "predictions"),
+    metricCard("Congress Feed Status", congressFeedStatus.error ? "Warning" : "Active", congressFeedStatus.error || `${Number(congressFeedStatus.totalTrades) || trades.length} saved trades`, "congress"),
+    metricCard("Policy Feed Status", policySignals.errors?.length ? "Warning" : "Active", `${signals.length} policy/news signals`, "policy"),
+    metricCard("Last Scan", predictionEngine.updatedAt ? new Date(predictionEngine.updatedAt).toLocaleString() : "Not scanned", "Run scan for latest read", "predictions"),
+    metricCard("Candidates Scanned", String(Number(health.tickersScanned) || predictions.length || 0), `${predictionEngine.scanUniverse?.mode || "watchlist"} universe`, "predictions"),
+    metricCard("Average Unified Score", `${averageUnifiedScore(predictions)}/100`, "Across generated predictions", "predictions"),
+  ].join("");
+
+  const opportunities = [
+    compactPickCard("Top Pick Today", topToday),
+    compactPickCard("Best Swing Trade", topWeek || topMonth),
+    compactPickCard("Best Long-Term Pick", topYear),
+    compactPickCard("Most Improved Stock", mostImproved),
+    compactPickCard("Highest Confidence Prediction", highestConfidence),
+  ];
+  if (output.opportunityCount) output.opportunityCount.textContent = opportunities.length;
+  output.todayOpportunitiesGrid.innerHTML = opportunities.join("");
 
   if (output.dashboardScanTime) {
     output.dashboardScanTime.textContent = predictionEngine.updatedAt ? new Date(predictionEngine.updatedAt).toLocaleString() : "Not scanned yet";
   }
-  if (output.dashboardScanSummary) {
-    const top25 = health.top25Counts || {};
-    output.dashboardScanSummary.innerHTML = `
-      <div><span>Tickers scanned</span><strong>${Number(health.tickersScanned) || 0}</strong></div>
-      <div><span>Predictions</span><strong>${Number(health.predictionsGenerated) || predictionEngine.predictions?.length || 0}</strong></div>
-      <div><span>Top 25 lists</span><strong>${Number(top25.top25OneDay) || 0}/${Number(top25.top25SevenDay) || 0}/${Number(top25.top25OneMonth) || 0}/${Number(top25.top25OneYear) || 0}</strong></div>
-      <div><span>Scan universe</span><strong>${escapeHtml(predictionEngine.scanUniverse?.mode || "watchlist")}</strong></div>
-    `;
-  }
   if (output.dashboardAlertCount) output.dashboardAlertCount.textContent = alerts.length;
-  if (output.dashboardAlerts) {
-    output.dashboardAlerts.innerHTML = alerts.length
-      ? alerts.map((trade) => `
-          <article class="alert-row compact-row">
-            <strong>${escapeHtml(trade.ticker)} ${escapeHtml(trade.transaction || "")}</strong>
-            <span>${escapeHtml(trade.representative || "Congress disclosure")} | ${escapeHtml(trade.reportedDate || "date pending")}</span>
-          </article>
-        `).join("")
-      : `<p class="muted-copy">No watchlist alerts yet.</p>`;
-  }
+  output.watchlistSummaryGrid.innerHTML = [
+    metricCard("Number of Watchlists", "1", "Primary watchlist active", "watchlist"),
+    metricCard("Stocks on Watchlists", String((settings.stockIdeas || []).length), "Configured stock ideas", "watchlist"),
+    metricCard("High Confidence Alerts", String(highConfidenceAlerts), "High or very high confidence", "alerts"),
+    metricCard("Watchlist Movers", String(movers), "Rank or score movement", "alerts"),
+  ].join("");
+
+  if (output.congressActivityCount) output.congressActivityCount.textContent = trades.length;
+  output.congressActivityGrid.innerHTML = [
+    metricCard("Recent Buys", String(buys.length), buys[0] ? `${buys[0].ticker} by ${buys[0].representative}` : "No recent buys", "congress"),
+    metricCard("Recent Sells", String(sells.length), sells[0] ? `${sells[0].ticker} by ${sells[0].representative}` : "No recent sells", "congress"),
+    metricCard("Most Active Politicians", mostActivePoliticians(trades), "Based on saved disclosures", "congress"),
+    metricCard("Largest Purchases", buys[0]?.reportedRange || "Pending", buys[0]?.ticker || "No purchase range", "congress"),
+  ].join("");
+
+  if (output.policyActivityCount) output.policyActivityCount.textContent = signals.length;
+  output.policyActivityGrid.innerHTML = [
+    metricCard("Major Policy Changes", String(signals.length), "Configured policy/news signals", "policy"),
+    metricCard("Industries Affected", new Set(signals.map((signal) => signal.company || signal.ticker)).size || "Pending", "Matched tickers/companies", "policy"),
+    metricCard("Positive Catalysts", String(positiveSignals.length), positiveSignals[0]?.ticker || "None active", "policy"),
+    metricCard("Negative Catalysts", String(negativeSignals.length), negativeSignals[0]?.ticker || "None active", "policy"),
+  ].join("");
+
+  output.predictionPerformanceGrid.innerHTML = [
+    metricCard("Overall Accuracy", "Tracking", "Available after outcomes are stored", "performance"),
+    metricCard("1 Day", "Pending", "Outcome tracking planned", "performance"),
+    metricCard("7 Day", "Pending", "Outcome tracking planned", "performance"),
+    metricCard("1 Month", "Pending", "Outcome tracking planned", "performance"),
+    metricCard("1 Year", "Pending", "Outcome tracking planned", "performance"),
+  ].join("");
 }
 
 function renderRecommendation(recommendation) {
