@@ -8,6 +8,7 @@
     "smoke:predictions": "node scripts/smoke-test-prediction-scan.js",
     "smoke:watchlists": "node scripts/smoke-test-watchlists.js",
     "smoke:alerts": "node scripts/smoke-test-alerts.js",
+    "smoke:layout": "node scripts/smoke-test-layout.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }

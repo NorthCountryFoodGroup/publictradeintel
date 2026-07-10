@@ -3584,3 +3584,381 @@ textarea:hover {
     --section-gap: var(--space-5);
   }
 }
+
+/* Version 2.0 Visual Recovery Hotfix
+   Root containment: recent sprint styles introduced competing app-shell widths,
+   a fixed margin-left inside a CSS grid, low-contrast token collisions, and
+   marketing-scale hero typography. These final overrides restore a stable app UI. */
+:root {
+  color-scheme: dark;
+  --bg: #0b1411;
+  --panel: #14211c;
+  --panel-strong: #1b2d25;
+  --ink: #f3faf6;
+  --muted: #b7c9c1;
+  --line: rgba(190, 216, 205, 0.22);
+  --green: #45d19a;
+  --green-soft: rgba(69, 209, 154, 0.14);
+  --accent: #6ed7e4;
+  --accent-soft: rgba(110, 215, 228, 0.13);
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
+  --shell-bg: #0b1411;
+  --shell-surface: #14211c;
+  --shell-surface-elevated: #1b2d25;
+  --shell-text: #f3faf6;
+  --shell-muted: #b7c9c1;
+  --shell-line: rgba(190, 216, 205, 0.22);
+  --color-background: #0b1411;
+  --color-surface: #14211c;
+  --color-surface-raised: #1b2d25;
+  --color-surface-elevated: #1b2d25;
+  --color-border: rgba(190, 216, 205, 0.22);
+  --text-primary: #f3faf6;
+  --text-secondary: #c7d6d0;
+  --text-muted: #9db2aa;
+  --font-size-display: 2rem;
+  --font-size-h1: 1.8rem;
+  --font-size-h2: 1.35rem;
+  --font-size-h3: 1rem;
+  --font-size-body: 0.95rem;
+  --font-size-small: 0.86rem;
+  --font-size-caption: 0.78rem;
+  --font-size-metric: 1.75rem;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.dashboard-frame.app-layout {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  width: 100%;
+  min-height: 100vh;
+}
+
+.side-nav.app-sidebar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: 236px;
+  height: 100vh;
+  padding: 18px 14px;
+  background: #0f1c17;
+  border-right: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.side-nav .nav-link,
+.side-nav .admin-link {
+  color: var(--muted);
+  min-height: 40px;
+  padding: 10px 11px;
+  font-size: 0.92rem;
+  line-height: 1.2;
+  white-space: normal;
+}
+
+.side-nav .nav-link.is-active,
+.side-nav .nav-link:hover,
+.side-nav .admin-link:hover {
+  background: rgba(69, 209, 154, 0.16);
+  color: var(--ink);
+}
+
+.dashboard-main.app-shell {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: 0;
+  margin-left: 0;
+  padding: 24px 28px 40px;
+}
+
+.app-topbar {
+  min-height: 64px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 420px) auto;
+}
+
+#pageTitle {
+  color: var(--ink);
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.breadcrumbs,
+.breadcrumbs span,
+.global-search span,
+.eyebrow,
+.hero-copy,
+.muted-copy {
+  color: var(--muted);
+}
+
+.app-hero {
+  display: none;
+}
+
+.section-heading {
+  margin: 0 0 14px;
+  align-items: center;
+}
+
+.section-heading h2,
+h2 {
+  max-width: none;
+  color: var(--ink);
+  font-size: 1.45rem;
+  line-height: 1.25;
+}
+
+h1 {
+  max-width: none;
+  font-size: 2rem;
+  line-height: 1.15;
+}
+
+h3,
+.card-heading strong,
+.brief-section-heading strong {
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+p,
+li,
+label,
+input,
+select,
+textarea,
+button {
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+small,
+.pti-badge,
+.brief-badge,
+.status-chip,
+.card-heading span,
+.summary-tile span,
+.summary-tile small {
+  font-size: 0.78rem;
+}
+
+.dashboard-page.is-active {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.executive-dashboard,
+.performance-center,
+.market-intelligence-center,
+.watchlist-workspace,
+.alerts-center {
+  gap: 16px;
+}
+
+.executive-card-grid,
+.market-summary-grid,
+.performance-overview-grid,
+.alerts-overview-grid,
+.watchlist-overview-grid,
+.prediction-grid {
+  grid-template-columns: repeat(4, minmax(280px, 1fr));
+}
+
+.opportunity-grid,
+.sector-rotation-grid,
+.sector-heatmap-grid,
+.watchlist-card-grid,
+.watchlist-detail-grid,
+.alert-filter-grid,
+.delivery-preferences-grid {
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+}
+
+.executive-two-column,
+.brief-report-grid,
+.dashboard-split {
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+}
+
+.summary-tile,
+.dashboard-card,
+.trade-brief-card,
+.prediction-screener-card,
+.market-metric-card,
+.performance-metric-card,
+.watchlist-card,
+.watchlist-stock-card,
+.alert-feed-card {
+  min-width: 0;
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.summary-tile {
+  min-height: 104px;
+  padding: 14px;
+}
+
+.summary-tile strong,
+.performance-metric-card strong,
+.market-metric-card strong,
+.prediction-score-block strong,
+.watchlist-health-pill strong {
+  color: var(--ink);
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  line-height: 1.1;
+}
+
+.dashboard-card,
+.trade-brief-card,
+.brief-section {
+  padding: 16px;
+}
+
+input,
+select,
+textarea {
+  border-color: var(--line);
+  background: #0f1c17;
+  color: var(--ink);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #8fa59b;
+}
+
+button,
+.pti-button,
+.brief-button,
+.inline-scan-button {
+  color: #06110c;
+  background: var(--green);
+}
+
+.pti-button.ghost,
+.icon-button,
+.profile-button,
+.prediction-tabs button,
+.view-toggle button {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+
+.mobile-nav {
+  border-color: var(--line);
+  background: rgba(15, 28, 23, 0.96);
+}
+
+@media (max-width: 1279px) {
+  .executive-card-grid,
+  .market-summary-grid,
+  .performance-overview-grid,
+  .alerts-overview-grid,
+  .watchlist-overview-grid,
+  .prediction-grid,
+  .opportunity-grid,
+  .sector-rotation-grid,
+  .sector-heatmap-grid,
+  .watchlist-card-grid,
+  .watchlist-detail-grid,
+  .alert-filter-grid,
+  .delivery-preferences-grid {
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .dashboard-frame.app-layout {
+    display: block;
+  }
+
+  .side-nav.app-sidebar {
+    display: none;
+  }
+
+  .dashboard-main.app-shell {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 16px 16px 92px;
+  }
+
+  .app-topbar {
+    grid-template-columns: 1fr auto;
+    min-height: 56px;
+    margin: 0 0 14px;
+  }
+
+  .global-search {
+    display: none;
+  }
+
+  .mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .mobile-nav .nav-link {
+    padding: 8px 4px;
+    font-size: 0.7rem;
+    text-align: center;
+  }
+}
+
+@media (max-width: 720px) {
+  .executive-card-grid,
+  .market-summary-grid,
+  .performance-overview-grid,
+  .alerts-overview-grid,
+  .watchlist-overview-grid,
+  .prediction-grid,
+  .opportunity-grid,
+  .sector-rotation-grid,
+  .sector-heatmap-grid,
+  .watchlist-card-grid,
+  .watchlist-detail-grid,
+  .alert-filter-grid,
+  .delivery-preferences-grid,
+  .executive-two-column,
+  .brief-report-grid,
+  .dashboard-split {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading {
+    display: grid;
+    gap: 10px;
+  }
+
+  .section-heading h2 {
+    font-size: 1.35rem;
+  }
+
+  #pageTitle {
+    font-size: 1.1rem;
+  }
+}
