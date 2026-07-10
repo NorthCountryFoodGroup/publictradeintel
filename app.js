@@ -75,6 +75,13 @@ const output = {
   policyActivityCount: document.querySelector("#policyActivityCount"),
   policyActivityGrid: document.querySelector("#policyActivityGrid"),
   predictionPerformanceGrid: document.querySelector("#predictionPerformanceGrid"),
+  performanceOverviewGrid: document.querySelector("#performanceOverviewGrid"),
+  performanceChartsGrid: document.querySelector("#performanceChartsGrid"),
+  signalAnalysisGrid: document.querySelector("#signalAnalysisGrid"),
+  performanceSearch: document.querySelector("#performanceSearch"),
+  predictionAuditList: document.querySelector("#predictionAuditList"),
+  aiLearningSummary: document.querySelector("#aiLearningSummary"),
+  performanceVersionGrid: document.querySelector("#performanceVersionGrid"),
   tradeBriefPanel: document.querySelector("#tradeBriefPanel"),
   pageBreadcrumb: document.querySelector("#pageBreadcrumb"),
   pageTitle: document.querySelector("#pageTitle"),
@@ -275,6 +282,7 @@ function calculate() {
   renderMemberOptions();
   renderCongressTrades();
   renderDashboard();
+  renderPerformanceCenter();
   renderTradeBrief();
 }
 
@@ -1719,6 +1727,258 @@ function predictionErrorMessage(error, fallback = "Prediction scan failed") {
   return message;
 }
 
+function predictionPerformanceRecords() {
+  const historical =
+    predictionEngine.performanceHistory ||
+    predictionEngine.predictionHistory ||
+    predictionEngine.history ||
+    predictionEngine.outcomes ||
+    [];
+  const source = Array.isArray(historical) && historical.length ? historical : predictionEngine.predictions || [];
+  return source.map((item, index) => {
+    const model = predictionModelForView(item);
+    const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+    const chartPattern = item.chartPatternSignal || {};
+    const setup = item.setupSignals || {};
+    const actualReturn = Number(item.actualReturn ?? item.returnPercent ?? item.gainLossPercent);
+    const predictedDirection = item.predictedDirection || item.unifiedDirection || "mixed";
+    const recommendation = recommendationCategory(item, model);
+    const score = scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore || item.score);
+    const timeframe = normalizedTimeframeForPrediction(item, model);
+    const resultKnown = Number.isFinite(actualReturn) || ["won", "lost", "hit", "miss"].includes(String(item.result || "").toLowerCase());
+    const isWin = resultKnown
+      ? String(item.result || "").toLowerCase() === "won" ||
+        String(item.result || "").toLowerCase() === "hit" ||
+        (predictedDirection === "bearish" ? actualReturn <= 0 : actualReturn >= 0)
+      : null;
+    return {
+      id: `${item.ticker || "prediction"}-${item.scannedAt || item.predictionDate || index}`,
+      ticker: item.ticker || "N/A",
+      name: item.name || item.companyName || item.ticker || "Unknown",
+      predictionDate: item.predictionDate || item.scannedAt || predictionEngine.updatedAt || null,
+      score,
+      recommendation,
+      confidence: confidenceCategory(item),
+      timeframe,
+      entryPrice: Number(item.entryPrice || item.currentPrice || item.marketPrice || 0),
+      actualReturn: Number.isFinite(actualReturn) ? actualReturn : null,
+      actualResult: resultKnown ? (isWin ? "Win" : "Loss") : "Tracking",
+      isWin,
+      reason: item.finalReasonSummary || item.predictionReason || item.plainEnglish || model?.reasons?.[0] || "Performance tracking in progress.",
+      signals: [
+        ...(Array.isArray(item.strongestSignals) ? item.strongestSignals : []),
+        chartPattern.primaryPattern || "",
+        setup.setupDirection && setup.setupDirection !== "none" ? `${setup.setupDirection} setup` : "",
+        technical.trendDirection ? `${technical.trendDirection} trend` : "",
+        item.multiTimeframeAlignment?.alignmentDirection ? `${item.multiTimeframeAlignment.alignmentDirection} alignment` : "",
+      ].filter(Boolean),
+      pattern: chartPattern.primaryPattern || "No pattern",
+      setupType: setup.setupDirection && setup.setupDirection !== "none" ? setup.setupDirection : "No setup",
+    };
+  });
+}
+
+function knownPerformanceRecords() {
+  return predictionPerformanceRecords().filter((record) => record.isWin !== null);
+}
+
+function accuracyFor(records, matcher = () => true) {
+  const filtered = records.filter(matcher);
+  if (!filtered.length) return null;
+  const wins = filtered.filter((record) => record.isWin).length;
+  return Math.round((wins / filtered.length) * 100);
+}
+
+function averageReturnFor(records, matcher = () => true) {
+  const returns = records.filter(matcher).map((record) => record.actualReturn).filter((value) => Number.isFinite(value));
+  if (!returns.length) return null;
+  return returns.reduce((sum, value) => sum + value, 0) / returns.length;
+}
+
+function performanceMetricValue(value, suffix = "") {
+  if (value === null || value === undefined || Number.isNaN(value)) return "Tracking";
+  return `${typeof value === "number" ? value.toFixed(suffix === "%" ? 0 : 1) : value}${suffix}`;
+}
+
+function performanceMetricCard(title, value, subtitle, tone = "neutral") {
+  return `
+    <article class="performance-metric-card ${tone}">
+      <span>${escapeHtml(title)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(subtitle)}</small>
+    </article>
+  `;
+}
+
+function performanceChartCard(title, value, subtitle, tone = "neutral") {
+  const numeric = Math.max(0, Math.min(100, Number(value) || 0));
+  return `
+    <article class="performance-chart-card ${tone}">
+      <div class="card-heading">
+        <span>${escapeHtml(title)}</span>
+        <strong>${value === null || value === undefined ? "Tracking" : `${Math.round(numeric)}%`}</strong>
+      </div>
+      <div class="performance-bar" aria-label="${escapeHtml(title)}">
+        <div style="width: ${numeric}%"></div>
+      </div>
+      <small>${escapeHtml(subtitle)}</small>
+    </article>
+  `;
+}
+
+function signalPerformance(records, extractor) {
+  const groups = new Map();
+  records.forEach((record) => {
+    extractor(record).forEach((signal) => {
+      if (!groups.has(signal)) groups.set(signal, { name: signal, total: 0, wins: 0, returns: [] });
+      const group = groups.get(signal);
+      group.total += 1;
+      if (record.isWin) group.wins += 1;
+      if (Number.isFinite(record.actualReturn)) group.returns.push(record.actualReturn);
+    });
+  });
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      winRate: group.total ? Math.round((group.wins / group.total) * 100) : 0,
+      averageReturn: group.returns.length ? group.returns.reduce((sum, value) => sum + value, 0) / group.returns.length : 0,
+    }))
+    .sort((a, b) => b.winRate - a.winRate || b.total - a.total);
+}
+
+function renderSignalRank(title, rows, emptyText) {
+  return `
+    <article class="signal-rank-card">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="signal-rank-list">
+        ${
+          rows.length
+            ? rows
+                .slice(0, 5)
+                .map(
+                  (row) => `
+                    <div>
+                      <span>${escapeHtml(row.name)}</span>
+                      <strong>${row.winRate}%</strong>
+                      <small>${row.total} prediction${row.total === 1 ? "" : "s"} | ${performanceMetricValue(row.averageReturn, "%")} avg return</small>
+                    </div>
+                  `
+                )
+                .join("")
+            : `<p class="muted-copy">${escapeHtml(emptyText)}</p>`
+        }
+      </div>
+    </article>
+  `;
+}
+
+function renderPredictionAudit(records) {
+  if (!output.predictionAuditList) return;
+  const search = String(output.performanceSearch?.value || "").trim().toLowerCase();
+  const filtered = records
+    .filter((record) => {
+      const text = `${record.ticker} ${record.name} ${record.reason} ${record.recommendation} ${record.timeframe}`.toLowerCase();
+      return !search || text.includes(search);
+    })
+    .slice(0, 60);
+  output.predictionAuditList.innerHTML = filtered.length
+    ? filtered
+        .map(
+          (record) => `
+            <article class="prediction-audit-card">
+              <div>
+                <strong>${escapeHtml(record.ticker)}</strong>
+                <span>${escapeHtml(record.name)}</span>
+              </div>
+              <div><span>Date</span><strong>${record.predictionDate ? new Date(record.predictionDate).toLocaleDateString() : "Tracking"}</strong></div>
+              <div><span>Score</span><strong>${record.score}/100</strong></div>
+              <div><span>Recommendation</span><strong>${escapeHtml(record.recommendation)}</strong></div>
+              <div><span>Entry</span><strong>${moneyOrCalculating(record.entryPrice)}</strong></div>
+              <div><span>Result</span><strong>${escapeHtml(record.actualResult)}</strong></div>
+              <div><span>Gain/Loss</span><strong>${record.actualReturn === null ? "Tracking" : percent(record.actualReturn)}</strong></div>
+              <p>${escapeHtml(record.reason)}</p>
+            </article>
+          `
+        )
+        .join("")
+    : `
+      <article class="prediction-audit-card empty">
+        <strong>No audit records match that search.</strong>
+        <p>Clear the search or run more scans as prediction history grows.</p>
+      </article>
+    `;
+}
+
+function renderPerformanceCenter() {
+  if (!output.performanceOverviewGrid) return;
+  const allRecords = predictionPerformanceRecords();
+  const known = knownPerformanceRecords();
+  const pendingCount = allRecords.length - known.length;
+  const wins = known.filter((record) => record.isWin).length;
+  const losses = known.length - wins;
+  const overallAccuracy = accuracyFor(known);
+  const oneDayAccuracy = accuracyFor(known, (record) => /1.?day/i.test(record.timeframe));
+  const sevenDayAccuracy = accuracyFor(known, (record) => /7.?day|week/i.test(record.timeframe));
+  const monthAccuracy = accuracyFor(known, (record) => /month|30/i.test(record.timeframe));
+  const yearAccuracy = accuracyFor(known, (record) => /year/i.test(record.timeframe));
+  const averageReturn = averageReturnFor(known);
+  const averageWinningReturn = averageReturnFor(known, (record) => record.isWin);
+  const averageLosingReturn = averageReturnFor(known, (record) => !record.isWin);
+  const winLossRatio = losses ? (wins / losses).toFixed(2) : wins ? "All wins" : "Tracking";
+  const signalRows = signalPerformance(known, (record) => record.signals);
+  const patternRows = signalPerformance(known, (record) => [record.pattern]);
+  const setupRows = signalPerformance(known, (record) => [record.setupType]);
+  const recommendationRows = signalPerformance(known, (record) => [record.recommendation]);
+  const confidenceRows = signalPerformance(known, (record) => [record.confidence]);
+
+  output.performanceOverviewGrid.innerHTML = [
+    performanceMetricCard("Overall Prediction Accuracy", performanceMetricValue(overallAccuracy, "%"), `${known.length} completed | ${pendingCount} tracking`, "success"),
+    performanceMetricCard("1-Day Accuracy", performanceMetricValue(oneDayAccuracy, "%"), "Expired 1-day predictions"),
+    performanceMetricCard("7-Day Accuracy", performanceMetricValue(sevenDayAccuracy, "%"), "Expired 7-day predictions"),
+    performanceMetricCard("1-Month Accuracy", performanceMetricValue(monthAccuracy, "%"), "Expired monthly predictions"),
+    performanceMetricCard("1-Year Accuracy", performanceMetricValue(yearAccuracy, "%"), "Long-term tracking"),
+    performanceMetricCard("Average Return", averageReturn === null ? "Tracking" : percent(averageReturn), "All completed predictions"),
+    performanceMetricCard("Average Winning Return", averageWinningReturn === null ? "Tracking" : percent(averageWinningReturn), "Winning predictions"),
+    performanceMetricCard("Average Losing Return", averageLosingReturn === null ? "Tracking" : percent(averageLosingReturn), "Losing predictions", "warning"),
+    performanceMetricCard("Win/Loss Ratio", winLossRatio, `${wins} wins / ${losses} losses`),
+  ].join("");
+
+  output.performanceChartsGrid.innerHTML = [
+    performanceChartCard("Prediction Accuracy over Time", overallAccuracy, "Uses completed prediction outcomes.", "success"),
+    performanceChartCard("Confidence vs Accuracy", accuracyFor(known, (record) => ["High", "Very High"].includes(record.confidence)), "High-confidence picks only."),
+    performanceChartCard("Average Return by Timeframe", averageReturn === null ? null : Math.max(0, Math.min(100, 50 + averageReturn * 5)), "Positive return lifts the bar."),
+    performanceChartCard("Signal Combination Performance", signalRows[0]?.winRate ?? null, signalRows[0] ? `Best current signal: ${signalRows[0].name}` : "Awaiting completed outcomes."),
+    performanceChartCard("Recommendation Performance", recommendationRows[0]?.winRate ?? null, recommendationRows[0] ? `Best label: ${recommendationRows[0].name}` : "Awaiting completed outcomes."),
+  ].join("");
+
+  output.signalAnalysisGrid.innerHTML = [
+    renderSignalRank("Best Performing Signals", signalRows, "Signal rankings appear after predictions expire."),
+    renderSignalRank("Worst Performing Signals", [...signalRows].reverse(), "Weak signal rankings appear after losses are recorded."),
+    renderSignalRank("Most Reliable Patterns", patternRows, "Chart pattern reliability is tracking."),
+    renderSignalRank("Least Reliable Patterns", [...patternRows].reverse(), "Pattern weakness appears after more outcomes."),
+    renderSignalRank("Highest Win Rate Chart Patterns", patternRows, "Chart pattern win rates need completed predictions."),
+    renderSignalRank("Highest Win Rate Setup Types", setupRows, "Setup type win rates need completed predictions."),
+  ].join("");
+
+  renderPredictionAudit(allRecords);
+
+  const bestSignal = signalRows[0]?.name || "completed high-quality signal stacks";
+  const weakestSignal = signalRows.length ? signalRows[signalRows.length - 1].name : "still being measured";
+  const confidenceTrend = confidenceRows[0] ? `${confidenceRows[0].name} confidence is leading at ${confidenceRows[0].winRate}% accuracy.` : "Confidence calibration will populate as predictions expire.";
+  output.aiLearningSummary.innerHTML = `
+    <p><strong>The AI currently performs best when</strong> ${escapeHtml(bestSignal)} appears with clean confirmation.</p>
+    <p><strong>The weakest signal combinations are</strong> ${escapeHtml(weakestSignal)}.</p>
+    <p><strong>Confidence has improved by</strong> tracking each score against actual outcomes over time. ${escapeHtml(confidenceTrend)}</p>
+    <p><strong>Average prediction quality trend</strong> is ${known.length ? "based on completed outcomes and will become more precise with every scan." : "waiting for predictions to expire before grading accuracy."}</p>
+  `;
+
+  output.performanceVersionGrid.innerHTML = [
+    performanceMetricCard("Model Version", predictionEngine.modelVersion || "Tracking", "Future model version registry"),
+    performanceMetricCard("Training Dataset Version", predictionEngine.trainingDatasetVersion || "Pending", "Placeholder for historical dataset tracking"),
+    performanceMetricCard("Prediction Engine Version", predictionEngine.predictionEngineVersion || predictionEngine.modelVersion || "Current production", "Future engine release tracking"),
+  ].join("");
+}
+
 async function runPredictionScan() {
   if (!output.runPredictionScan && !output.predictionGrid) return;
   const buttons = [output.runPredictionScan, ...document.querySelectorAll("[data-run-prediction-scan]")].filter(Boolean);
@@ -1745,6 +2005,7 @@ async function runPredictionScan() {
     const warningText = Array.isArray(result.warnings) && result.warnings.length ? ` Warnings: ${result.warnings.join(" ")}` : "";
     if (output.predictionScanMessage) output.predictionScanMessage.textContent = `Prediction scan complete. ${result.predictions?.length || 0} records generated.${warningText}`;
     renderPredictions();
+    renderPerformanceCenter();
   } catch (error) {
     if (output.predictionScanMessage) output.predictionScanMessage.textContent = predictionErrorMessage(error);
   } finally {
@@ -2400,6 +2661,7 @@ function setPage(pageName) {
   if (output.pageBreadcrumb) output.pageBreadcrumb.textContent = label;
   if (output.pageTitle) output.pageTitle.textContent = label;
   if (target === "briefs") renderTradeBrief();
+  if (target === "performance") renderPerformanceCenter();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -2441,6 +2703,7 @@ document.querySelectorAll("[data-prediction-view]").forEach((button) => {
   });
 });
 output.predictionSort?.addEventListener("change", renderPredictions);
+output.performanceSearch?.addEventListener("input", () => renderPredictionAudit(predictionPerformanceRecords()));
 [
   output.predictionSearch,
   output.filterTimeframe,

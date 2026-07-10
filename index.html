@@ -325,6 +325,69 @@
         <div class="prediction-grid" id="predictionGrid"></div>
       </section>
 
+      <section class="dashboard-page" data-page="performance">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Prediction Performance</p>
+            <h2>Measure how the AI performs over time</h2>
+          </div>
+        </div>
+
+        <div class="performance-center">
+          <section class="dashboard-card performance-section">
+            <div class="card-heading">
+              <span>Overview</span>
+              <strong>Accuracy and returns</strong>
+            </div>
+            <div class="performance-overview-grid" id="performanceOverviewGrid"></div>
+          </section>
+
+          <section class="dashboard-card performance-section">
+            <div class="card-heading">
+              <span>Performance Charts</span>
+              <strong>Visual read</strong>
+            </div>
+            <div class="performance-chart-grid" id="performanceChartsGrid"></div>
+          </section>
+
+          <section class="dashboard-card performance-section">
+            <div class="card-heading">
+              <span>Signal Analysis</span>
+              <strong>What is working</strong>
+            </div>
+            <div class="signal-analysis-grid" id="signalAnalysisGrid"></div>
+          </section>
+
+          <section class="dashboard-card performance-section">
+            <div class="card-heading">
+              <span>Prediction Audit</span>
+              <strong>Search historical predictions</strong>
+            </div>
+            <label class="performance-search">
+              <span>Search ticker or reason</span>
+              <input id="performanceSearch" placeholder="NVDA, bull flag, high confidence..." autocomplete="off" />
+            </label>
+            <div class="prediction-audit-list" id="predictionAuditList"></div>
+          </section>
+
+          <section class="dashboard-card performance-section">
+            <div class="card-heading">
+              <span>AI Learning Summary</span>
+              <strong>Plain-English report</strong>
+            </div>
+            <div class="learning-summary" id="aiLearningSummary"></div>
+          </section>
+
+          <section class="dashboard-card performance-section">
+            <div class="card-heading">
+              <span>Future Model Tracking</span>
+              <strong>Version placeholders</strong>
+            </div>
+            <div class="performance-overview-grid compact-executive-grid" id="performanceVersionGrid"></div>
+          </section>
+        </div>
+      </section>
+
       <section class="dashboard-page" data-page="briefs">
         <div class="section-heading">
           <div>
@@ -499,6 +562,7 @@
       <button type="button" class="nav-link" data-page-target="predictions">Picks</button>
       <button type="button" class="nav-link" data-page-target="briefs">Briefs</button>
       <button type="button" class="nav-link" data-page-target="watchlist">Lists</button>
+      <button type="button" class="nav-link" data-page-target="performance">Perf</button>
       <button type="button" class="nav-link" data-page-target="alerts">Alerts</button>
     </nav>
 
