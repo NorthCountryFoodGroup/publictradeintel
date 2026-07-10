@@ -132,6 +132,14 @@ const output = {
   tradeBriefPanel: document.querySelector("#tradeBriefPanel"),
   pageBreadcrumb: document.querySelector("#pageBreadcrumb"),
   pageTitle: document.querySelector("#pageTitle"),
+  profileMenuButton: document.querySelector("#profileMenuButton"),
+  profileDropdown: document.querySelector("#profileDropdown"),
+  profileSignOutButton: document.querySelector("#profileSignOutButton"),
+  alertsMenuButton: document.querySelector("#alertsMenuButton"),
+  alertsDropdown: document.querySelector("#alertsDropdown"),
+  topbarAlertCount: document.querySelector("#topbarAlertCount"),
+  alertsDropdownCount: document.querySelector("#alertsDropdownCount"),
+  alertsDropdownContent: document.querySelector("#alertsDropdownContent"),
 };
 
 const defaultPlans = [
@@ -247,10 +255,11 @@ let selectedWatchlistId = "core-holdings";
 
 const pageLabels = {
   dashboard: "Dashboard",
-  predictions: "Predictions",
+  predictions: "Opportunities",
   briefs: "AI Trade Briefs",
   watchlist: "Watchlists",
-  market: "Market",
+  market: "Markets",
+  admin: "Admin",
   congress: "Congress",
   policy: "Policy",
   performance: "Performance",
@@ -953,6 +962,7 @@ function renderAlertsCenter() {
       .join("");
   }
   renderAlertHistory();
+  renderTopbarAlerts();
 }
 
 function renderAlertHistory() {
@@ -966,6 +976,56 @@ function renderAlertHistory() {
         .map((alert) => `<article class="alert-history-card"><strong>${escapeHtml(alert.ticker)} | ${escapeHtml(alert.type)}</strong><span>${escapeHtml(alert.priority)} | ${alert.timestamp ? new Date(alert.timestamp).toLocaleString() : "Now"}</span><small>${escapeHtml(alert.resolved ? "Resolved" : alert.read ? "Read" : "Unread")}</small></article>`)
         .join("")
     : `<article class="watchlist-empty"><strong>No alert history yet</strong><p>Triggered alerts will remain searchable here.</p></article>`;
+}
+
+function closeTopbarMenus() {
+  if (output.profileDropdown) output.profileDropdown.hidden = true;
+  if (output.alertsDropdown) output.alertsDropdown.hidden = true;
+  output.profileMenuButton?.setAttribute("aria-expanded", "false");
+  output.alertsMenuButton?.setAttribute("aria-expanded", "false");
+}
+
+function toggleTopbarMenu(menuName) {
+  const isProfile = menuName === "profile";
+  const dropdown = isProfile ? output.profileDropdown : output.alertsDropdown;
+  const button = isProfile ? output.profileMenuButton : output.alertsMenuButton;
+  if (!dropdown || !button) return;
+  const willOpen = dropdown.hidden;
+  closeTopbarMenus();
+  dropdown.hidden = !willOpen;
+  button.setAttribute("aria-expanded", String(willOpen));
+}
+
+function renderTopbarAlerts() {
+  if (!output.topbarAlertCount && !output.alertsDropdownContent) return;
+  const active = alertHistory.filter((alert) => !alert.resolved);
+  const unread = active.filter((alert) => !alert.read);
+  const highest = [...active].sort((a, b) => alertPriorityScore(b.priority) - alertPriorityScore(a.priority))[0];
+  if (output.topbarAlertCount) output.topbarAlertCount.textContent = String(unread.length);
+  if (output.alertsDropdownCount) output.alertsDropdownCount.textContent = `${unread.length} unread`;
+  if (!output.alertsDropdownContent) return;
+  if (!active.length) {
+    output.alertsDropdownContent.innerHTML = `<p>No new alerts.</p>`;
+    return;
+  }
+  output.alertsDropdownContent.innerHTML = `
+    <article class="dropdown-alert-item">
+      <span>${escapeHtml(highest?.priority || "Low")}</span>
+      <strong>${escapeHtml(highest?.ticker || "Market")} | ${escapeHtml(highest?.type || "Alert")}</strong>
+      <small>${escapeHtml(highest?.explanation || "Review the Alerts Center.")}</small>
+    </article>
+    ${active
+      .slice(0, 3)
+      .map(
+        (alert) => `
+          <article class="dropdown-alert-item compact">
+            <strong>${escapeHtml(alert.ticker || "Market")}</strong>
+            <small>${escapeHtml(alert.type || "Alert")} | ${alert.timestamp ? new Date(alert.timestamp).toLocaleString() : "Now"}</small>
+          </article>
+        `,
+      )
+      .join("")}
+  `;
 }
 
 function renderWatchlistAlerts() {
@@ -1000,6 +1060,7 @@ function renderDashboard() {
   const activeAppAlerts = alertHistory.filter((alert) => !alert.resolved);
   const unreadAppAlerts = activeAppAlerts.filter((alert) => !alert.read);
   const highestPriorityAlert = [...activeAppAlerts].sort((a, b) => alertPriorityScore(b.priority) - alertPriorityScore(a.priority))[0];
+  renderTopbarAlerts();
   const recentAppAlert = [...alertHistory].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0];
   const signals = policySignals.signals || [];
   const positiveSignals = signals.filter((signal) => signal.direction === "positive");
@@ -2358,7 +2419,7 @@ function renderTradeBrief() {
         <button type="button" data-page-target="predictions">Return to Predictions</button>
         <button type="button" data-page-target="watchlist">Add to Watchlist</button>
         <button type="button" data-create-alert-for="${escapeHtml(item.ticker)}">Create Alert</button>
-        <button type="button">Share Report</button>
+        <button type="button" disabled>Share Report <small>Coming Soon</small></button>
       </footer>
     </article>
   `;
@@ -3801,9 +3862,32 @@ output.predictionGrid?.addEventListener("click", (event) => {
     }
   }
 });
+output.profileMenuButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleTopbarMenu("profile");
+});
+output.profileDropdown?.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+output.alertsMenuButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  renderTopbarAlerts();
+  toggleTopbarMenu("alerts");
+});
+output.alertsDropdown?.addEventListener("click", (event) => {
+  const navButton = event.target.closest("[data-page-target]");
+  if (navButton) {
+    setPage(navButton.dataset.pageTarget);
+    closeTopbarMenus();
+  }
+  event.stopPropagation();
+});
 document.addEventListener("click", (event) => {
   const navButton = event.target.closest("[data-page-target]");
-  if (navButton) setPage(navButton.dataset.pageTarget);
+  if (navButton) {
+    setPage(navButton.dataset.pageTarget);
+    closeTopbarMenus();
+  }
   const scanButton = event.target.closest("[data-run-prediction-scan]");
   if (scanButton && !output.predictionGrid?.contains(scanButton)) runPredictionScan();
   const briefButton = event.target.closest("[data-view-brief]");
@@ -3820,6 +3904,10 @@ document.addEventListener("click", (event) => {
     if (output.alertRuleTicker) output.alertRuleTicker.value = ticker;
     output.alertRuleTicker?.focus();
   }
+  if (!event.target.closest(".topbar-menu-wrap")) closeTopbarMenus();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeTopbarMenus();
 });
 output.portfolioList?.addEventListener("click", (event) => {
   const button = event.target.closest(".remove-position");
@@ -3829,6 +3917,10 @@ output.portfolioList?.addEventListener("click", (event) => {
   renderPortfolio();
 });
 output.logoutButton?.addEventListener("click", async () => {
+  await fetch("api/logout", { method: "POST" }).catch(() => {});
+  location.href = "/login.html";
+});
+output.profileSignOutButton?.addEventListener("click", async () => {
   await fetch("api/logout", { method: "POST" }).catch(() => {});
   location.href = "/login.html";
 });

@@ -18,18 +18,23 @@
           <strong>Public Trade Intel</strong>
         </div>
         <nav>
+          <span class="nav-section-label">User Area</span>
           <button type="button" class="nav-link is-active" data-page-target="dashboard">Dashboard</button>
           <button type="button" class="nav-link" data-page-target="market">Markets</button>
           <button type="button" class="nav-link" data-page-target="predictions">Opportunities</button>
           <button type="button" class="nav-link" data-page-target="watchlist">Watchlists</button>
           <button type="button" class="nav-link" data-page-target="alerts">Alerts</button>
-          <button type="button" class="nav-link" data-page-target="briefs">Trade Briefs</button>
           <button type="button" class="nav-link" data-page-target="performance">AI Performance</button>
           <button type="button" class="nav-link" data-page-target="settings">Settings</button>
-          <button type="button" class="nav-link" data-page-target="congress">Congress</button>
-          <button type="button" class="nav-link" data-page-target="policy">Policy</button>
+          <span class="nav-section-label admin-nav-heading">Admin Area</span>
+          <a class="admin-link" href="admin.html">Admin Dashboard</a>
+          <a class="admin-link" href="admin.html#prediction-engine">Prediction Engine</a>
+          <a class="admin-link" href="admin.html#scan-universe">Prediction Scan Settings</a>
+          <a class="admin-link" href="admin.html#market-data">Market Data</a>
+          <a class="admin-link" href="admin.html#congress-feed">Congress Feed</a>
+          <a class="admin-link" href="admin.html#policy-feed">Policy Feed</a>
+          <a class="admin-link" href="admin.html#system-health">System Health</a>
         </nav>
-        <a class="admin-link" href="admin.html">Admin backend</a>
       </aside>
 
       <main class="app-shell dashboard-main">
@@ -46,11 +51,45 @@
           <input id="globalSearch" placeholder="Search ticker, member, signal..." autocomplete="off" />
         </label>
         <div class="topbar-actions">
-          <button type="button" class="icon-button" aria-label="Notifications">!</button>
-          <button type="button" class="profile-button" aria-label="User profile menu">
+          <div class="topbar-menu-wrap">
+            <button type="button" class="icon-button alerts-button" id="alertsMenuButton" aria-label="Open alerts menu" aria-expanded="false" aria-controls="alertsDropdown">
+              <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+                <path d="M10 21h4" />
+              </svg>
+              <em id="topbarAlertCount">0</em>
+            </button>
+            <div class="topbar-dropdown alerts-dropdown" id="alertsDropdown" hidden>
+              <div class="dropdown-heading">
+                <strong>Alerts</strong>
+                <span id="alertsDropdownCount">0 unread</span>
+              </div>
+              <div id="alertsDropdownContent">
+                <p>No new alerts.</p>
+              </div>
+              <button type="button" class="dropdown-action" data-page-target="alerts">View All Alerts</button>
+            </div>
+          </div>
+          <div class="topbar-menu-wrap">
+          <button type="button" class="profile-button" id="profileMenuButton" aria-label="Open user profile menu" aria-expanded="false" aria-controls="profileDropdown">
             <span>R</span>
             <strong>Profile</strong>
           </button>
+            <div class="topbar-dropdown profile-dropdown" id="profileDropdown" hidden>
+              <div class="dropdown-heading profile-heading">
+                <span>R</span>
+                <div>
+                  <strong>Ron</strong>
+                  <small>Admin user</small>
+                </div>
+              </div>
+              <button type="button" disabled>Profile <small>Coming Soon</small></button>
+              <button type="button" disabled>Preferences <small>Coming Soon</small></button>
+              <button type="button" disabled>Theme <small>Coming Soon</small></button>
+              <button type="button" disabled>Help &amp; Support <small>Coming Soon</small></button>
+              <button type="button" id="profileSignOutButton">Sign Out</button>
+            </div>
+          </div>
         </div>
       </header>
 
