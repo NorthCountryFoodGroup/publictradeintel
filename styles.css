@@ -319,6 +319,140 @@ textarea {
   padding-top: 14px;
 }
 
+.trade-brief-report {
+  display: grid;
+  gap: 16px;
+}
+
+.brief-report-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 18px;
+  align-items: center;
+}
+
+.brief-badge-row,
+.brief-chip-list,
+.brief-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+}
+
+.brief-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.brief-badge.positive {
+  border-color: rgba(69, 209, 154, 0.45);
+  background: rgba(69, 209, 154, 0.14);
+  color: #46d79e;
+}
+
+.brief-badge.neutral {
+  border-color: rgba(157, 180, 170, 0.3);
+  background: rgba(157, 180, 170, 0.12);
+  color: var(--muted);
+}
+
+.brief-badge.negative {
+  border-color: rgba(255, 122, 104, 0.42);
+  background: rgba(255, 122, 104, 0.13);
+  color: #ff9a8b;
+}
+
+.brief-top-metrics,
+.brief-plan-grid,
+.brief-fact-list,
+.brief-badge-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.brief-top-metrics div,
+.brief-plan-grid div,
+.brief-fact-list div,
+.brief-badge-panel div {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+.brief-top-metrics span,
+.brief-plan-grid span,
+.brief-fact-list span,
+.brief-badge-panel span,
+.brief-section-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.brief-report-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
+  gap: 16px;
+}
+
+.brief-section {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.brief-wide {
+  grid-column: 1 / -1;
+}
+
+.brief-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.brief-chip-list span {
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.positive-list span {
+  background: rgba(69, 209, 154, 0.13);
+  color: #46d79e;
+}
+
+.risk-list span {
+  background: rgba(255, 122, 104, 0.12);
+  color: #ff9a8b;
+}
+
+.brief-actions {
+  justify-content: flex-end;
+}
+
+.brief-actions button {
+  width: auto;
+}
+
 .executive-dashboard {
   display: grid;
   gap: 16px;
@@ -433,10 +567,28 @@ textarea {
   .compact-executive-grid,
   .opportunity-grid,
   .executive-two-column,
+  .brief-report-hero,
+  .brief-top-metrics,
+  .brief-plan-grid,
+  .brief-report-grid,
+  .brief-fact-list,
+  .brief-badge-panel,
   .brief-grid,
   .brief-columns,
   .brief-hero {
     grid-template-columns: 1fr;
+  }
+
+  .brief-wide {
+    grid-column: auto;
+  }
+
+  .brief-actions {
+    justify-content: stretch;
+  }
+
+  .brief-actions button {
+    width: 100%;
   }
 
   .summary-tile {

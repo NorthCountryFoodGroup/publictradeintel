@@ -1156,6 +1156,76 @@ function findPredictionByTicker(ticker) {
   return (predictionEngine.predictions || []).find((item) => String(item.ticker || "").toUpperCase() === normalized) || null;
 }
 
+function calculating(value) {
+  if (value === null || value === undefined || value === "" || value === "Needs market data") return "Calculating";
+  return String(value);
+}
+
+function moneyOrCalculating(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? dollarsPrecise(number) : "Calculating";
+}
+
+function badgeTone(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized.includes("positive") || normalized.includes("bull") || normalized.includes("buy") || normalized.includes("good")) return "positive";
+  if (normalized.includes("negative") || normalized.includes("bear") || normalized.includes("sell") || normalized.includes("risk") || normalized.includes("failed")) return "negative";
+  return "neutral";
+}
+
+function briefSignalItems(item, technical, setup, chartPattern) {
+  const signals = [];
+  const add = (label, active = true) => {
+    if (active && label && !signals.includes(label)) signals.push(label);
+  };
+  add("Multi-Timeframe Alignment", ["bullish", "bearish"].includes(item.multiTimeframeAlignment?.alignmentDirection));
+  add(chartPattern.primaryPattern, chartPattern.primaryPattern && chartPattern.primaryPattern !== "none");
+  add("Above VWAP", Number(technical.priceVsVwap) > 0);
+  add("Strong Relative Volume", Number(item.shortSqueezeSignal?.relativeVolume) >= 1.5);
+  add("Congress Buying", Number(item.congressionalSignal?.buys) > 0);
+  add("Positive Policy Signals", (policySignals.signals || []).some((signal) => signal.ticker === item.ticker && signal.direction === "positive"));
+  add("High Technical Score", Number(technical.technicalSignalScore) >= 70);
+  add(setup.setupDirection && setup.setupDirection !== "none" ? `${setup.setupDirection} setup` : "", setup.setupDirection && setup.setupDirection !== "none");
+  (item.strongestSignals || []).slice(0, 3).forEach((signal) => add(signal));
+  return signals.slice(0, 7);
+}
+
+function briefRiskItems(item, technical) {
+  const risks = [];
+  const add = (label, active = true) => {
+    if (active && label && !risks.includes(label)) risks.push(label);
+  };
+  add("Near Resistance", Number(technical.nearestResistance) > 0 && Number(item.currentPrice) > 0 && Number(technical.nearestResistance) - Number(item.currentPrice) < Number(item.currentPrice) * 0.015);
+  add("Weak Volume", Number(item.shortSqueezeSignal?.relativeVolume) > 0 && Number(item.shortSqueezeSignal?.relativeVolume) < 0.8);
+  add("Mixed Signals", item.unifiedDirection === "mixed" || (item.conflictingSignals || []).length > 1);
+  add("Policy Risk", (policySignals.signals || []).some((signal) => signal.ticker === item.ticker && signal.direction === "negative"));
+  add("Data Quality", ["partial", "stale", "failed"].includes(item.dataQualityStatus));
+  (item.conflictingSignals || []).slice(0, 3).forEach((signal) => add(signal));
+  add(item.failureRisk || item.whyMayBeWrong || "Prediction can fail if market conditions change quickly.", !risks.length);
+  return risks.slice(0, 6);
+}
+
+function tradeBriefSummary(item, signals, risks) {
+  const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+  const direction = item.unifiedDirection || "neutral";
+  const confidence = item.confidenceTier || "low";
+  const action =
+    direction === "bullish" && score >= 70
+      ? "This is a stronger buy candidate, assuming position size and risk controls fit your plan."
+      : direction === "bullish"
+      ? "This is a watchable buy candidate, but it still needs confirmation before sizing aggressively."
+      : direction === "mixed"
+      ? "This is not a clean buy yet because the signal stack is mixed."
+      : "This does not currently read as a strong buy candidate.";
+  return [
+    action,
+    `${item.ticker} carries a unified score of ${score}/100 with ${confidence} confidence and a ${direction} read.`,
+    signals.length ? `The biggest opportunities are ${signals.slice(0, 3).join(", ")}.` : "The opportunity case is still developing.",
+    risks.length ? `The biggest risks are ${risks.slice(0, 3).join(", ")}.` : "No major risk factor is dominating the brief yet.",
+    "Use the trade plan and invalidation level before acting."
+  ].join(" ");
+}
+
 function renderTradeBrief() {
   if (!output.tradeBriefPanel) return;
   const firstPick = firstFromSection("top25OneDay") || firstFromSection("top25SevenDay") || (predictionEngine.predictions || [])[0];
@@ -1174,58 +1244,156 @@ function renderTradeBrief() {
   selectedBriefTicker = item.ticker;
   const model = predictionModelForView(item);
   const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+  const setup = item.setupSignals || model?.setupSignals || {};
+  const chartPattern = item.chartPatternSignal || {};
   const qualityNotes = item.dataQualityNotes || item.dataQuality?.dataQualityNotes || [];
-  const congressSignals = [item.congressionalSignal, item.congressSignal, item.policyCatalyst].filter(Boolean);
   const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+  const signals = briefSignalItems(item, technical, setup, chartPattern);
+  const risks = briefRiskItems(item, technical);
+  const summary = tradeBriefSummary(item, signals, risks);
+  const matchingPolicy = (policySignals.signals || []).filter((signal) => signal.ticker === item.ticker);
+  const congress = item.congressionalSignal || {};
+  const newsSentiment = matchingPolicy.some((signal) => signal.direction === "positive")
+    ? "Positive"
+    : matchingPolicy.some((signal) => signal.direction === "negative")
+    ? "Negative"
+    : "Neutral";
+  const targetOne = model?.profitTarget || item.suggestedProfitTarget;
+  const targetTwo = Number(item.currentPrice) && Number(item.forecasts?.thirtyDay?.expectedUpside)
+    ? dollarsPrecise(Number(item.currentPrice) * (1 + Number(item.forecasts.thirtyDay.expectedUpside) / 100))
+    : "";
 
   output.tradeBriefPanel.innerHTML = `
-    <article class="trade-brief-card">
-      <div class="brief-hero">
+    <article class="trade-brief-report">
+      <header class="trade-brief-card brief-report-hero">
         <div>
-          <span class="eyebrow">AI Trade Brief</span>
+          <span class="eyebrow">AI Trade Brief&trade;</span>
           <h2>${escapeHtml(item.ticker)} | ${escapeHtml(item.name || item.company || item.ticker)}</h2>
-          <p>${escapeHtml(item.finalReasonSummary || item.reasonForRecommendation || item.predictionReason || "Signal summary pending.")}</p>
+          <div class="brief-badge-row">
+            <span class="brief-badge ${badgeTone(item.label)}">${escapeHtml(item.label || item.recommendation || "Research candidate")}</span>
+            <span class="brief-badge ${badgeTone(item.unifiedDirection)}">${escapeHtml(item.unifiedDirection || "neutral")}</span>
+            <span class="brief-badge neutral">${escapeHtml(item.bestTimeframe || item.timeframe || predictionModelTitle(model))}</span>
+          </div>
         </div>
         <div class="brief-score">
           <span>Unified score</span>
           <strong>${score}/100</strong>
-          <small>${escapeHtml(item.unifiedDirection || "neutral")} | ${escapeHtml(item.confidenceTier || "low")} confidence</small>
+          <small>${escapeHtml(item.confidenceTier || "low")} confidence</small>
         </div>
+      </header>
+
+      <div class="brief-top-metrics">
+        <div><span>Current Price</span><strong>${moneyOrCalculating(item.currentPrice)}</strong></div>
+        <div><span>Prediction Timeframe</span><strong>${escapeHtml(item.bestTimeframe || item.timeframe || predictionModelTitle(model))}</strong></div>
+        <div><span>Market Trend</span><strong>${escapeHtml(technical.trendDirection || item.marketRegime?.primary || "Calculating")}</strong></div>
+        <div><span>Company</span><strong>${escapeHtml(item.name || item.company || item.ticker)}</strong></div>
       </div>
-      <div class="brief-grid">
-        <div><span>Recommendation</span><strong>${escapeHtml(item.label || item.recommendation || "Research candidate")}</strong></div>
-        <div><span>Entry zone</span><strong>${escapeHtml(model?.entryZone || item.suggestedEntryZone || "Needs market data")}</strong></div>
-        <div><span>Stop / invalidation</span><strong>${escapeHtml(model?.stopLevel || item.suggestedStopLevel || "Needs market data")}</strong></div>
-        <div><span>Target</span><strong>${escapeHtml(model?.profitTarget || item.suggestedProfitTarget || "Needs market data")}</strong></div>
-        <div><span>Risk / reward</span><strong>${Number(item.riskRewardRatio || 0).toFixed(2)}</strong></div>
-        <div><span>Data quality</span><strong>${escapeHtml(item.dataQualityStatus || item.dataQuality?.dataQualityStatus || "partial")}</strong></div>
+
+      <div class="brief-report-grid">
+        <section class="brief-section brief-wide">
+          <div class="brief-section-heading">
+            <span>Executive Summary</span>
+            <strong>Decision read</strong>
+          </div>
+          <p>${escapeHtml(summary)}</p>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading">
+            <span>Trade Plan</span>
+            <strong>Levels</strong>
+          </div>
+          <div class="brief-plan-grid">
+            <div><span>Suggested Entry Zone</span><strong>${escapeHtml(calculating(model?.entryZone || item.suggestedEntryZone))}</strong></div>
+            <div><span>Stop Loss</span><strong>${escapeHtml(calculating(model?.stopLevel || item.suggestedStopLevel))}</strong></div>
+            <div><span>Target 1</span><strong>${escapeHtml(calculating(targetOne))}</strong></div>
+            <div><span>Target 2</span><strong>${escapeHtml(calculating(targetTwo))}</strong></div>
+            <div><span>Risk / Reward Ratio</span><strong>${Number(item.riskRewardRatio) ? Number(item.riskRewardRatio).toFixed(2) : "Calculating"}</strong></div>
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading">
+            <span>Why This Pick</span>
+            <strong>Strongest signals</strong>
+          </div>
+          <div class="brief-chip-list positive-list">
+            ${signals.length ? signals.map((signal) => `<span>✓ ${escapeHtml(signal)}</span>`).join("") : "<span>Calculating signal stack</span>"}
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading">
+            <span>Risk Factors</span>
+            <strong>Watch these</strong>
+          </div>
+          <div class="brief-chip-list risk-list">
+            ${risks.map((risk) => `<span>! ${escapeHtml(risk)}</span>`).join("")}
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading">
+            <span>Technical Snapshot</span>
+            <strong>${Number(technical.technicalSignalScore) || 0}/100</strong>
+          </div>
+          <div class="brief-fact-list">
+            <div><span>Trend</span><strong>${escapeHtml(technical.trendDirection || "Calculating")}</strong></div>
+            <div><span>EMA Alignment</span><strong>${Number(technical.ema9Vs20Ema) > 0 ? "9 EMA above 20 EMA" : Number(technical.ema9Vs20Ema) < 0 ? "9 EMA below 20 EMA" : "Calculating"}</strong></div>
+            <div><span>VWAP Position</span><strong>${Number(technical.priceVsVwap) > 0 ? "Above VWAP" : Number(technical.priceVsVwap) < 0 ? "Below VWAP" : "Calculating"}</strong></div>
+            <div><span>Chart Pattern</span><strong>${escapeHtml(chartPattern.primaryPattern || "Calculating")}</strong></div>
+            <div><span>Support</span><strong>${moneyOrCalculating(technical.nearestSupport)}</strong></div>
+            <div><span>Resistance</span><strong>${moneyOrCalculating(technical.nearestResistance)}</strong></div>
+            <div><span>Setup Type</span><strong>${escapeHtml(setup.setupDirection && setup.setupDirection !== "none" ? setup.setupDirection : "Calculating")}</strong></div>
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading">
+            <span>Congress / Policy / News</span>
+            <strong>Signal tone</strong>
+          </div>
+          <div class="brief-badge-panel">
+            <div><span>Recent Congressional Activity</span><strong class="brief-badge ${Number(congress.buys) > Number(congress.sells || 0) ? "positive" : Number(congress.sells) ? "negative" : "neutral"}">${Number(congress.buys) || Number(congress.sells) ? `${Number(congress.buys) || 0} buys / ${Number(congress.sells) || 0} sells` : "Neutral"}</strong></div>
+            <div><span>Policy Catalysts</span><strong class="brief-badge ${badgeTone(matchingPolicy[0]?.direction)}">${matchingPolicy.length ? matchingPolicy[0].direction : "Neutral"}</strong></div>
+            <div><span>News Sentiment</span><strong class="brief-badge ${badgeTone(newsSentiment)}">${escapeHtml(newsSentiment)}</strong></div>
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading">
+            <span>Prediction Confidence</span>
+            <strong>${score}/100</strong>
+          </div>
+          <div class="brief-fact-list">
+            <div><span>Confidence Tier</span><strong>${escapeHtml(item.confidenceTier || "low")}</strong></div>
+            <div><span>Data Quality</span><strong>${escapeHtml(item.dataQualityStatus || item.dataQuality?.dataQualityStatus || "partial")}</strong></div>
+            <div><span>Strongest Signals</span><strong>${signals.slice(0, 2).map(escapeHtml).join(", ") || "Calculating"}</strong></div>
+            <div><span>Conflicting Signals</span><strong>${(item.conflictingSignals || []).slice(0, 2).map(escapeHtml).join(", ") || "None flagged"}</strong></div>
+          </div>
+          <details class="why-pick">
+            <summary>Data quality notes</summary>
+            <div class="signal-list">
+              ${qualityNotes.length ? qualityNotes.map((note) => `<span>${escapeHtml(note)}</span>`).join("") : "<span>No data quality warnings for this record.</span>"}
+            </div>
+          </details>
+        </section>
+
+        <section class="brief-section brief-wide">
+          <div class="brief-section-heading">
+            <span>Historical Performance</span>
+            <strong>Coming online</strong>
+          </div>
+          <p>Historical tracking will become available as prediction history grows.</p>
+        </section>
       </div>
-      <div class="brief-columns">
-        <section>
-          <h3>Why this pick</h3>
-          ${(item.strongestSignals || [item.whyTop25 || item.reasonForRecommendation || "Ranked by available AI signal strength."]).map((signal) => `<p>${escapeHtml(signal)}</p>`).join("")}
-        </section>
-        <section>
-          <h3>Risk factors</h3>
-          ${(item.conflictingSignals || [item.whyMayBeWrong || item.failureRisk || "The prediction can fail if market conditions change."]).map((signal) => `<p>${escapeHtml(signal)}</p>`).join("")}
-        </section>
-        <section>
-          <h3>Technical summary</h3>
-          <p>Trend: ${escapeHtml(technical.trendDirection || "unknown")}</p>
-          <p>Price vs 9/20 EMA: ${compactValue(technical.priceVs9Ema, "%")} / ${compactValue(technical.priceVs20Ema, "%")}</p>
-          <p>Support / resistance: ${technical.nearestSupport ? `$${Number(technical.nearestSupport).toFixed(2)}` : "n/a"} / ${technical.nearestResistance ? `$${Number(technical.nearestResistance).toFixed(2)}` : "n/a"}</p>
-        </section>
-        <section>
-          <h3>Congress / policy / news</h3>
-          ${congressSignals.length ? congressSignals.map((signal) => `<p>${escapeHtml(typeof signal === "string" ? signal : signal.reason || signal.summary || JSON.stringify(signal))}</p>`).join("") : "<p>No dedicated Congress or policy signal attached to this record yet.</p>"}
-        </section>
-      </div>
-      <details class="why-pick" open>
-        <summary>Data quality notes</summary>
-        <div class="signal-list">
-          ${qualityNotes.length ? qualityNotes.map((note) => `<span>${escapeHtml(note)}</span>`).join("") : "<span>No data quality warnings for this record.</span>"}
-        </div>
-      </details>
+
+      <footer class="brief-actions">
+        <button type="button" data-page-target="predictions">Return to Predictions</button>
+        <button type="button" data-page-target="watchlist">Add to Watchlist</button>
+        <button type="button">Create Alert</button>
+        <button type="button">Share Report</button>
+      </footer>
     </article>
   `;
 }
