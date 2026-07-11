@@ -1,6 +1,8 @@
 const state = {
   pin: "",
   config: null,
+  symbolUniverse: null,
+  congressFeedStatus: null,
 };
 
 const loginForm = document.querySelector("#adminLogin");
@@ -18,6 +20,8 @@ const goalsEditor = document.querySelector("#goalsEditor");
 const stocksEditor = document.querySelector("#stocksEditor");
 const congressEditor = document.querySelector("#congressEditor");
 const predictionHealthPanel = document.querySelector("#predictionHealthPanel");
+const symbolUniversePanel = document.querySelector("#symbolUniversePanel");
+const congressStatusPanel = document.querySelector("#congressStatusPanel");
 
 const thresholdFields = {
   firstEmergencyTarget: document.querySelector("#firstEmergencyTarget"),
@@ -38,6 +42,7 @@ const adminAlertsDropdown = document.querySelector("#adminAlertsDropdown");
 
 const universeLabels = {
   watchlist: "Watchlist only",
+  symbolMaster: "U.S. stock/ETF symbol master",
   sp500: "S&P 500",
   nasdaq100: "Nasdaq-100",
   etfs: "ETFs",
@@ -76,6 +81,7 @@ const adminHashTargets = {
 
 const universeBaseCounts = {
   watchlist: 0,
+  symbolMaster: 0,
   sp500: 60,
   nasdaq100: 48,
   etfs: 28,
@@ -280,10 +286,123 @@ function renderScanSettingsStatus() {
   const mode = scanUniverse.value || "combined";
   const customCount = parseCustomTickerCount(customTickers?.value || "");
   const watchlistCount = state.config?.stockIdeas?.length || 0;
-  const baseCount = mode === "watchlist" ? watchlistCount : universeBaseCounts[mode] || 0;
-  const total = Math.min(90, baseCount + customCount);
+  const symbolCount = state.symbolUniverse?.symbols?.length || 0;
+  const baseCount = mode === "watchlist" ? watchlistCount : mode === "symbolMaster" ? symbolCount : universeBaseCounts[mode] || 0;
+  const target = state.config?.discoverySettings?.broadScreenTarget || 2500;
+  const budget = state.config?.discoverySettings?.providerRequestBudget || target;
+  const total = Math.min(baseCount + customCount, target, budget);
   activeScanUniverse.value = universeLabels[mode] || "Combined universe";
-  scanCandidateCount.value = `${total} candidate${total === 1 ? "" : "s"}${customCount ? `, including ${customCount} custom` : ""}`;
+  scanCandidateCount.value = `${total} candidate${total === 1 ? "" : "s"} available for broad screen${customCount ? `, including ${customCount} custom` : ""}`;
+}
+
+function renderSymbolUniverse(universe) {
+  if (!symbolUniversePanel) return;
+  const metadata = universe?.metadata || universe?.symbolUniverseMetadata || {};
+  const notes = metadata.notes || universe?.notes || [];
+  symbolUniversePanel.innerHTML = `
+    <article class="editor-row stock-editor-row">
+      <label>
+        <span>Symbol universe status</span>
+        <input readonly value="${escapeHtml(metadata.refreshStatus || metadata.status || "Unknown")}" />
+      </label>
+      <label>
+        <span>Eligible symbols cached</span>
+        <input readonly value="${Number(metadata.eligibleCount || universe?.symbols?.length) || 0}" />
+      </label>
+      <label>
+        <span>Source</span>
+        <input readonly value="${escapeHtml(metadata.source || "Not loaded")}" />
+      </label>
+      <label>
+        <span>Last refreshed</span>
+        <input readonly value="${escapeHtml(metadata.lastRefresh || metadata.generatedAt || "Not available")}" />
+      </label>
+      <label class="wide-field">
+        <span>Coverage notes</span>
+        <input readonly value="${escapeHtml(notes.join("; ") || "No provider limitations reported.")}" />
+      </label>
+      <div class="button-row">
+        <button type="button" id="refreshSymbolUniverse">Refresh symbol universe</button>
+      </div>
+    </article>
+  `;
+  document.querySelector("#refreshSymbolUniverse")?.addEventListener("click", refreshSymbolUniverse);
+}
+
+function renderCongressStatus(status) {
+  if (!congressStatusPanel) return;
+  congressStatusPanel.innerHTML = `
+    <article class="editor-row stock-editor-row">
+      <label>
+        <span>Feed status</span>
+        <input readonly value="${escapeHtml(status?.status || "Unknown")}" />
+      </label>
+      <label>
+        <span>Provider/source</span>
+        <input readonly value="${escapeHtml(status?.provider || status?.source || "Saved disclosures")}" />
+      </label>
+      <label>
+        <span>Last refresh</span>
+        <input readonly value="${escapeHtml(status?.lastRefresh || "Not available")}" />
+      </label>
+      <label>
+        <span>Latest disclosure</span>
+        <input readonly value="${escapeHtml(status?.latestDisclosureDate || "Not available")}" />
+      </label>
+      <label>
+        <span>Records available</span>
+        <input readonly value="${Number(status?.recordsAvailable) || 0}" />
+      </label>
+      <label>
+        <span>Live URL configured</span>
+        <input readonly value="${status?.liveFeedUrlConfigured ? "Yes" : "No"}" />
+      </label>
+      <label class="wide-field">
+        <span>User-facing message</span>
+        <input readonly value="${escapeHtml(status?.userMessage || "Congress feed status unavailable.")}" />
+      </label>
+      <label class="wide-field">
+        <span>Admin setup note</span>
+        <input readonly value="${escapeHtml(status?.technicalSetupInstructions || "Set CONGRESS_TRADES_FEED_URL only when a live JSON or CSV provider is connected.")}" />
+      </label>
+    </article>
+  `;
+}
+
+async function loadAdminStatusPanels() {
+  try {
+    const [symbolResponse, congressResponse] = await Promise.all([
+      fetch("/api/symbol-universe"),
+      fetch("/api/congress-feed-status"),
+    ]);
+    state.symbolUniverse = symbolResponse.ok ? await symbolResponse.json() : null;
+    state.congressFeedStatus = congressResponse.ok ? await congressResponse.json() : null;
+  } catch (error) {
+    state.symbolUniverse = null;
+    state.congressFeedStatus = { status: "Failed", userMessage: error.message };
+  }
+  renderSymbolUniverse(state.symbolUniverse);
+  renderCongressStatus(state.congressFeedStatus);
+  renderScanSettingsStatus();
+}
+
+async function refreshSymbolUniverse() {
+  scanSettingsMessage.textContent = "Refreshing symbol universe...";
+  try {
+    const response = await fetch("/api/admin/refresh-symbol-universe", {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({}),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Symbol universe refresh failed.");
+    state.symbolUniverse = result;
+    renderSymbolUniverse(result);
+    renderScanSettingsStatus();
+    scanSettingsMessage.textContent = `Symbol universe refreshed. ${result.symbols?.length || 0} eligible symbols cached.`;
+  } catch (error) {
+    scanSettingsMessage.textContent = error.message;
+  }
 }
 
 function renderPredictionHealth(health) {
@@ -671,6 +790,7 @@ loginForm.addEventListener("submit", async (event) => {
     ]);
     renderConfig(config);
     renderSummary(summary);
+    await loadAdminStatusPanels();
     setAdminSection(adminSectionFromHash());
     loginMessage.textContent = "Admin loaded.";
   } catch (error) {
@@ -760,6 +880,22 @@ document.querySelector("#refreshPredictions")?.addEventListener("click", async (
   }
 });
 
+document.querySelector("#settleOutcomes")?.addEventListener("click", async () => {
+  predictionHealthMessage.textContent = "Settling due prediction outcomes...";
+  try {
+    const response = await fetch("/api/admin/settle-outcomes", {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({}),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Outcome settlement failed.");
+    predictionHealthMessage.textContent = `Outcome settlement complete. ${result.predictionsSettled || 0} settled, ${result.retryQueue || 0} waiting for quote data.`;
+  } catch (error) {
+    predictionHealthMessage.textContent = error.message;
+  }
+});
+
 document.querySelector("#refreshPolicy").addEventListener("click", async () => {
   policyMessage.textContent = "Scanning policy sources...";
   try {
@@ -787,6 +923,11 @@ document.querySelector("#refreshCongressFeed").addEventListener("click", async (
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Congress feed refresh failed.");
     renderConfig(result.config);
+    const statusResponse = await fetch("/api/congress-feed-status");
+    if (statusResponse.ok) {
+      state.congressFeedStatus = await statusResponse.json();
+      renderCongressStatus(state.congressFeedStatus);
+    }
     congressFeedMessage.textContent = `Imported ${result.status.imported} trades. Total tracked trades: ${result.status.totalTrades}.`;
   } catch (error) {
     congressFeedMessage.textContent = error.message;

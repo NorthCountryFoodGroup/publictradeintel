@@ -15,6 +15,9 @@ const POLICY_FILE = path.join(DATA_DIR, "policySignals.json");
 const CONGRESS_FEED_STATUS_FILE = path.join(DATA_DIR, "congressFeedStatus.json");
 const PORTFOLIO_FILE = path.join(DATA_DIR, "portfolio.json");
 const PREDICTIONS_FILE = path.join(DATA_DIR, "predictions.json");
+const SYMBOL_UNIVERSE_FILE = path.join(DATA_DIR, "symbolUniverse.json");
+const PREDICTION_HISTORY_FILE = path.join(DATA_DIR, "predictionHistory.json");
+const OUTCOME_STATUS_FILE = path.join(DATA_DIR, "outcomeStatus.json");
 const MARKET_API_KEY = String(process.env.ALPHA_VANTAGE_API_KEY || "").trim();
 const POLICY_REFRESH_MS = Number(process.env.POLICY_REFRESH_MS || 60 * 60 * 1000);
 const CONGRESS_TRADES_FEED_URL = process.env.CONGRESS_TRADES_FEED_URL || "";
@@ -31,7 +34,7 @@ const PROVIDER_REQUEST_BUDGET = 2500;
 const MAX_SCAN_DURATION = 180000;
 const MARKET_QUOTE_BATCH_SIZE = 8;
 const MARKET_QUOTE_RETRY_DELAY_MS = 350;
-const SCAN_UNIVERSE_MODES = ["watchlist", "sp500", "nasdaq100", "etfs", "combined"];
+const SCAN_UNIVERSE_MODES = ["watchlist", "sp500", "nasdaq100", "etfs", "combined", "symbolMaster"];
 const DEFAULT_DISCOVERY_SETTINGS = {
   broadScreenTarget: BROAD_SCREEN_TARGET,
   targetSymbolCount: BROAD_SCREEN_TARGET,
@@ -59,6 +62,9 @@ const DEFAULT_DISCOVERY_SETTINGS = {
   scheduledScanningEnabled: false,
   scheduledScanTimes: ["08:30", "09:45", "12:00", "15:30", "19:00"],
   timezone: "America/New_York",
+  symbolUniverseRefreshHours: 24,
+  includeAdrs: true,
+  includeClosedEndFunds: false,
 };
 const DEFAULT_MODEL_WEIGHTS = {
   modelVersion: "v5-responsive-discovery",
@@ -110,6 +116,45 @@ function readJson(file, fallback) {
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function ageMs(timestamp) {
+  const time = Date.parse(timestamp || "");
+  return Number.isFinite(time) ? Date.now() - time : Infinity;
+}
+
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function tradingDaysFrom(startTimestamp, tradingDays) {
+  const date = new Date(startTimestamp || Date.now());
+  let remaining = Number(tradingDays) || 1;
+  while (remaining > 0) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) remaining -= 1;
+  }
+  date.setHours(16, 0, 0, 0);
+  return date.toISOString();
+}
+
+function securityTypeForSymbol(symbol, index = 0) {
+  if (/ETF|FUND/i.test(symbol)) return "ETF";
+  if (index % 29 === 0) return "ADR";
+  if (index % 43 === 0) return "Closed-End Fund";
+  return "Common Stock";
+}
+
+function providerTickerFor(ticker, provider = "yahoo") {
+  const canonicalTicker = quoteTickerSymbol(ticker);
+  const providerTicker = provider === "yahoo" ? canonicalTicker.replace(/\./g, "-") : canonicalTicker;
+  return {
+    canonicalTicker,
+    displayTicker: canonicalTicker,
+    providerTicker,
+    provider,
+  };
 }
 
 function sendJson(response, status, body) {
@@ -284,6 +329,9 @@ function sanitizeDiscoverySettings(settings = {}) {
     scheduledScanningEnabled: source.scheduledScanningEnabled === true,
     scheduledScanTimes: Array.isArray(source.scheduledScanTimes) ? source.scheduledScanTimes.slice(0, 8).map((time) => String(time).slice(0, 8)) : DEFAULT_DISCOVERY_SETTINGS.scheduledScanTimes,
     timezone: String(source.timezone || "America/New_York").slice(0, 80),
+    symbolUniverseRefreshHours: boundedNumber(source.symbolUniverseRefreshHours, 24, 1, 720),
+    includeAdrs: source.includeAdrs !== false,
+    includeClosedEndFunds: source.includeClosedEndFunds === true,
     lastChangedAt: String(source.lastChangedAt || "").slice(0, 40),
   };
 }
@@ -553,7 +601,155 @@ function universePresetTickers(mode) {
   if (mode === "nasdaq100") return BUILT_IN_UNIVERSES.nasdaq100;
   if (mode === "etfs") return BUILT_IN_UNIVERSES.etfs;
   if (mode === "combined") return [...BUILT_IN_UNIVERSES.sp500, ...BUILT_IN_UNIVERSES.nasdaq100, ...BUILT_IN_UNIVERSES.etfs];
+  if (mode === "symbolMaster") return symbolMasterTickers(sanitizeConfig(readJson(CONFIG_FILE, {})));
   return [];
+}
+
+function symbolMasterFallbackRows(count = 3200) {
+  const exchanges = ["NASDAQ", "NYSE", "NYSE American"];
+  const rows = [];
+  const realSeed = [
+    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "BRK.B", "LLY", "AVGO", "JPM", "TSLA",
+    "SPY", "QQQ", "IWM", "VTI", "VOO", "DIA", "XLK", "XLF", "XLE", "XLV", "SMH", "SOXX",
+  ];
+  realSeed.forEach((ticker, index) => {
+    rows.push({
+      canonicalTicker: quoteTickerSymbol(ticker),
+      displayTicker: quoteTickerSymbol(ticker),
+      providerTicker: yahooTickerSymbol(ticker),
+      name: ticker,
+      exchange: index % 3 === 0 ? "NASDAQ" : index % 3 === 1 ? "NYSE" : "NYSE American",
+      securityType: BUILT_IN_UNIVERSES.etfs.includes(ticker) ? "ETF" : "Common Stock",
+      active: true,
+      source: "fixture-fallback",
+    });
+  });
+  for (let index = 0; rows.length < count; index += 1) {
+    const prefix = String.fromCharCode(65 + (index % 26)) + String.fromCharCode(65 + (Math.floor(index / 26) % 26));
+    const ticker = `${prefix}${String(index % 100).padStart(2, "0")}`;
+    if (rows.some((row) => row.canonicalTicker === ticker)) continue;
+    const type = index % 17 === 0 ? "ETF" : securityTypeForSymbol(ticker, index);
+    rows.push({
+      canonicalTicker: ticker,
+      displayTicker: ticker,
+      providerTicker: ticker,
+      name: `Fixture ${type} ${ticker}`,
+      exchange: exchanges[index % exchanges.length],
+      securityType: type,
+      active: true,
+      source: "fixture-fallback",
+    });
+  }
+  return rows;
+}
+
+function symbolUniverseMetadata(rows, source, status, notes = [], exclusions = {}) {
+  const exchangeCounts = {};
+  const securityCounts = {};
+  rows.forEach((row) => {
+    exchangeCounts[row.exchange || "Unknown"] = (exchangeCounts[row.exchange || "Unknown"] || 0) + 1;
+    securityCounts[row.securityType || "Unknown"] = (securityCounts[row.securityType || "Unknown"] || 0) + 1;
+  });
+  const fetchedAt = isoNow();
+  return {
+    source,
+    fetchedAt,
+    rawSymbolCount: rows.length + Object.values(exclusions).reduce((sum, value) => sum + value, 0),
+    normalizedSymbolCount: rows.length,
+    eligibleSymbolCount: rows.length,
+    commonStockCount: securityCounts["Common Stock"] || 0,
+    ETFCount: securityCounts.ETF || 0,
+    excludedCount: Object.values(exclusions).reduce((sum, value) => sum + value, 0),
+    exclusionReasons: exclusions,
+    exchangeCounts,
+    securityTypeCounts: securityCounts,
+    refreshStatus: status,
+    refreshNotes: notes,
+    timezone: DEFAULT_DISCOVERY_SETTINGS.timezone,
+  };
+}
+
+function buildFallbackSymbolUniverse(note = "Official exchange listing refresh unavailable; using generated fixture universe for development/testing.") {
+  const symbols = symbolMasterFallbackRows(3200);
+  return {
+    symbols,
+    symbolUniverseMetadata: symbolUniverseMetadata(symbols, "Generated fixture fallback, not live broad-market coverage", "fallback", [note]),
+  };
+}
+
+async function refreshSymbolUniverse() {
+  const sources = [
+    { name: "Nasdaq Trader nasdaqlisted", url: "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt" },
+    { name: "Nasdaq Trader otherlisted", url: "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt" },
+  ];
+  const rows = [];
+  const exclusions = {};
+  try {
+    for (const source of sources) {
+      const response = await fetch(source.url, { headers: { "User-Agent": "PublicTradeIntelSymbolUniverse/1.0" } });
+      if (!response.ok) throw new Error(`${source.name} returned ${response.status}`);
+      const text = await response.text();
+      const lines = text.split(/\r?\n/).filter((line) => line && !/^File Creation Time/i.test(line));
+      const headers = lines.shift()?.split("|") || [];
+      for (const line of lines) {
+        const values = line.split("|");
+        const row = Object.fromEntries(headers.map((header, index) => [header, values[index] || ""]));
+        const rawTicker = row.Symbol || row["ACT Symbol"] || "";
+        const ticker = quoteTickerSymbol(rawTicker);
+        const name = row["Security Name"] || row["Company Name"] || ticker;
+        const exchange = row["Listing Exchange"] === "N" ? "NYSE" : row["Listing Exchange"] === "A" ? "NYSE American" : "NASDAQ";
+        const type = /ETF/i.test(row.ETF || name) ? "ETF" : /ADR/i.test(name) ? "ADR" : /Fund/i.test(name) ? "Closed-End Fund" : "Common Stock";
+        const invalid = !ticker || /[\^$]/.test(rawTicker) || /Warrant|Right|Unit|Preferred|Test|Delisted/i.test(name);
+        if (invalid) {
+          exclusions.invalidOrExcludedSecurity = (exclusions.invalidOrExcludedSecurity || 0) + 1;
+          continue;
+        }
+        rows.push({ ...providerTickerFor(ticker), name, exchange, securityType: type, active: true, source: source.name });
+      }
+    }
+    const unique = [...new Map(rows.map((row) => [row.canonicalTicker, row])).values()];
+    if (unique.length < 2500) throw new Error(`Official listing source returned only ${unique.length} eligible symbols.`);
+    const result = {
+      symbols: unique,
+      symbolUniverseMetadata: symbolUniverseMetadata(unique, "Nasdaq Trader exchange listing files", "live", ["Fetched official listing files."], exclusions),
+    };
+    writeJson(SYMBOL_UNIVERSE_FILE, result);
+    return result;
+  } catch (error) {
+    const saved = readJson(SYMBOL_UNIVERSE_FILE, null);
+    if (saved?.symbols?.length) {
+      saved.symbolUniverseMetadata = {
+        ...(saved.symbolUniverseMetadata || {}),
+        refreshStatus: "stale",
+        refreshNotes: [`Refresh failed: ${error.message}. Retaining last valid symbol master.`],
+      };
+      writeJson(SYMBOL_UNIVERSE_FILE, saved);
+      return saved;
+    }
+    const fallback = buildFallbackSymbolUniverse(`Official symbol refresh failed: ${error.message}. Generated fixture universe is explicit fallback only.`);
+    writeJson(SYMBOL_UNIVERSE_FILE, fallback);
+    return fallback;
+  }
+}
+
+function loadSymbolUniverse() {
+  const saved = readJson(SYMBOL_UNIVERSE_FILE, null);
+  if (saved?.symbols?.length) return saved;
+  const fallback = buildFallbackSymbolUniverse("No cached symbol master exists yet. This is an explicit fallback, not live exchange coverage.");
+  writeJson(SYMBOL_UNIVERSE_FILE, fallback);
+  return fallback;
+}
+
+function symbolMasterTickers(config) {
+  const discovery = sanitizeDiscoverySettings(config.discoverySettings);
+  const universe = loadSymbolUniverse();
+  return (universe.symbols || [])
+    .filter((row) => row.active !== false)
+    .filter((row) => discovery.includeEtfs || row.securityType !== "ETF")
+    .filter((row) => discovery.includeAdrs || row.securityType !== "ADR")
+    .filter((row) => discovery.includeClosedEndFunds || row.securityType !== "Closed-End Fund")
+    .map((row) => row.displayTicker || row.canonicalTicker)
+    .filter(Boolean);
 }
 
 function universeCandidate(ticker, index, overrides = {}) {
@@ -584,7 +780,7 @@ function configuredUniverseTickers(config) {
   const custom = parseTickerList(config.scanSettings?.customTickers);
   const mode = config.scanSettings?.universe || "combined";
   const tickers = [
-    ...(mode === "watchlist" ? [...watchlist.keys()] : universePresetTickers(mode)),
+    ...(mode === "watchlist" ? [...watchlist.keys()] : mode === "symbolMaster" ? symbolMasterTickers(config) : universePresetTickers(mode)),
     ...custom,
   ];
   if (mode === "combined") tickers.unshift(...watchlist.keys());
@@ -662,6 +858,7 @@ function broadUniverseStats(config, quotes = []) {
   const quoteMap = new Map((quotes || []).map((quote) => [quote.ticker, quote]));
   const custom = parseTickerList(config.scanSettings?.customTickers);
   const pipeline = buildDiscoveryPipeline(config, quotes);
+  const symbolUniverse = loadSymbolUniverse();
   const withQuotes = pipeline.allTickers.filter((ticker) => quoteMap.has(ticker)).length;
   return {
     mode: pipeline.mode,
@@ -680,6 +877,7 @@ function broadUniverseStats(config, quotes = []) {
     freshQuoteCount: withQuotes,
     coverageLimitReasons: pipeline.coverageLimitReasons,
     actualCoverageNote: pipeline.actualCoverageNote,
+    symbolUniverseMetadata: symbolUniverse.symbolUniverseMetadata || null,
   };
 }
 
@@ -904,6 +1102,9 @@ function predictionCongressMetrics(ticker, trades) {
   const related = (trades || []).filter((trade) => trade.ticker === ticker);
   const buys = related.filter((trade) => trade.transaction === "Buy");
   const sells = related.filter((trade) => trade.transaction === "Sell");
+  const latestDate = related.map((trade) => trade.disclosureDate || trade.reportedDate || trade.transactionDate).filter(Boolean).sort().reverse()[0] || null;
+  const dataAgeDays = latestDate ? Math.max(0, Math.floor(ageMs(latestDate) / 86400000)) : null;
+  const ageDecay = dataAgeDays === null ? 0.5 : dataAgeDays <= 14 ? 1 : dataAgeDays <= 45 ? 0.7 : dataAgeDays <= 120 ? 0.45 : 0.25;
   const visibility = related.reduce((sum, trade) => sum + (Number(trade.signalScore) || 0), 0) / Math.max(1, related.length);
   const bipartisan = new Set(related.map((trade) => trade.party).filter(Boolean)).size > 1 ? 12 : 0;
   const cluster = Math.min(22, buys.length * 8 + related.length * 3);
@@ -913,7 +1114,54 @@ function predictionCongressMetrics(ticker, trades) {
     buys: buys.length,
     sells: sells.length,
     members: [...new Set(related.map((trade) => trade.representative).filter(Boolean))],
-    score: clamp(visibility * 0.58 + cluster + bipartisan - sellPenalty),
+    score: clamp((visibility * 0.58 + cluster + bipartisan - sellPenalty) * ageDecay),
+    latestDate,
+    dataAgeDays,
+    freshnessStatus: dataAgeDays === null ? "unavailable" : dataAgeDays <= 45 ? "fresh" : dataAgeDays <= 120 ? "stale" : "very stale",
+    ageDecay,
+    disclosureLagNotes: related
+      .map((trade) => {
+        const transactionDate = trade.transactionDate || trade.reportedDate;
+        const disclosureDate = trade.disclosureDate || trade.reportedDate;
+        const lag = Math.max(0, Math.floor((Date.parse(disclosureDate || "") - Date.parse(transactionDate || "")) / 86400000));
+        return Number.isFinite(lag) && lag > 0 ? `Disclosure filed ${lag} days after the reported transaction.` : "";
+      })
+      .filter(Boolean)
+      .slice(0, 3),
+  };
+}
+
+function congressFeedPublicStatus(config = sanitizeConfig(readJson(CONFIG_FILE, {}))) {
+  const savedTrades = config.congressTrades || [];
+  const status = readJson(CONGRESS_FEED_STATUS_FILE, {});
+  const latestDisclosureDate = savedTrades.map((trade) => trade.disclosureDate || trade.reportedDate).filter(Boolean).sort().reverse()[0] || null;
+  const dataAgeDays = latestDisclosureDate ? Math.max(0, Math.floor(ageMs(latestDisclosureDate) / 86400000)) : null;
+  let label = "Unavailable";
+  if (status.error) label = "Failed";
+  else if (CONGRESS_TRADES_FEED_URL && status.updatedAt) label = dataAgeDays !== null && dataAgeDays > 45 ? "Stale" : "Live";
+  else if (savedTrades.length) label = dataAgeDays !== null && dataAgeDays > 120 ? "Stale" : "Saved Data Only";
+  return {
+    status: label,
+    userMessage:
+      label === "Saved Data Only"
+        ? "Live congressional feed is not connected. Predictions are using saved congressional disclosures."
+        : label === "Live"
+          ? "Live congressional disclosure feed is connected."
+          : label === "Stale"
+            ? "Congressional disclosure data is stale. Predictions use it as a lower-confidence supporting signal."
+            : label === "Failed"
+              ? "Congressional feed refresh failed. Saved disclosures are still used when available."
+              : "Congressional disclosure data is unavailable.",
+    provider: CONGRESS_TRADES_FEED_URL ? "Configured feed" : "Saved disclosures",
+    source: status.source || CONGRESS_TRADES_FEED_URL || "saved config",
+    lastRefresh: status.updatedAt || null,
+    latestDisclosureDate,
+    recordsAvailable: savedTrades.length,
+    liveFeedUrlConfigured: Boolean(CONGRESS_TRADES_FEED_URL),
+    savedFallbackAvailable: savedTrades.length > 0,
+    dataAgeDays,
+    freshnessStatus: dataAgeDays === null ? "unavailable" : dataAgeDays <= 45 ? "fresh" : dataAgeDays <= 120 ? "stale" : "very stale",
+    technicalSetupInstructions: "Set CONGRESS_TRADES_FEED_URL to a JSON or CSV congressional trading feed. Optional: set CONGRESS_TRADES_API_KEY.",
   };
 }
 
@@ -2762,6 +3010,151 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
   };
 }
 
+function timeframeTradingDays(timeframe) {
+  if (/1-day|daily/i.test(timeframe)) return 1;
+  if (/7-day|weekly/i.test(timeframe)) return 7;
+  if (/month|30/i.test(timeframe)) return 21;
+  if (/year/i.test(timeframe)) return 252;
+  return 1;
+}
+
+function historicalPredictionRows({ predictions, sections, scanId, scanHealth, updatedAt }) {
+  const byTicker = new Map((predictions || []).map((item) => [item.ticker, item]));
+  const lists = [
+    ["1-day trade", sections.top25OneDay || []],
+    ["7-day trade", sections.top25SevenDay || []],
+    ["1-month trade", sections.top25OneMonth || []],
+    ["1-year hold", sections.top25OneYear || []],
+  ];
+  return lists.flatMap(([timeframe, rows]) =>
+    rows.map((row, index) => {
+      const item = byTicker.get(row.ticker) || row;
+      const referencePrice = Number(item.currentPrice || item.marketPrice || item.price) || null;
+      return {
+        predictionId: `${scanId}:${timeframe}:${row.ticker}`,
+        scanId,
+        modelVersion: "v5-live-coverage-forward-tracking",
+        ticker: row.ticker,
+        timeframe,
+        rank: index + 1,
+        predictionTimestamp: updatedAt,
+        evaluationDueAt: tradingDaysFrom(updatedAt, timeframeTradingDays(timeframe)),
+        predictedDirection: item.unifiedDirection || item.direction || "mixed",
+        unifiedScore: Number(item.unifiedPredictionScore || item.aiOpportunityScore) || 0,
+        confidenceTier: item.confidenceTier || "low",
+        recommendation: item.recommendation || item.label || "Watch",
+        referencePrice,
+        referencePriceTimestamp: item.quoteTimestamp || scanHealth?.marketDataAsOfTimestamp || null,
+        targetPrice: Number(item.targetPrice || item.suggestedTarget || item.targetLevel) || null,
+        stopPrice: Number(item.stopPrice || item.suggestedStop || item.invalidationLevel) || null,
+        signalSummary: (item.strongestSignals || []).slice(0, 5).join("; ") || item.finalReasonSummary || "",
+        dataFreshness: item.freshnessStatus || item.dataQualityStatus || "unknown",
+        universe: scanHealth?.selectedScanUniverse || "combined",
+        settlementStatus: "pending",
+      };
+    }),
+  );
+}
+
+function appendPredictionHistory(rows) {
+  const history = readJson(PREDICTION_HISTORY_FILE, { records: [], updatedAt: null });
+  const seen = new Set((history.records || []).map((record) => record.predictionId));
+  const nextRecords = [...(history.records || [])];
+  rows.forEach((row) => {
+    if (!seen.has(row.predictionId)) {
+      nextRecords.push(row);
+      seen.add(row.predictionId);
+    }
+  });
+  const result = { updatedAt: isoNow(), records: nextRecords.slice(-10000) };
+  writeJson(PREDICTION_HISTORY_FILE, result);
+  return result;
+}
+
+function settlePredictionOutcomes(config) {
+  const history = readJson(PREDICTION_HISTORY_FILE, { records: [], updatedAt: null });
+  const now = Date.now();
+  let checked = 0;
+  let settled = 0;
+  const records = (history.records || []).map((record) => {
+    if (record.settlementStatus === "settled") return record;
+    if (Date.parse(record.evaluationDueAt || "") > now) return record;
+    checked += 1;
+    const quote = findCachedQuote(record.ticker);
+    const actualPrice = Number(quote?.marketPrice) || null;
+    if (!actualPrice || !Number(record.referencePrice)) {
+      return { ...record, settlementStatus: "eligible", settlementNotes: "Eligible, but evaluation price is not available yet." };
+    }
+    const percentageReturn = ((actualPrice - Number(record.referencePrice)) / Number(record.referencePrice)) * 100;
+    const bullish = /bullish|buy|long/i.test(`${record.predictedDirection} ${record.recommendation}`);
+    settled += 1;
+    return {
+      ...record,
+      actualEvaluationPrice: actualPrice,
+      actualEvaluationTimestamp: quote.marketUpdatedAt || isoNow(),
+      absoluteReturn: actualPrice - Number(record.referencePrice),
+      percentageReturn,
+      directionCorrect: bullish ? percentageReturn >= 0 : percentageReturn <= 0,
+      targetReached: Number(record.targetPrice) ? (bullish ? actualPrice >= Number(record.targetPrice) : actualPrice <= Number(record.targetPrice)) : false,
+      stopReached: Number(record.stopPrice) ? (bullish ? actualPrice <= Number(record.stopPrice) : actualPrice >= Number(record.stopPrice)) : false,
+      maximumFavorableExcursion: null,
+      maximumAdverseExcursion: null,
+      settlementStatus: "settled",
+      settlementNotes: "Settled from available cached/current market quote.",
+    };
+  });
+  const result = {
+    updatedAt: isoNow(),
+    records,
+  };
+  writeJson(PREDICTION_HISTORY_FILE, result);
+  const status = {
+    lastOutcomeSettlementRun: isoNow(),
+    nextSettlementRun: tradingDaysFrom(isoNow(), 1),
+    predictionsChecked: checked,
+    predictionsSettled: settled,
+    failures: records.filter((record) => record.settlementStatus === "failed").length,
+    retryQueue: records.filter((record) => record.settlementStatus === "eligible").length,
+  };
+  writeJson(OUTCOME_STATUS_FILE, status);
+  return { history: result, status };
+}
+
+function performanceSummary() {
+  const history = readJson(PREDICTION_HISTORY_FILE, { records: [] });
+  const records = history.records || [];
+  const settled = records.filter((record) => record.settlementStatus === "settled");
+  const pending = records.filter((record) => record.settlementStatus === "pending");
+  const eligible = records.filter((record) => record.settlementStatus === "eligible");
+  const byTimeframe = {};
+  ["1-day trade", "7-day trade", "1-month trade", "1-year hold"].forEach((timeframe) => {
+    const rows = records.filter((record) => record.timeframe === timeframe);
+    const settledRows = rows.filter((record) => record.settlementStatus === "settled");
+    byTimeframe[timeframe] = {
+      recorded: rows.length,
+      pending: rows.filter((record) => record.settlementStatus === "pending").length,
+      eligible: rows.filter((record) => record.settlementStatus === "eligible").length,
+      settled: settledRows.length,
+      accuracy: settledRows.length ? Math.round((settledRows.filter((record) => record.directionCorrect).length / settledRows.length) * 100) : null,
+      averageReturn: settledRows.length ? settledRows.reduce((sum, record) => sum + Number(record.percentageReturn || 0), 0) / settledRows.length : null,
+    };
+  });
+  return {
+    updatedAt: isoNow(),
+    recordsTotal: records.length,
+    predictionsRecorded: records.length,
+    predictionsPending: pending.length,
+    predictionsEligible: eligible.length,
+    predictionsSettled: settled.length,
+    oldestPendingPrediction: pending.map((record) => record.predictionTimestamp).sort()[0] || null,
+    nextSettlementTime: pending.map((record) => record.evaluationDueAt).sort()[0] || null,
+    dataCoverageStartDate: records.map((record) => record.predictionTimestamp).sort()[0] || null,
+    byTimeframe,
+    liveForwardResultsOnly: true,
+    historicalBacktestResults: null,
+  };
+}
+
 function samplePredictionConfig() {
   const base = sanitizeConfig(readJson(CONFIG_FILE, {}));
   const existing = Array.isArray(base.stockIdeas) ? base.stockIdeas : [];
@@ -2838,9 +3231,18 @@ async function refreshPredictions(options = {}) {
   const sections = predictionSections(predictions, previous.sections || {});
   const predictionEngineHealth = buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt });
   const durationMs = Date.parse(updatedAt) - Date.parse(scanStartedAt);
+  const scanId = `scan-${Date.parse(updatedAt) || Date.now()}`;
+  const marketDataAsOfTimestamp = predictions.map((item) => item.quoteTimestamp).filter(Boolean).sort().reverse()[0] || null;
   const scanHealth = {
+    scanId,
     scanStartedAt,
     scanCompletedAt: updatedAt,
+    lastSuccessfulScanTimestamp: updatedAt,
+    lastScanAttemptTimestamp: scanStartedAt,
+    scanCompletedTimestamp: updatedAt,
+    marketDataAsOfTimestamp,
+    scanDurationSeconds: Number.isFinite(durationMs) ? Math.round(durationMs / 1000) : 0,
+    scanStatus: "completed",
     durationMs: Number.isFinite(durationMs) ? durationMs : 0,
     selectedScanUniverse: config.scanSettings?.universe || "combined",
     targetSymbolCount: broadStats.targetSymbolCount,
@@ -2859,7 +3261,7 @@ async function refreshPredictions(options = {}) {
     dataQualitySummary: predictionEngineHealth.dataQualityStatusCounts || {},
     failedAndSkippedSymbols: predictionEngineHealth.failedTickers || [],
     lastSuccessfulScan: updatedAt,
-    dataAsOf: predictions.map((item) => item.quoteTimestamp).filter(Boolean).sort().reverse()[0] || null,
+    dataAsOf: marketDataAsOfTimestamp,
     providerCapacity: {
       providerName: MARKET_API_KEY ? "Alpha Vantage + Yahoo fallback" : "Yahoo fallback / cached data",
       estimatedRequestLimit: MARKET_API_KEY ? "Depends on Alpha Vantage plan" : "No authenticated provider limit configured",
@@ -2872,6 +3274,7 @@ async function refreshPredictions(options = {}) {
       rateLimitWarnings: warnings.filter((warning) => /rate|limit|api key|provider/i.test(warning)),
     },
     broadScreen: broadStats,
+    symbolUniverseMetadata: broadStats.symbolUniverseMetadata,
     sectorAllocation: sectorAllocationSummary(scanUniverse),
     stages: [
       { name: "Preparing scan", completed: true, completedCount: 1, totalCount: 1 },
@@ -2884,12 +3287,17 @@ async function refreshPredictions(options = {}) {
       { name: "Saving predictions", completed: true, completedCount: 1, totalCount: 1 },
     ],
   };
+  const predictionHistory = appendPredictionHistory(historicalPredictionRows({ predictions, sections, scanId, scanHealth, updatedAt }));
+  const outcomeSettlement = settlePredictionOutcomes(config);
   const result = {
     updatedAt,
     predictions,
     sections,
     predictionEngineHealth,
     scanHealth,
+    predictionHistory: predictionHistory.records.slice(-300),
+    performanceSummary: performanceSummary(),
+    outcomeSettlementStatus: outcomeSettlement.status,
     scanUniverse: {
       mode: config.scanSettings?.universe || "combined",
       customTickerCount: parseTickerList(config.scanSettings?.customTickers).length,
@@ -3035,6 +3443,9 @@ async function runPredictionScanInternal() {
 }
 
 function normalizeImportedTrade(trade) {
+  const transactionDate = trade.transactionDate || trade.transaction_date || trade.date || trade.reportedDate || trade.filingDate || "";
+  const disclosureDate = trade.disclosureDate || trade.disclosure_date || trade.reportedDate || trade.filingDate || trade.date || "";
+  const dataAge = disclosureDate ? Math.max(0, Math.floor(ageMs(disclosureDate) / 86400000)) : null;
   return {
     representative: trade.representative || trade.member || trade.name || "Representative",
     state: trade.state || "",
@@ -3044,6 +3455,13 @@ function normalizeImportedTrade(trade) {
     transaction: trade.transaction || trade.type || "Buy",
     reportedRange: trade.reportedRange || trade.amount || trade.range || "Not reported",
     reportedDate: trade.reportedDate || trade.date || trade.filingDate || "",
+    transactionDate,
+    disclosureDate,
+    fetchedAt: isoNow(),
+    source: trade.source || trade.sourceName || "Congress disclosure feed",
+    sourceURL: safeHttpUrl(trade.sourceURL || trade.sourceUrl || trade.source, "https://disclosures-clerk.house.gov/FinancialDisclosure"),
+    dataAge,
+    freshnessStatus: dataAge === null ? "unavailable" : dataAge <= 45 ? "fresh" : dataAge <= 120 ? "stale" : "very stale",
     entryPrice: Number(trade.entryPrice || trade.price || trade.purchasePrice) || null,
     entryPriceSource: trade.entryPriceSource || trade.priceSource || "",
     sourceUrl: safeHttpUrl(trade.sourceUrl || trade.source, "https://disclosures-clerk.house.gov/FinancialDisclosure"),
@@ -3221,6 +3639,16 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (request.method === "GET" && pathname === "/api/symbol-universe") {
+    sendJson(response, 200, loadSymbolUniverse());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/performance-summary") {
+    sendJson(response, 200, performanceSummary());
+    return;
+  }
+
   if (request.method === "GET" && pathname === "/api/predictions") {
     try {
       const saved = readJson(PREDICTIONS_FILE, null);
@@ -3258,7 +3686,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (request.method === "GET" && pathname === "/api/congress-feed-status") {
-    sendJson(response, 200, readJson(CONGRESS_FEED_STATUS_FILE, { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null }));
+    sendJson(response, 200, congressFeedPublicStatus());
     return;
   }
 
@@ -3366,8 +3794,18 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (request.method === "POST" && pathname === "/api/admin/refresh-symbol-universe") {
+    sendJson(response, 200, await refreshSymbolUniverse());
+    return;
+  }
+
   if (request.method === "POST" && pathname === "/api/admin/refresh-predictions") {
     sendJson(response, 200, await runPredictionScan());
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/admin/settle-outcomes") {
+    sendJson(response, 200, settlePredictionOutcomes(readJson(CONFIG_FILE, {})));
     return;
   }
 

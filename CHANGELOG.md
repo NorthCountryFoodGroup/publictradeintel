@@ -1,5 +1,21 @@
 # Public Trade Intel Changelog
 
+## Version 2.0 Live Coverage and Outcome Tracking
+
+- Added exact and relative scan timestamps across the dashboard.
+- Added persistent scan freshness metadata: last attempt, last successful scan, completion time, market data timestamp, and scan duration.
+- Added cached U.S. stock/ETF symbol-universe ingestion with Nasdaq Trader listing-source support and explicit fixture fallback when live listing data is unavailable.
+- Added provider-specific ticker normalization, including Yahoo-compatible symbols such as `BRK-B`.
+- Added admin symbol-universe status and refresh controls.
+- Added user-safe Congress Feed statuses: Live, Saved Data Only, Stale, Unavailable, and Failed.
+- Removed environment-variable setup language from the user-facing Congress dashboard status.
+- Added congressional disclosure freshness, age decay, disclosure-date tracking, transaction-date tracking, and source metadata.
+- Added persistent prediction history records for Top 25 rankings.
+- Added outcome settlement foundation for 1-day, 7-day, 1-month, and 1-year predictions.
+- Added sample-size-aware performance wording so the app does not imply accuracy before predictions have settled.
+- Added `SYMBOL_UNIVERSE.md`, `SYMBOL_UNIVERSE_DIAGNOSTIC.md`, `OUTCOME_TRACKING.md`, and `CONGRESS_FEED_STATUS.md`.
+- Added smoke tests for symbol-universe coverage, outcome tracking, performance status, and Congress feed status.
+
 ## Version 2.0 Prediction Responsiveness and Broad Discovery
 
 - Added Dashboard AI Market Brief guidance.

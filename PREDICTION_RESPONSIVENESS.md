@@ -67,3 +67,23 @@ Scan health now separates engine completion from data quality.
 - Data quality answers: how fresh and complete was the market data?
 
 This prevents incomplete quote data from incorrectly making the whole prediction engine look broken.
+
+## Scan Freshness
+
+Dashboard scan reporting now shows both:
+
+- exact scan completion time
+- relative scan age, refreshed once per minute
+
+Prediction records also store the market-data timestamp used during the scan. This makes it clear whether a recommendation is based on fresh, delayed, stale, or incomplete provider data.
+
+## Outcome Tracking Foundation
+
+Each completed scan appends Top 25 prediction records into persistent history. Outcome settlement is timeframe-aware:
+
+- 1-day predictions settle after the next trading day
+- 7-day predictions settle after seven trading days
+- 1-month predictions settle after about 21 trading days
+- 1-year predictions settle after about 252 trading days
+
+Performance screens distinguish live forward results from future backtest work, and they avoid showing accuracy claims until enough predictions have settled.

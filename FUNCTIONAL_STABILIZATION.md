@@ -38,6 +38,9 @@ Feature development is frozen for this sprint. This pass focused on repairing vi
 - Live browser and console inspection could not be performed from this sandbox.
 - In-app alert delivery is functional; email/SMS/push/Slack/Discord/webhook delivery remains future work.
 - Historical performance will become more useful as prediction history accumulates.
+- Live-forward prediction performance now starts from stored prediction history and remains sample-size aware until outcomes settle.
+- Symbol-universe ingestion can fall back to a clearly labeled generated fixture when live listing sources are unavailable.
+- Congress feed status is shown separately from prediction engine health and uses user-safe wording on the main dashboard.
 - Admin failed-ticker display is separated from data quality, but can still be improved with richer expand/collapse presentation later.
 
 ## Validation

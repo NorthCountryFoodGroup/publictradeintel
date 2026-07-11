@@ -235,6 +235,7 @@
             <span>Scan universe</span>
             <select id="scanUniverse">
               <option value="watchlist">Watchlist only</option>
+              <option value="symbolMaster">U.S. stock/ETF symbol master</option>
               <option value="sp500">S&P 500</option>
               <option value="nasdaq100">Nasdaq-100</option>
               <option value="etfs">ETFs</option>
@@ -247,13 +248,14 @@
           </label>
           <label>
             <span>Candidate count</span>
-            <input id="scanCandidateCount" readonly value="Up to 90" />
+            <input id="scanCandidateCount" readonly value="Loading..." />
           </label>
           <label class="wide-field">
             <span>Custom ticker list</span>
             <textarea id="customTickers" rows="4" placeholder="Example: PLTR, SOFI, RKLB, TSM"></textarea>
           </label>
         </div>
+        <div class="admin-list admin-section-block" data-admin-section="universe" id="symbolUniversePanel"></div>
         <p class="form-message admin-section-block" data-admin-section="universe" id="scanSettingsMessage"></p>
 
         <div class="section-heading editor-heading admin-section-block" data-admin-section="discovery">
@@ -321,7 +323,10 @@
             <h2>Prediction engine health</h2>
             <p class="muted-copy">Run an authenticated production validation scan and review ranking sanity checks.</p>
           </div>
-          <button type="button" id="refreshPredictions">Run prediction scan</button>
+          <div class="button-row">
+            <button type="button" id="refreshPredictions">Run prediction scan</button>
+            <button type="button" id="settleOutcomes">Settle due outcomes</button>
+          </div>
         </div>
         <p class="form-message admin-section-block" data-admin-section="health" id="predictionHealthMessage"></p>
         <div class="admin-list admin-section-block" data-admin-section="health" id="predictionHealthPanel"></div>
@@ -343,6 +348,7 @@
           <button type="button" id="refreshCongressFeed">Refresh congress feed</button>
         </div>
         <p class="form-message admin-section-block" data-admin-section="congress" id="congressFeedMessage"></p>
+        <div class="admin-list admin-section-block" data-admin-section="congress" id="congressStatusPanel"></div>
         <div class="import-panel admin-section-block" data-admin-section="congress">
           <label>
             <span>Bulk import trades as JSON</span>

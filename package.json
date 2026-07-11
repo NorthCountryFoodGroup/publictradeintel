@@ -14,6 +14,10 @@
     "smoke:admin": "node scripts/smoke-test-admin-workflow.js",
     "smoke:broad": "node scripts/smoke-test-broad-discovery.js",
     "smoke:scan-progress": "node scripts/smoke-test-scan-progress.js",
+    "smoke:symbol-universe": "node scripts/smoke-test-symbol-universe.js",
+    "smoke:outcome-tracking": "node scripts/smoke-test-outcome-tracking.js",
+    "smoke:performance-status": "node scripts/smoke-test-performance-status.js",
+    "smoke:congress-status": "node scripts/smoke-test-congress-status.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }

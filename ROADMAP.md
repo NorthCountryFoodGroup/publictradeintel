@@ -42,6 +42,17 @@
 - Track strongest and weakest signals
 - Identify false positives and false negatives
 
+## Version 2.2.5 - Live Coverage And Outcome Tracking
+
+- Ingest a broader U.S. stock/ETF symbol universe from listing sources where available
+- Cache symbol-universe metadata and show explicit fallback status
+- Normalize canonical, display, and provider-specific tickers
+- Persist scan timestamps and market-data freshness
+- Track prediction history from each Top 25 list
+- Settle prediction outcomes after the correct timeframe expires
+- Separate live forward results from placeholder historical backtest language
+- Apply congressional disclosure freshness and age decay
+
 ## Version 2.3 - Alerts and User Productivity
 
 - Watchlist alerts

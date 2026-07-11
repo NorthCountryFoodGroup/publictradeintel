@@ -108,3 +108,26 @@ Admin discovery settings include scheduled scan options:
 - Last scheduled scan timestamp
 
 The current sprint stores the configuration foundation. A future worker or scheduler can use these fields to run scans automatically.
+
+## Live Symbol Universe
+
+The discovery pipeline now has a symbol-universe ingestion layer.
+
+Preferred live sources:
+
+- Nasdaq Trader `nasdaqlisted.txt`
+- Nasdaq Trader `otherlisted.txt`
+
+The app parses those listing files into canonical, display, and provider-specific ticker forms. Symbols that are malformed, OTC-only, delisted, test issues, units, rights, warrants, or unsupported preferred formatting are excluded before broad screening.
+
+If live listing fetches fail or return too few eligible symbols, the app writes an explicit local fallback cache instead of silently pretending live coverage exists. Scan health and Admin > Prediction Scan Settings show the actual eligible count and source notes.
+
+## Provider Ticker Normalization
+
+Prediction candidates now keep separate ticker roles:
+
+- canonical ticker
+- display ticker
+- provider ticker
+
+Example: `BRK.B` remains readable to users, while Yahoo quote lookups use `BRK-B`.

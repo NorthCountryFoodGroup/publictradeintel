@@ -250,6 +250,7 @@ let latestRecommendation = null;
 let policySignals = { updatedAt: null, signals: [], errors: [] };
 let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null };
 let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
+let performanceSummaryState = { predictionsRecorded: 0, predictionsPending: 0, predictionsEligible: 0, predictionsSettled: 0, byTimeframe: {} };
 let predictionView = "top25OneDay";
 let predictionLayout = "cards";
 let portfolio = [];
@@ -296,6 +297,26 @@ function percent(value) {
   if (!Number.isFinite(value)) return "n/a";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
+}
+
+function relativeTime(timestamp) {
+  const time = Date.parse(timestamp || "");
+  if (!Number.isFinite(time)) return "unknown";
+  const seconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
+  if (seconds < 45) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes === 1) return "1 minute ago";
+  if (minutes < 60) return `${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours === 1) return "1 hour ago";
+  if (hours < 24) return `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "1 day ago" : `${days} days ago`;
+}
+
+function exactEt(timestamp) {
+  const time = Date.parse(timestamp || "");
+  return Number.isFinite(time) ? new Date(time).toLocaleString(undefined, { timeZoneName: "short" }) : "Unavailable";
 }
 
 function parsePercent(value) {
@@ -1131,9 +1152,11 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
     if (isActive) {
       output.scanProgressMessage.textContent = stage;
     } else if (scan.scanCompletedAt || predictionEngine.updatedAt) {
-      const completed = scan.scanCompletedAt || predictionEngine.updatedAt;
-      const dataAsOf = scan.dataAsOf || "market data timestamp unavailable";
-      output.scanProgressMessage.textContent = `Scan complete. Last scan: ${new Date(completed).toLocaleString()}. Data as of: ${dataAsOf === "market data timestamp unavailable" ? dataAsOf : new Date(dataAsOf).toLocaleString()}.`;
+      const completed = scan.lastSuccessfulScanTimestamp || scan.scanCompletedAt || predictionEngine.updatedAt;
+      const attempt = scan.lastScanAttemptTimestamp;
+      const dataAsOf = scan.marketDataAsOfTimestamp || scan.dataAsOf;
+      const failureLine = scan.scanStatus === "failed" && attempt ? `Latest attempt failed ${relativeTime(attempt)}. ` : "";
+      output.scanProgressMessage.textContent = `${failureLine}Last successful scan: ${relativeTime(completed)}. Completed: ${exactEt(completed)}. Market data as of: ${dataAsOf ? exactEt(dataAsOf) : "Unavailable"}. Timezone: ET.`;
     } else {
       output.scanProgressMessage.textContent = "No successful scan is saved yet.";
     }
@@ -1144,7 +1167,7 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
       metricCard("Symbols Screened", String(scan.symbolsScreened || 0), `Target ${scan.targetSymbolCount || predictionEngine.scanUniverse?.targetSymbolCount || 2500}`, "predictions"),
       metricCard("Deep Candidates", String(scan.deepAnalysisCandidatesSelected || predictionEngine.scanUniverse?.candidateCount || 0), "Selected for full analysis", "predictions"),
       metricCard("Predictions Generated", String(scan.predictionsGenerated || predictionEngine.predictions?.length || 0), "Published after validation", "predictions"),
-      metricCard("Duration", scan.durationMs ? `${(scan.durationMs / 1000).toFixed(1)}s` : "Not recorded", "Scan completion duration", "predictions"),
+      metricCard("Duration", scan.scanDurationSeconds ? `${scan.scanDurationSeconds}s` : scan.durationMs ? `${(scan.durationMs / 1000).toFixed(1)}s` : "Not recorded", "Scan completion duration", "predictions"),
       metricCard("Data Quality", predictionEngine.predictionEngineHealth?.dataQualityStatus || "Not run", "Separate from engine health", "predictions"),
     ].join("");
   }
@@ -1205,9 +1228,9 @@ function renderDashboard() {
   output.predictionEngineGrid.innerHTML = [
     metricCard("Prediction Engine Status", engineStatus, `${Number(health.predictionsGenerated) || predictions.length} predictions generated`, "predictions"),
     metricCard("Market Data Status", dataStatus, `${Number(health.marketQuotesSucceeded) || 0}/${Number(health.marketQuotesRequested) || 0} quotes succeeded`, "predictions"),
-    metricCard("Congress Feed Status", congressFeedStatus.error ? "Warning" : "Active", congressFeedStatus.error || `${Number(congressFeedStatus.totalTrades) || trades.length} saved trades`, "congress"),
+    metricCard("Congress Feed", congressFeedStatus.status || "Saved Data Only", congressFeedStatus.userMessage || "Live congressional feed is not connected. Predictions are using saved congressional disclosures.", "congress"),
     metricCard("Policy Feed Status", policySignals.errors?.length ? "Warning" : "Active", `${signals.length} policy/news signals`, "policy"),
-    metricCard("Last Scan", predictionEngine.updatedAt ? new Date(predictionEngine.updatedAt).toLocaleString() : "Not scanned", "Run scan for latest read", "predictions"),
+    metricCard("Last Scan", predictionEngine.updatedAt ? relativeTime(predictionEngine.scanHealth?.lastSuccessfulScanTimestamp || predictionEngine.updatedAt) : "Not scanned", predictionEngine.updatedAt ? `Completed ${exactEt(predictionEngine.scanHealth?.scanCompletedTimestamp || predictionEngine.updatedAt)}` : "Run scan for latest read", "predictions"),
     metricCard("Candidates Scanned", String(Number(health.tickersScanned) || predictions.length || 0), `${predictionEngine.scanUniverse?.mode || "watchlist"} universe`, "predictions"),
     metricCard("Average Unified Score", `${averageUnifiedScore(predictions)}/100`, "Across generated predictions", "predictions"),
   ].join("");
@@ -1267,11 +1290,11 @@ function renderDashboard() {
   ].join("");
 
   output.predictionPerformanceGrid.innerHTML = [
-    metricCard("Overall Accuracy", "Tracking", "Available after outcomes are stored", "performance"),
-    metricCard("1 Day", "Pending", "Outcome tracking planned", "performance"),
-    metricCard("7 Day", "Pending", "Outcome tracking planned", "performance"),
-    metricCard("1 Month", "Pending", "Outcome tracking planned", "performance"),
-    metricCard("1 Year", "Pending", "Outcome tracking planned", "performance"),
+    metricCard("Overall Accuracy", performanceSummaryState.predictionsSettled ? "Calculated" : "No settled predictions yet", `${performanceSummaryState.predictionsRecorded || 0} recorded / ${performanceSummaryState.predictionsSettled || 0} settled`, "performance"),
+    metricCard("1 Day", performanceSummaryState.byTimeframe?.["1-day trade"]?.settled ? `${performanceSummaryState.byTimeframe["1-day trade"].accuracy}%` : "Awaiting first market close", `${performanceSummaryState.byTimeframe?.["1-day trade"]?.settled || 0} settled`, "performance"),
+    metricCard("7 Day", `${performanceSummaryState.byTimeframe?.["7-day trade"]?.settled || 0} of ${performanceSummaryState.byTimeframe?.["7-day trade"]?.recorded || 0} predictions settled`, "Seven trading-day evaluation", "performance"),
+    metricCard("1 Month", performanceSummaryState.byTimeframe?.["1-month trade"]?.settled ? `${performanceSummaryState.byTimeframe["1-month trade"].accuracy}%` : `First results expected ${exactEt(performanceSummaryState.nextSettlementTime)}`, "21 trading-day evaluation", "performance"),
+    metricCard("1 Year", "Long-term tracking in progress", `${performanceSummaryState.byTimeframe?.["1-year hold"]?.recorded || 0} recorded`, "performance"),
   ].join("");
 }
 
@@ -2952,6 +2975,28 @@ function renderMarketIntelligence() {
 
 function renderPerformanceCenter() {
   if (!output.performanceOverviewGrid) return;
+  const summary = performanceSummaryState || {};
+  if (!Number(summary.predictionsSettled)) {
+    output.performanceOverviewGrid.innerHTML = [
+      performanceMetricCard("Overall Accuracy", "No settled predictions yet", "Accuracy will appear after eligible predictions reach their evaluation dates.", "warning"),
+      performanceMetricCard("Predictions Recorded", String(summary.predictionsRecorded || 0), "Live forward predictions stored"),
+      performanceMetricCard("Predictions Pending", String(summary.predictionsPending || 0), "Waiting for evaluation dates"),
+      performanceMetricCard("Predictions Eligible", String(summary.predictionsEligible || 0), "Ready when evaluation prices are available"),
+      performanceMetricCard("Predictions Settled", String(summary.predictionsSettled || 0), "Sample size shown before percentages"),
+      performanceMetricCard("1-Day", "Awaiting first market close", `${summary.byTimeframe?.["1-day trade"]?.recorded || 0} recorded`),
+      performanceMetricCard("7-Day", `${summary.byTimeframe?.["7-day trade"]?.settled || 0} of ${summary.byTimeframe?.["7-day trade"]?.recorded || 0} predictions settled`, "Seven trading days"),
+      performanceMetricCard("1-Month", `First results expected ${exactEt(summary.nextSettlementTime)}`, "Approximately 21 trading days"),
+      performanceMetricCard("1-Year", "Long-term tracking in progress", "Approximately 252 trading days"),
+    ].join("");
+    output.performanceChartsGrid.innerHTML = [
+      performanceChartCard("Live Forward Results", null, "No settled predictions yet. This excludes historical backtests."),
+      performanceChartCard("Historical Backtest Results", null, "Not implemented; kept separate to avoid look-ahead bias."),
+    ].join("");
+    output.signalAnalysisGrid.innerHTML = `<article class="performance-card"><strong>Signal analysis pending</strong><p>Signal rankings will appear after an adequate settled sample exists.</p></article>`;
+    renderPredictionAudit(predictionPerformanceRecords());
+    output.aiLearningSummary.innerHTML = `<p><strong>Forward tracking has started.</strong> Performance will remain sample-size aware and will not show accuracy percentages until predictions settle.</p>`;
+    return;
+  }
   const allRecords = predictionPerformanceRecords();
   const known = knownPerformanceRecords();
   const pendingCount = allRecords.length - known.length;
@@ -3692,6 +3737,16 @@ async function loadCongressFeedStatus() {
   }
 }
 
+async function loadPerformanceSummary() {
+  try {
+    const response = await fetch("api/performance-summary", { cache: "no-store" });
+    if (!response.ok) throw new Error("Performance summary unavailable");
+    performanceSummaryState = await response.json();
+  } catch {
+    performanceSummaryState = { predictionsRecorded: 0, predictionsPending: 0, predictionsEligible: 0, predictionsSettled: 0, byTimeframe: {} };
+  }
+}
+
 function recommendationAction(recommendation) {
   if (recommendation.invest > 0) return "invest";
   if (recommendation.save > 0) return "save";
@@ -4107,4 +4162,8 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 }
 
 if (output.tradeDate) output.tradeDate.value = new Date().toISOString().slice(0, 10);
-Promise.all([loadSettings(), loadPolicySignals(), loadPredictions(), loadCongressFeedStatus(), loadPortfolioFromServer()]).then(calculate);
+Promise.all([loadSettings(), loadPolicySignals(), loadPredictions(), loadCongressFeedStatus(), loadPerformanceSummary(), loadPortfolioFromServer()]).then(calculate);
+setInterval(() => {
+  renderScanProgressSummary(false, predictionEngine.updatedAt ? "Scan complete" : "Idle", predictionEngine.updatedAt ? 100 : 0);
+  renderDashboard();
+}, 60_000);
