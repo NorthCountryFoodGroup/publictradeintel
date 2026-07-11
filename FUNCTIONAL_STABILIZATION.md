@@ -41,6 +41,9 @@ Feature development is frozen for this sprint. This pass focused on repairing vi
 - Live-forward prediction performance now starts from stored prediction history and remains sample-size aware until outcomes settle.
 - Symbol-universe ingestion can fall back to a clearly labeled generated fixture when live listing sources are unavailable.
 - Congress feed status is shown separately from prediction engine health and uses user-safe wording on the main dashboard.
+- Production symbol coverage now has a packaged cached public snapshot before emergency preset fallback.
+- Market overview labels now separate external broad-market data from prediction-universe estimates.
+- Render JSON files remain beta runtime storage until persistent storage or a database is configured.
 - Admin failed-ticker display is separated from data quality, but can still be improved with richer expand/collapse presentation later.
 
 ## Validation

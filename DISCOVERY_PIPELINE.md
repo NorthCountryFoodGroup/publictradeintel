@@ -131,3 +131,9 @@ Prediction candidates now keep separate ticker roles:
 - provider ticker
 
 Example: `BRK.B` remains readable to users, while Yahoo quote lookups use `BRK-B`.
+
+## Production Startup Coverage
+
+Render runtime cache files may be missing after deploy or restart. The discovery pipeline now has a packaged cached public listing snapshot so Stage 1 can start from a broad baseline before live listing refresh succeeds.
+
+If the packaged snapshot is active, scan health and Admin diagnostics label it `Cached public snapshot`. If only the old preset list is active, Admin labels it `Emergency Preset Fallback`.

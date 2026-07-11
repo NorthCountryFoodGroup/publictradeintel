@@ -53,6 +53,16 @@
 - Separate live forward results from placeholder historical backtest language
 - Apply congressional disclosure freshness and age decay
 
+## Version 2.2.6 - Production Coverage And External Data Connections
+
+- Package a production baseline symbol snapshot
+- Prevent Render restarts from falling back to 117 preset symbols
+- Add market index/proxy connection diagnostics
+- Separate Broad Market Trend from Prediction Universe Bias
+- Rename internal sentiment metric to Prediction Universe Sentiment
+- Add Congress feed connection diagnostics
+- Document Render persistence limits for JSON runtime files
+
 ## Version 2.3 - Alerts and User Productivity
 
 - Watchlist alerts

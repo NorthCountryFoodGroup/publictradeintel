@@ -249,6 +249,8 @@ let lastEventKey = "";
 let latestRecommendation = null;
 let policySignals = { updatedAt: null, signals: [], errors: [] };
 let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source: null, error: null };
+let symbolUniverseStatus = { activeSource: "Unknown", eligibleSymbolCount: 0, emergencyFallbackActive: false };
+let marketIndexData = { broadMarketTrend: "Unavailable", rows: [], provider: "Unavailable" };
 let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
 let performanceSummaryState = { predictionsRecorded: 0, predictionsPending: 0, predictionsEligible: 0, predictionsSettled: 0, byTimeframe: {} };
 let predictionView = "top25OneDay";
@@ -317,6 +319,23 @@ function relativeTime(timestamp) {
 function exactEt(timestamp) {
   const time = Date.parse(timestamp || "");
   return Number.isFinite(time) ? new Date(time).toLocaleString(undefined, { timeZoneName: "short" }) : "Unavailable";
+}
+
+function marketIndexRow(key) {
+  return (marketIndexData.rows || []).find((row) => row.key === key) || null;
+}
+
+function marketIndexCard(title, key) {
+  const row = marketIndexRow(key);
+  const quote = row?.activeQuote || {};
+  if (!row || quote.connectionStatus !== "Connected") {
+    const unavailable = key === "vix" ? "Volatility index unavailable" : `${title} unavailable`;
+    return metricCard(title, unavailable, quote.latestProviderError || "External market quote unavailable", "market");
+  }
+  const price = Number(quote.currentPrice);
+  const change = quote.dailyChangePercent || "";
+  const label = row.exactOrProxy === "ETF proxy" ? row.label : title;
+  return metricCard(label, Number.isFinite(price) ? `$${price.toFixed(2)} ${change}` : "Quote connected", `Source: ${quote.provider}; updated ${relativeTime(quote.quoteTimestamp)}; ${quote.freshness} quote`, "market");
 }
 
 function parsePercent(value) {
@@ -1193,7 +1212,8 @@ function renderDashboard() {
   const highestConfidence = strongestBy(predictions, (item) => item.confidenceScore || item.unifiedPredictionScore || 0);
   const engineStatus = health.predictionEngineStatus || health.status || (predictionEngine.updatedAt ? "Healthy" : "Not run");
   const dataStatus = health.dataQualityStatus || "Not run";
-  const marketMood = predictionEngine.marketRegime?.primary || topToday?.marketRegime?.primary || "Scanning";
+  const predictionBias = predictionEngine.marketRegime?.primary || topToday?.marketRegime?.primary || "Neutral";
+  const broadMarketTrend = marketIndexData.broadMarketTrend || "Unavailable";
   const trades = settings.congressTrades || [];
   const buys = trades.filter((trade) => trade.transaction === "Buy");
   const sells = trades.filter((trade) => trade.transaction === "Sell");
@@ -1212,23 +1232,26 @@ function renderDashboard() {
   const movers = watchlistRows.filter((item) => item.badges.some((badge) => ["New", "Improving", "Weakening", "Changed"].includes(badge))).length || predictions.filter((item) => Number(item.scoreChange || 0) !== 0 || item.rankMovement).length;
   const needsAttention = watchlistRows.filter((item) => item.badges.includes("Needs Attention")).length;
 
-  if (output.marketOverviewTone) output.marketOverviewTone.textContent = marketMood;
-  renderDashboardBrief({ predictions, marketMood, signals, positiveSignals, negativeSignals, health });
+  if (output.marketOverviewTone) output.marketOverviewTone.textContent = broadMarketTrend;
+  renderDashboardBrief({ predictions, marketMood: predictionBias, signals, positiveSignals, negativeSignals, health });
   renderScanProgressSummary(false, predictionEngine.updatedAt ? "Scan complete" : "Idle", predictionEngine.updatedAt ? 100 : 0);
   output.marketOverviewGrid.innerHTML = [
-    metricCard("Overall market sentiment", marketMood, "Based on latest prediction scan", "market"),
-    metricCard("Fear / Greed", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "Historical outcomes not available yet", "Using prediction-universe estimate", "market"),
-    metricCard("S&P 500", "Live index data not connected", "Using prediction-universe estimate", "market"),
-    metricCard("Nasdaq", "Live index data not connected", "Growth/tech tape from candidates", "market"),
-    metricCard("Dow", "Live index data not connected", "Large-cap industrial read pending", "market"),
-    metricCard("VIX", "Waiting for live volatility feed", "Volatility detail pending", "market"),
-    metricCard("Sector strength", sectorStrengthSummary(predictions), "Top scoring asset group", "market"),
+    metricCard("Broad Market Trend", broadMarketTrend, marketIndexData.connectedCount ? `Based on ${marketIndexData.connectedCount} external market quote(s)` : "Broad-market sentiment unavailable due to missing external data", "market"),
+    metricCard("Prediction Universe Bias", predictionBias, `${predictions.length} analyzed prediction candidate(s)`, "market"),
+    metricCard("Prediction Universe Sentiment", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "No scan yet", "Internal estimate based on unified prediction scores only", "market"),
+    marketIndexCard("S&P 500", "sp500"),
+    marketIndexCard("Nasdaq", "nasdaq"),
+    marketIndexCard("Dow", "dow"),
+    marketIndexCard("Russell 2000", "russell2000"),
+    marketIndexCard("VIX", "vix"),
+    metricCard("Highest-Scoring Group in Current Scan", sectorStrengthSummary(predictions), `Based on ${predictions.length} final prediction candidate(s)`, "market"),
+    metricCard("Symbol Universe Source", symbolUniverseStatus.activeSource || "Cached public listing snapshot", `${symbolUniverseStatus.eligibleSymbolCount || 0} eligible symbols; emergency fallback ${symbolUniverseStatus.emergencyFallbackActive ? "active" : "inactive"}`, "market"),
   ].join("");
 
   output.predictionEngineGrid.innerHTML = [
     metricCard("Prediction Engine Status", engineStatus, `${Number(health.predictionsGenerated) || predictions.length} predictions generated`, "predictions"),
     metricCard("Market Data Status", dataStatus, `${Number(health.marketQuotesSucceeded) || 0}/${Number(health.marketQuotesRequested) || 0} quotes succeeded`, "predictions"),
-    metricCard("Congress Feed", congressFeedStatus.status || "Saved Data Only", congressFeedStatus.userMessage || "Live congressional feed is not connected. Predictions are using saved congressional disclosures.", "congress"),
+    metricCard("Congress Feed", congressFeedStatus.status || "Saved Data Only", congressFeedStatus.userMessage || "Live congressional disclosures are not connected. Predictions are using saved disclosure records.", "congress"),
     metricCard("Policy Feed Status", policySignals.errors?.length ? "Warning" : "Active", `${signals.length} policy/news signals`, "policy"),
     metricCard("Last Scan", predictionEngine.updatedAt ? relativeTime(predictionEngine.scanHealth?.lastSuccessfulScanTimestamp || predictionEngine.updatedAt) : "Not scanned", predictionEngine.updatedAt ? `Completed ${exactEt(predictionEngine.scanHealth?.scanCompletedTimestamp || predictionEngine.updatedAt)}` : "Run scan for latest read", "predictions"),
     metricCard("Candidates Scanned", String(Number(health.tickersScanned) || predictions.length || 0), `${predictionEngine.scanUniverse?.mode || "watchlist"} universe`, "predictions"),
@@ -2894,16 +2917,19 @@ function renderMarketIntelligence() {
   const trades = settings.congressTrades || [];
   const buys = trades.filter((trade) => trade.transaction === "Buy");
   const sells = trades.filter((trade) => trade.transaction === "Sell");
-  const marketMood = predictionEngine.marketRegime?.primary || strongestSector?.direction || "Scanning";
-  if (output.marketIntelligenceStatus) output.marketIntelligenceStatus.textContent = marketMood;
+  const predictionBias = predictionEngine.marketRegime?.primary || strongestSector?.direction || "Neutral";
+  const broadMarketTrend = marketIndexData.broadMarketTrend || "Unavailable";
+  if (output.marketIntelligenceStatus) output.marketIntelligenceStatus.textContent = broadMarketTrend;
 
   output.marketSummaryGrid.innerHTML = [
-    marketMetricCard("Overall Market Sentiment", marketMood, strongestSector ? `${strongestSector.sector} leads sector strength` : "Run scan for a market read", statusTone(marketMood)),
-    marketMetricCard("S&P 500", "Tracking", "Live index provider placeholder"),
-    marketMetricCard("Nasdaq", "Tracking", "Live index provider placeholder"),
-    marketMetricCard("Dow", "Tracking", "Live index provider placeholder"),
-    marketMetricCard("Russell 2000", "Tracking", "Small-cap read placeholder"),
-    marketMetricCard("VIX", "Tracking", "Volatility read placeholder"),
+    marketMetricCard("Broad Market Trend", broadMarketTrend, marketIndexData.connectedCount ? `External market data from ${marketIndexData.provider}` : "Broad-market sentiment unavailable due to missing external data", statusTone(broadMarketTrend)),
+    marketMetricCard("Prediction Universe Bias", predictionBias, `${predictions.length} deeply analyzed candidate(s)`, statusTone(predictionBias)),
+    marketMetricCard("Prediction Universe Sentiment", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "No scan yet", "Internal estimate based on unified prediction scores only"),
+    marketIndexCard("S&P 500", "sp500"),
+    marketIndexCard("Nasdaq", "nasdaq"),
+    marketIndexCard("Dow", "dow"),
+    marketIndexCard("Russell 2000", "russell2000"),
+    marketIndexCard("VIX", "vix"),
     marketMetricCard("Prediction Engine Status", health.predictionEngineStatus || health.status || "Not run", `${Number(health.predictionsGenerated) || predictions.length} predictions generated`, statusTone(health.predictionEngineStatus || health.status)),
     marketMetricCard("Market Data Quality", health.dataQualityStatus || "Not run", `${Number(health.incompleteMarketDataPercent) || 0}% incomplete`, statusTone(health.dataQualityStatus)),
   ].join("");
@@ -2911,10 +2937,10 @@ function renderMarketIntelligence() {
   output.marketBreadthGrid.innerHTML = [
     marketMetricCard("Advancers", String(bullishCount), "Bullish prediction direction"),
     marketMetricCard("Decliners", String(bearishCount), "Bearish prediction direction", "warning"),
-    marketMetricCard("New Highs", "Tracking", "Market data provider placeholder"),
-    marketMetricCard("New Lows", "Tracking", "Market data provider placeholder"),
-    marketMetricCard("Volume Breadth", `${Math.max(0, Math.min(100, breadthScore))}/100`, "Proxy from bullish participation"),
-    marketMetricCard("Market Breadth Score", `${breadthScore}/100`, predictions.length ? "Derived from active scan directions" : "Run scan for breadth"),
+    marketMetricCard("New Highs", "Unavailable", "Broad-market highs/lows feed not connected"),
+    marketMetricCard("New Lows", "Unavailable", "Broad-market highs/lows feed not connected"),
+    marketMetricCard("Volume Breadth", "Unavailable", "Volume breadth feed not connected"),
+    marketMetricCard("Prediction Breadth Score", `${breadthScore}/100`, predictions.length ? "Derived from active scan directions, not whole-market breadth" : "Run scan for prediction breadth"),
   ].join("");
 
   output.sectorRotationGrid.innerHTML = stats
@@ -2947,29 +2973,29 @@ function renderMarketIntelligence() {
     marketMetricCard("Largest Purchases", largestTradeSummary(trades, "Buy"), `${buys.length} tracked buys`),
     marketMetricCard("Largest Sales", largestTradeSummary(trades, "Sell"), `${sells.length} tracked sells`),
     marketMetricCard("Most Active Members", mostActivePoliticians(trades), "Based on imported disclosures"),
-    marketMetricCard("Sector Concentration", strongestSector?.sector || "Tracking", "Matched against prediction sectors"),
+    marketMetricCard("Sector Concentration", strongestSector?.sector || "No scan yet", "Matched against prediction sectors"),
   ].join("");
 
   output.marketPolicyGrid.innerHTML = [
     marketMetricCard("Positive Catalysts", String(positiveSignals.length), "Policy/news signals marked positive", "success"),
     marketMetricCard("Negative Catalysts", String(negativeSignals.length), "Policy/news signals marked negative", "warning"),
-    marketMetricCard("Upcoming Policy Events", "Tracking", "Calendar integration placeholder"),
+    marketMetricCard("Upcoming Policy Events", "Unavailable", "Policy calendar feed not connected"),
     marketMetricCard("Industries Impacted", String(new Set(signals.map((signal) => signal.industry || signal.sector || signal.ticker).filter(Boolean)).size), "Unique impacted groups"),
   ].join("");
 
   output.economicCalendarGrid.innerHTML = [
-    marketMetricCard("Fed Meetings", "Tracking", "Upcoming rate decision placeholder"),
-    marketMetricCard("Inflation", "Tracking", "CPI/PCE release placeholder"),
-    marketMetricCard("Jobs", "Tracking", "Payrolls and unemployment placeholder"),
-    marketMetricCard("GDP", "Tracking", "Growth report placeholder"),
-    marketMetricCard("Major Earnings Weeks", "Tracking", "Earnings calendar placeholder"),
+    marketMetricCard("Fed Meetings", "Unavailable", "Economic calendar feed not connected"),
+    marketMetricCard("Inflation", "Unavailable", "Economic calendar feed not connected"),
+    marketMetricCard("Jobs", "Unavailable", "Economic calendar feed not connected"),
+    marketMetricCard("GDP", "Unavailable", "Economic calendar feed not connected"),
+    marketMetricCard("Major Earnings Weeks", "Unavailable", "Earnings calendar feed not connected"),
   ].join("");
 
   output.aiMarketSummary.innerHTML = `
-    <p><strong>What is driving today's market?</strong> The app currently sees ${escapeHtml(marketMood)} conditions with ${bullishCount} bullish and ${bearishCount} bearish prediction reads across the active universe.</p>
-    <p><strong>Strongest sectors:</strong> ${escapeHtml(strongestSector?.sector || "Tracking")} shows the best relative score at ${Number(strongestSector?.avgScore) || 0}/100. Its current read is ${escapeHtml(strongestSector?.direction || "neutral")}.</p>
-    <p><strong>Weakest sectors:</strong> ${escapeHtml(weakestSector?.sector || "Tracking")} has the weakest sector score at ${Number(weakestSector?.avgScore) || 0}/100, so it deserves extra caution before chasing individual names.</p>
-    <p><strong>What to watch today:</strong> Watch breadth, market data quality, policy catalysts, congressional concentration, and whether top predictions stay aligned across the 1-day, 7-day, 1-month, and 1-year lists.</p>
+    <p><strong>Broad market trend:</strong> ${escapeHtml(broadMarketTrend)} based on available external index/proxy quotes. ETF proxies are labeled as proxies when exact indexes are unavailable.</p>
+    <p><strong>Prediction universe bias:</strong> ${escapeHtml(predictionBias)} with ${bullishCount} bullish and ${bearishCount} bearish prediction reads across the active analyzed universe.</p>
+    <p><strong>Highest-scoring group in current scan:</strong> ${escapeHtml(strongestSector?.sector || "No scan yet")} averages ${Number(strongestSector?.avgScore) || 0}/100 across ${strongestSector?.matches?.length || 0} deeply analyzed securities.</p>
+    <p><strong>What to watch today:</strong> Watch external index freshness, market data quality, policy catalysts, congressional disclosure age, and whether top predictions stay aligned across the 1-day, 7-day, 1-month, and 1-year lists.</p>
   `;
 }
 
@@ -3737,6 +3763,26 @@ async function loadCongressFeedStatus() {
   }
 }
 
+async function loadSymbolUniverseStatus() {
+  try {
+    const response = await fetch("api/symbol-universe-status", { cache: "no-store" });
+    if (!response.ok) throw new Error("Symbol universe status unavailable");
+    symbolUniverseStatus = await response.json();
+  } catch {
+    symbolUniverseStatus = { activeSource: "Unknown", eligibleSymbolCount: 0, emergencyFallbackActive: false };
+  }
+}
+
+async function loadMarketIndexData() {
+  try {
+    const response = await fetch("api/market-index-data", { cache: "no-store" });
+    if (!response.ok) throw new Error("Market index data unavailable");
+    marketIndexData = await response.json();
+  } catch {
+    marketIndexData = { broadMarketTrend: "Unavailable", rows: [], provider: "Unavailable", connectedCount: 0 };
+  }
+}
+
 async function loadPerformanceSummary() {
   try {
     const response = await fetch("api/performance-summary", { cache: "no-store" });
@@ -4162,7 +4208,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 }
 
 if (output.tradeDate) output.tradeDate.value = new Date().toISOString().slice(0, 10);
-Promise.all([loadSettings(), loadPolicySignals(), loadPredictions(), loadCongressFeedStatus(), loadPerformanceSummary(), loadPortfolioFromServer()]).then(calculate);
+Promise.all([loadSettings(), loadPolicySignals(), loadPredictions(), loadCongressFeedStatus(), loadSymbolUniverseStatus(), loadMarketIndexData(), loadPerformanceSummary(), loadPortfolioFromServer()]).then(calculate);
 setInterval(() => {
   renderScanProgressSummary(false, predictionEngine.updatedAt ? "Scan complete" : "Idle", predictionEngine.updatedAt ? 100 : 0);
   renderDashboard();

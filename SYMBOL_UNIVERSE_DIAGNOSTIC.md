@@ -39,6 +39,12 @@ The app now reports:
 
 ## Current Fallback
 
-When exchange listing refresh is unavailable and no cache exists, the app creates a generated fixture universe of 3,200 symbols. This is only for development/testing coverage and is explicitly labeled as fallback data.
+When exchange listing refresh is unavailable and no runtime cache exists, production now loads the packaged cached public listing snapshot first.
 
-The app must not call fixture fallback live broad-market coverage.
+Only if both live refresh and packaged snapshot are unavailable should the old preset universe be treated as emergency fallback.
+
+The app must not call 117 preset symbols broad-market coverage.
+
+## Production Fix
+
+`data/publicSymbolSnapshot.json` ships with the app and contains 3,200 snapshot rows. It excludes prices, predictions, watchlists, secrets, credentials, and user data.

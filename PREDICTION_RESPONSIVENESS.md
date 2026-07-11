@@ -87,3 +87,13 @@ Each completed scan appends Top 25 prediction records into persistent history. O
 - 1-year predictions settle after about 252 trading days
 
 Performance screens distinguish live forward results from future backtest work, and they avoid showing accuracy claims until enough predictions have settled.
+
+## External Market Labels
+
+Dashboard and Market Intelligence now separate:
+
+- Broad Market Trend: external index/proxy quotes
+- Prediction Universe Bias: analyzed prediction candidates
+- Prediction Universe Sentiment: internal unified-score estimate
+
+ETF proxies are labeled as proxies. Internal sentiment is not called Fear / Greed.

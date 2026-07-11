@@ -1,5 +1,16 @@
 # Public Trade Intel Changelog
 
+## Fix Production Symbol Coverage and External Data Connections
+
+- Added packaged cached public symbol snapshot so production does not shrink to the 117-symbol preset universe after Render deploy/restart.
+- Added production symbol-universe diagnostics and emergency preset fallback labeling.
+- Added market index/proxy diagnostics for `^GSPC`, `^IXIC`, `^DJI`, `^RUT`, `^VIX`, `SPY`, `QQQ`, `DIA`, and `IWM`.
+- Renamed internal Fear / Greed style wording to Prediction Universe Sentiment.
+- Separated Broad Market Trend from Prediction Universe Bias.
+- Added source/freshness lines and explicit unavailable states for market cards.
+- Added Congress connection diagnostics with HTTP status, content type, saved fallback count, and non-secret auth status.
+- Added Render persistence documentation for packaged snapshot, runtime cache, and JSON-history limitations.
+
 ## Version 2.0 Live Coverage and Outcome Tracking
 
 - Added exact and relative scan timestamps across the dashboard.

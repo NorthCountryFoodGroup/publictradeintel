@@ -18,6 +18,12 @@
     "smoke:outcome-tracking": "node scripts/smoke-test-outcome-tracking.js",
     "smoke:performance-status": "node scripts/smoke-test-performance-status.js",
     "smoke:congress-status": "node scripts/smoke-test-congress-status.js",
+    "smoke:production-symbol-universe": "node scripts/smoke-test-production-symbol-universe.js",
+    "smoke:market-index-data": "node scripts/smoke-test-market-index-data.js",
+    "smoke:market-overview-labels": "node scripts/smoke-test-market-overview-labels.js",
+    "smoke:data-provenance": "node scripts/smoke-test-data-provenance.js",
+    "smoke:congress-connection": "node scripts/smoke-test-congress-connection.js",
+    "smoke:render-persistence": "node scripts/smoke-test-render-persistence.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }

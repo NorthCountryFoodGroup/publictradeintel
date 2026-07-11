@@ -42,3 +42,9 @@ Stored congressional rows include:
 - freshnessStatus
 
 Signals decay as disclosures age. Short-term predictions use congressional data only as a weak secondary catalyst, while monthly and yearly models may treat it as a larger but still capped supporting input.
+
+## Connection Diagnostics
+
+Admin now reports HTTP status, content type, authentication configuration, parse result, latest successful refresh, live record count, saved fallback record count, latest disclosure date, and exact failure reason.
+
+Secret values are never exposed to the frontend.

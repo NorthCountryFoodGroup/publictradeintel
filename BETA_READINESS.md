@@ -26,6 +26,8 @@ Public Trade Intel is ready for private beta use after the Version 2.0 Functiona
 - Historical performance and calibration improve as prediction history accumulates.
 - Broad symbol coverage depends on listing-source and quote-provider availability. The app now reports actual coverage and explicit fallback status instead of implying full live coverage.
 - Prediction performance metrics are live-forward only until enough stored predictions have reached their evaluation windows.
+- Production now ships a cached public symbol snapshot so Render restarts should not reduce coverage to the 117-symbol preset universe.
+- JSON prediction history on Render is not durable long-term storage unless a persistent disk or database is configured.
 - Legal/compliance copy should be reviewed before public marketing.
 
 ## Beta Blockers
@@ -44,4 +46,5 @@ Public Trade Intel is ready for private beta use after the Version 2.0 Functiona
 - Create one alert.
 - Open Admin Dashboard and Prediction Scan Settings.
 - Confirm symbol-universe coverage, Congress feed status, scan freshness, and performance sample-size language are visible.
+- Confirm Broad Market Trend, Prediction Universe Bias, and Prediction Universe Sentiment are separately labeled.
 - Confirm no browser console errors on the primary workflows.

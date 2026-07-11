@@ -60,3 +60,16 @@ Configurable inclusions:
 - ETFs
 - ADRs
 - closed-end funds
+
+## Production Baseline
+
+Production now ships `data/publicSymbolSnapshot.json` as a packaged cached public listing snapshot. This prevents Render deploys or restarts from reducing the universe back to the old preset-only list when runtime cache files are absent.
+
+Source order:
+
+1. Live Nasdaq Trader listing refresh
+2. Runtime cache at `data/symbolUniverse.json`
+3. Packaged cached public listing snapshot
+4. Emergency preset fallback
+
+The packaged snapshot is not labeled live coverage. Admin diagnostics show the active source, snapshot age, exchange counts, and whether emergency fallback is active.

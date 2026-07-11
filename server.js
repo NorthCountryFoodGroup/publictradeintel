@@ -16,6 +16,7 @@ const CONGRESS_FEED_STATUS_FILE = path.join(DATA_DIR, "congressFeedStatus.json")
 const PORTFOLIO_FILE = path.join(DATA_DIR, "portfolio.json");
 const PREDICTIONS_FILE = path.join(DATA_DIR, "predictions.json");
 const SYMBOL_UNIVERSE_FILE = path.join(DATA_DIR, "symbolUniverse.json");
+const PUBLIC_SYMBOL_SNAPSHOT_FILE = path.join(DATA_DIR, "publicSymbolSnapshot.json");
 const PREDICTION_HISTORY_FILE = path.join(DATA_DIR, "predictionHistory.json");
 const OUTCOME_STATUS_FILE = path.join(DATA_DIR, "outcomeStatus.json");
 const MARKET_API_KEY = String(process.env.ALPHA_VANTAGE_API_KEY || "").trim();
@@ -669,6 +670,47 @@ function symbolUniverseMetadata(rows, source, status, notes = [], exclusions = {
   };
 }
 
+function emergencyPresetUniverseMetadata(tickers, notes = []) {
+  const unique = [...new Set(tickers)];
+  return {
+    source: "Emergency preset fallback",
+    fetchedAt: isoNow(),
+    rawSymbolCount: tickers.length,
+    normalizedSymbolCount: unique.length,
+    eligibleSymbolCount: unique.length,
+    commonStockCount: unique.filter((ticker) => !BUILT_IN_UNIVERSES.etfs.includes(ticker)).length,
+    ETFCount: unique.filter((ticker) => BUILT_IN_UNIVERSES.etfs.includes(ticker)).length,
+    excludedCount: tickers.length - unique.length,
+    exclusionReasons: { duplicatesRemoved: tickers.length - unique.length },
+    exchangeCounts: { Preset: unique.length },
+    securityTypeCounts: {
+      "Common Stock": unique.filter((ticker) => !BUILT_IN_UNIVERSES.etfs.includes(ticker)).length,
+      ETF: unique.filter((ticker) => BUILT_IN_UNIVERSES.etfs.includes(ticker)).length,
+    },
+    refreshStatus: "emergency-preset-fallback",
+    refreshNotes: notes.length ? notes : ["Broad-market discovery is unavailable. Results currently use preset symbols."],
+    timezone: DEFAULT_DISCOVERY_SETTINGS.timezone,
+    emergencyFallbackActive: true,
+  };
+}
+
+function packagedSymbolUniverse() {
+  const snapshot = readJson(PUBLIC_SYMBOL_SNAPSHOT_FILE, null);
+  if (!snapshot?.symbols?.length) return null;
+  const metadata = snapshot.snapshotMetadata || snapshot.symbolUniverseMetadata || {};
+  return {
+    symbols: snapshot.symbols,
+    symbolUniverseMetadata: {
+      ...metadata,
+      source: metadata.source || "Cached public listing snapshot",
+      refreshStatus: metadata.refreshStatus || "packaged-snapshot",
+      refreshNotes: metadata.refreshNotes || ["Packaged public listing snapshot loaded at startup."],
+      packagedSnapshot: true,
+      emergencyFallbackActive: false,
+    },
+  };
+}
+
 function buildFallbackSymbolUniverse(note = "Official exchange listing refresh unavailable; using generated fixture universe for development/testing.") {
   const symbols = symbolMasterFallbackRows(3200);
   return {
@@ -722,11 +764,27 @@ async function refreshSymbolUniverse() {
         ...(saved.symbolUniverseMetadata || {}),
         refreshStatus: "stale",
         refreshNotes: [`Refresh failed: ${error.message}. Retaining last valid symbol master.`],
+        lastRefreshError: error.message,
       };
       writeJson(SYMBOL_UNIVERSE_FILE, saved);
       return saved;
     }
-    const fallback = buildFallbackSymbolUniverse(`Official symbol refresh failed: ${error.message}. Generated fixture universe is explicit fallback only.`);
+    const packaged = packagedSymbolUniverse();
+    if (packaged?.symbols?.length) {
+      packaged.symbolUniverseMetadata = {
+        ...(packaged.symbolUniverseMetadata || {}),
+        refreshStatus: "packaged-snapshot",
+        refreshNotes: [`Live listing refresh failed: ${error.message}. Using packaged cached public listing snapshot.`],
+        lastRefreshError: error.message,
+      };
+      writeJson(SYMBOL_UNIVERSE_FILE, packaged);
+      return packaged;
+    }
+    const fallback = buildFallbackSymbolUniverse(`Official symbol refresh failed: ${error.message}. Generated fixture universe is explicit emergency fallback only.`);
+    fallback.symbolUniverseMetadata = {
+      ...(fallback.symbolUniverseMetadata || {}),
+      ...emergencyPresetUniverseMetadata(universePresetTickers("combined"), [`Live listing refresh and packaged snapshot unavailable: ${error.message}.`]),
+    };
     writeJson(SYMBOL_UNIVERSE_FILE, fallback);
     return fallback;
   }
@@ -735,8 +793,13 @@ async function refreshSymbolUniverse() {
 function loadSymbolUniverse() {
   const saved = readJson(SYMBOL_UNIVERSE_FILE, null);
   if (saved?.symbols?.length) return saved;
-  const fallback = buildFallbackSymbolUniverse("No cached symbol master exists yet. This is an explicit fallback, not live exchange coverage.");
-  writeJson(SYMBOL_UNIVERSE_FILE, fallback);
+  const packaged = packagedSymbolUniverse();
+  if (packaged?.symbols?.length) return packaged;
+  const fallback = buildFallbackSymbolUniverse("No cached symbol master or packaged snapshot exists yet. This is an explicit emergency fallback, not live exchange coverage.");
+  fallback.symbolUniverseMetadata = {
+    ...(fallback.symbolUniverseMetadata || {}),
+    ...emergencyPresetUniverseMetadata(universePresetTickers("combined"), ["Packaged snapshot missing; emergency preset fallback would be used if generated fixture support was unavailable."]),
+  };
   return fallback;
 }
 
@@ -1043,6 +1106,98 @@ async function fetchMarketQuoteWithRetry(ticker, retryCount = 1) {
   };
 }
 
+function quoteFreshness(timestamp) {
+  if (!timestamp) return "unavailable";
+  const hours = ageMs(timestamp) / 3600000;
+  if (hours <= 0.25) return "live";
+  if (hours <= 2) return "recent";
+  if (hours <= 24) return "delayed";
+  return "stale";
+}
+
+const MARKET_INDEX_PROBES = [
+  { key: "sp500", displayName: "S&P 500", exactTicker: "^GSPC", proxyTicker: "SPY", proxyLabel: "S&P 500 Proxy - SPY" },
+  { key: "nasdaq", displayName: "Nasdaq Composite", exactTicker: "^IXIC", proxyTicker: "QQQ", proxyLabel: "Nasdaq-100 Proxy - QQQ" },
+  { key: "dow", displayName: "Dow Jones Industrial Average", exactTicker: "^DJI", proxyTicker: "DIA", proxyLabel: "Dow Proxy - DIA" },
+  { key: "russell2000", displayName: "Russell 2000", exactTicker: "^RUT", proxyTicker: "IWM", proxyLabel: "Russell 2000 Proxy - IWM" },
+  { key: "vix", displayName: "CBOE Volatility Index", exactTicker: "^VIX", proxyTicker: null, proxyLabel: "Volatility index unavailable" },
+];
+
+async function quoteProbe(ticker, kind) {
+  try {
+    const quote = await fetchYahooChartQuote(ticker);
+    const connectionStatus = quote.marketPrice && quote.marketUpdatedAt ? "Connected" : "Unavailable";
+    return {
+      requestedTicker: ticker,
+      providerTicker: quote.marketProviderSymbol || yahooTickerSymbol(ticker),
+      kind,
+      connectionStatus,
+      currentPrice: quote.marketPrice || null,
+      dailyChange: quote.marketChange ?? null,
+      dailyChangePercent: quote.marketChangePercent || "",
+      quoteTimestamp: quote.marketUpdatedAt || null,
+      provider: quote.marketProvider || "Yahoo chart",
+      sessionStatus: "regular-or-delayed",
+      freshness: quoteFreshness(quote.marketUpdatedAt),
+      latestProviderError: null,
+    };
+  } catch (error) {
+    return {
+      requestedTicker: ticker,
+      providerTicker: yahooTickerSymbol(ticker),
+      kind,
+      connectionStatus: "Unavailable",
+      currentPrice: null,
+      dailyChange: null,
+      dailyChangePercent: "",
+      quoteTimestamp: null,
+      provider: "Yahoo chart",
+      sessionStatus: "unavailable",
+      freshness: "unavailable",
+      latestProviderError: publicErrorMessage(error, "Quote provider did not return usable market data."),
+    };
+  }
+}
+
+async function marketIndexDiagnostics() {
+  const rows = [];
+  for (const probe of MARKET_INDEX_PROBES) {
+    const exact = await quoteProbe(probe.exactTicker, "exact index");
+    if (exact.connectionStatus === "Connected") {
+      rows.push({
+        ...probe,
+        label: probe.displayName,
+        exactOrProxy: "Exact index",
+        activeQuote: exact,
+        exactQuote: exact,
+        proxyQuote: null,
+      });
+      continue;
+    }
+    const proxy = probe.proxyTicker ? await quoteProbe(probe.proxyTicker, "ETF proxy") : null;
+    rows.push({
+      ...probe,
+      label: proxy?.connectionStatus === "Connected" ? probe.proxyLabel : probe.key === "vix" ? "Volatility index unavailable" : `${probe.displayName} unavailable`,
+      exactOrProxy: proxy?.connectionStatus === "Connected" ? "ETF proxy" : "Unavailable",
+      activeQuote: proxy?.connectionStatus === "Connected" ? proxy : exact,
+      exactQuote: exact,
+      proxyQuote: proxy,
+    });
+  }
+  const connected = rows.filter((row) => row.activeQuote?.connectionStatus === "Connected");
+  const bullish = connected.filter((row) => Number(row.activeQuote?.dailyChange) > 0).length;
+  const bearish = connected.filter((row) => Number(row.activeQuote?.dailyChange) < 0).length;
+  const broadMarketTrend = !connected.length ? "Unavailable" : bullish > bearish + 1 ? "Bullish" : bearish > bullish + 1 ? "Bearish" : bullish || bearish ? "Mixed" : "Neutral";
+  return {
+    updatedAt: isoNow(),
+    provider: "Yahoo chart",
+    broadMarketTrend,
+    rows,
+    connectedCount: connected.length,
+    sourceDetails: "Exact indexes are attempted first. ETF proxies are used only when exact index symbols are unavailable and are labeled as proxies.",
+  };
+}
+
 async function refreshMarketData(config) {
   const quotes = [];
   const errors = [];
@@ -1162,6 +1317,64 @@ function congressFeedPublicStatus(config = sanitizeConfig(readJson(CONFIG_FILE, 
     dataAgeDays,
     freshnessStatus: dataAgeDays === null ? "unavailable" : dataAgeDays <= 45 ? "fresh" : dataAgeDays <= 120 ? "stale" : "very stale",
     technicalSetupInstructions: "Set CONGRESS_TRADES_FEED_URL to a JSON or CSV congressional trading feed. Optional: set CONGRESS_TRADES_API_KEY.",
+  };
+}
+
+function symbolUniverseStatus() {
+  const universe = loadSymbolUniverse();
+  const metadata = universe.symbolUniverseMetadata || universe.snapshotMetadata || {};
+  const eligible = Number(metadata.eligibleSymbolCount || universe.symbols?.length || 0);
+  const fallback117 = eligible <= 117 || metadata.refreshStatus === "emergency-preset-fallback";
+  const activeSource =
+    metadata.refreshStatus === "live"
+      ? "Live listing source"
+      : metadata.refreshStatus === "packaged-snapshot"
+        ? "Cached public snapshot"
+        : fallback117
+          ? "Emergency preset fallback"
+          : metadata.refreshStatus === "stale"
+            ? "Cached public snapshot"
+            : "Cached public snapshot";
+  return {
+    status: fallback117 ? "Emergency Preset Fallback" : activeSource,
+    activeSource,
+    liveListingRefreshStatus: metadata.refreshStatus || "unknown",
+    rawSymbolCount: Number(metadata.rawSymbolCount || eligible),
+    eligibleSymbolCount: eligible,
+    commonStockCount: Number(metadata.commonStockCount || 0),
+    ETFCount: Number(metadata.ETFCount || 0),
+    exchangeCounts: metadata.exchangeCounts || {},
+    securityTypeCounts: metadata.securityTypeCounts || {},
+    cacheOrSnapshotAgeMs: metadata.fetchedAt || metadata.generatedAt ? ageMs(metadata.fetchedAt || metadata.generatedAt) : null,
+    emergencyFallbackActive: fallback117,
+    lastSuccessfulRefresh: metadata.refreshStatus === "live" ? metadata.fetchedAt : null,
+    lastRefreshError: metadata.lastRefreshError || null,
+    nextScheduledRefresh: metadata.fetchedAt ? new Date(Date.parse(metadata.fetchedAt) + sanitizeDiscoverySettings(readJson(CONFIG_FILE, {}).discoverySettings).symbolUniverseRefreshHours * 3600000).toISOString() : null,
+    sourceDetails: fallback117
+      ? "Broad-market discovery is unavailable. Results currently use 117 preset symbols."
+      : `${activeSource}: ${eligible} eligible symbols available.`,
+    metadata,
+  };
+}
+
+function congressConnectionDiagnostic(config = sanitizeConfig(readJson(CONFIG_FILE, {}))) {
+  const status = congressFeedPublicStatus(config);
+  const rawStatus = readJson(CONGRESS_FEED_STATUS_FILE, {});
+  return {
+    configured: Boolean(CONGRESS_TRADES_FEED_URL),
+    providerName: CONGRESS_TRADES_FEED_URL ? "Configured congressional disclosure feed" : "No live provider configured",
+    requestedUrl: CONGRESS_TRADES_FEED_URL ? "[configured, hidden from user dashboard]" : null,
+    httpResponseStatus: rawStatus.httpStatus || null,
+    contentType: rawStatus.contentType || null,
+    authenticationRequirement: process.env.CONGRESS_TRADES_API_KEY ? "API key environment variable configured" : "No API key configured",
+    parseResult: rawStatus.error ? "failed" : rawStatus.imported ? "parsed" : "not attempted",
+    latestSuccessfulRefresh: rawStatus.error ? null : rawStatus.updatedAt || null,
+    liveRecordCount: rawStatus.imported || 0,
+    savedFallbackRecordCount: status.recordsAvailable,
+    latestDisclosureDate: status.latestDisclosureDate,
+    savedDataAgeDays: status.dataAgeDays,
+    failureReason: rawStatus.error || (CONGRESS_TRADES_FEED_URL ? "No successful refresh recorded yet." : "CONGRESS_TRADES_FEED_URL is not configured."),
+    userFacingStatus: status,
   };
 }
 
@@ -3555,10 +3768,35 @@ async function refreshCongressTradeFeed() {
     headers["X-API-Key"] = CONGRESS_TRADES_API_KEY;
   }
 
-  const response = await fetch(CONGRESS_TRADES_FEED_URL, { headers });
-  if (!response.ok) throw new Error(`Congress feed returned ${response.status}`);
-
+  let response;
+  try {
+    response = await fetch(CONGRESS_TRADES_FEED_URL, { headers });
+  } catch (error) {
+    writeJson(CONGRESS_FEED_STATUS_FILE, {
+      updatedAt: new Date().toISOString(),
+      imported: 0,
+      totalTrades: (readJson(CONFIG_FILE, {}).congressTrades || []).length,
+      source: CONGRESS_TRADES_FEED_URL,
+      httpStatus: null,
+      contentType: null,
+      error: error.message,
+    });
+    throw error;
+  }
   const contentType = response.headers.get("content-type") || "";
+  if (!response.ok) {
+    const message = `Congress feed returned ${response.status}`;
+    writeJson(CONGRESS_FEED_STATUS_FILE, {
+      updatedAt: new Date().toISOString(),
+      imported: 0,
+      totalTrades: (readJson(CONFIG_FILE, {}).congressTrades || []).length,
+      source: CONGRESS_TRADES_FEED_URL,
+      httpStatus: response.status,
+      contentType,
+      error: message,
+    });
+    throw new Error(message);
+  }
   const text = await response.text();
   const rows =
     contentType.includes("json") || text.trim().startsWith("{") || text.trim().startsWith("[")
@@ -3577,6 +3815,8 @@ async function refreshCongressTradeFeed() {
     imported: imported.length,
     totalTrades: nextConfig.congressTrades.length,
     source: CONGRESS_TRADES_FEED_URL,
+    httpStatus: response.status,
+    contentType,
     error: null,
   };
   writeJson(CONGRESS_FEED_STATUS_FILE, status);
@@ -3690,6 +3930,16 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (request.method === "GET" && pathname === "/api/symbol-universe-status") {
+    sendJson(response, 200, symbolUniverseStatus());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/market-index-data") {
+    sendJson(response, 200, await marketIndexDiagnostics());
+    return;
+  }
+
   if (request.method === "GET" && pathname === "/api/portfolio") {
     if (!isPortfolioOwner(request)) {
       sendJson(response, 401, { error: "Portfolio PIN required" });
@@ -3766,6 +4016,21 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "GET" && pathname === "/api/admin/summary") {
     sendJson(response, 200, summarizeEvents());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/symbol-universe-diagnostic") {
+    sendJson(response, 200, symbolUniverseStatus());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/market-index-diagnostic") {
+    sendJson(response, 200, await marketIndexDiagnostics());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/congress-connection-diagnostic") {
+    sendJson(response, 200, congressConnectionDiagnostic());
     return;
   }
 

@@ -3,6 +3,8 @@ const state = {
   config: null,
   symbolUniverse: null,
   congressFeedStatus: null,
+  congressDiagnostic: null,
+  marketIndexData: null,
 };
 
 const loginForm = document.querySelector("#adminLogin");
@@ -22,6 +24,7 @@ const congressEditor = document.querySelector("#congressEditor");
 const predictionHealthPanel = document.querySelector("#predictionHealthPanel");
 const symbolUniversePanel = document.querySelector("#symbolUniversePanel");
 const congressStatusPanel = document.querySelector("#congressStatusPanel");
+const marketIndexPanel = document.querySelector("#marketIndexPanel");
 
 const thresholdFields = {
   firstEmergencyTarget: document.querySelector("#firstEmergencyTarget"),
@@ -298,28 +301,33 @@ function renderScanSettingsStatus() {
 function renderSymbolUniverse(universe) {
   if (!symbolUniversePanel) return;
   const metadata = universe?.metadata || universe?.symbolUniverseMetadata || {};
+  const eligibleCount = Number(universe?.eligibleSymbolCount || metadata.eligibleSymbolCount || universe?.symbols?.length) || 0;
   const notes = metadata.notes || universe?.notes || [];
   symbolUniversePanel.innerHTML = `
     <article class="editor-row stock-editor-row">
       <label>
         <span>Symbol universe status</span>
-        <input readonly value="${escapeHtml(metadata.refreshStatus || metadata.status || "Unknown")}" />
+        <input readonly value="${escapeHtml(universe?.status || metadata.refreshStatus || metadata.status || "Unknown")}" />
       </label>
       <label>
         <span>Eligible symbols cached</span>
-        <input readonly value="${Number(metadata.eligibleCount || universe?.symbols?.length) || 0}" />
+        <input readonly value="${eligibleCount}" />
       </label>
       <label>
         <span>Source</span>
-        <input readonly value="${escapeHtml(metadata.source || "Not loaded")}" />
+        <input readonly value="${escapeHtml(universe?.activeSource || metadata.source || "Not loaded")}" />
       </label>
       <label>
         <span>Last refreshed</span>
-        <input readonly value="${escapeHtml(metadata.lastRefresh || metadata.generatedAt || "Not available")}" />
+        <input readonly value="${escapeHtml(universe?.lastSuccessfulRefresh || metadata.lastRefresh || metadata.generatedAt || metadata.fetchedAt || "Not available")}" />
       </label>
       <label class="wide-field">
         <span>Coverage notes</span>
-        <input readonly value="${escapeHtml(notes.join("; ") || "No provider limitations reported.")}" />
+        <input readonly value="${escapeHtml(universe?.sourceDetails || notes.join("; ") || "No provider limitations reported.")}" />
+      </label>
+      <label class="wide-field">
+        <span>Exchange counts</span>
+        <input readonly value="${escapeHtml(Object.entries(universe?.exchangeCounts || metadata.exchangeCounts || {}).map(([name, count]) => `${name}: ${count}`).join("; ") || "Unavailable")}" />
       </label>
       <div class="button-row">
         <button type="button" id="refreshSymbolUniverse">Refresh symbol universe</button>
@@ -365,24 +373,63 @@ function renderCongressStatus(status) {
         <span>Admin setup note</span>
         <input readonly value="${escapeHtml(status?.technicalSetupInstructions || "Set CONGRESS_TRADES_FEED_URL only when a live JSON or CSV provider is connected.")}" />
       </label>
+      <label class="wide-field">
+        <span>Connection diagnostic</span>
+        <input readonly value="${escapeHtml(state.congressDiagnostic?.failureReason || "No diagnostic run yet.")}" />
+      </label>
+    </article>
+  `;
+}
+
+function renderMarketIndexDiagnostics(data) {
+  if (!marketIndexPanel) return;
+  const rows = data?.rows || [];
+  marketIndexPanel.innerHTML = `
+    <article class="editor-row stock-editor-row">
+      <label>
+        <span>Broad Market Trend</span>
+        <input readonly value="${escapeHtml(data?.broadMarketTrend || "Unavailable")}" />
+      </label>
+      <label>
+        <span>Quote provider</span>
+        <input readonly value="${escapeHtml(data?.provider || "Unavailable")}" />
+      </label>
+      <label>
+        <span>Connected market quotes</span>
+        <input readonly value="${Number(data?.connectedCount) || 0} / ${rows.length}" />
+      </label>
+      <label class="wide-field">
+        <span>Index/proxy diagnostics</span>
+        <textarea rows="6" readonly>${escapeHtml(rows.map((row) => {
+          const quote = row.activeQuote || {};
+          return `${row.displayName}: ${row.exactOrProxy}; requested ${quote.requestedTicker || row.exactTicker}; provider ${quote.providerTicker || "n/a"}; status ${quote.connectionStatus || "Unavailable"}; freshness ${quote.freshness || "unavailable"}; error ${quote.latestProviderError || "none"}`;
+        }).join("\n") || "No market index diagnostics loaded.")}</textarea>
+      </label>
     </article>
   `;
 }
 
 async function loadAdminStatusPanels() {
   try {
-    const [symbolResponse, congressResponse] = await Promise.all([
-      fetch("/api/symbol-universe"),
+    const [symbolResponse, congressResponse, congressDiagnosticResponse, marketResponse] = await Promise.all([
+      fetch("/api/admin/symbol-universe-diagnostic", { headers: adminHeaders() }),
       fetch("/api/congress-feed-status"),
+      fetch("/api/admin/congress-connection-diagnostic", { headers: adminHeaders() }),
+      fetch("/api/admin/market-index-diagnostic", { headers: adminHeaders() }),
     ]);
     state.symbolUniverse = symbolResponse.ok ? await symbolResponse.json() : null;
     state.congressFeedStatus = congressResponse.ok ? await congressResponse.json() : null;
+    state.congressDiagnostic = congressDiagnosticResponse.ok ? await congressDiagnosticResponse.json() : null;
+    state.marketIndexData = marketResponse.ok ? await marketResponse.json() : null;
   } catch (error) {
     state.symbolUniverse = null;
     state.congressFeedStatus = { status: "Failed", userMessage: error.message };
+    state.congressDiagnostic = { failureReason: error.message };
+    state.marketIndexData = { broadMarketTrend: "Unavailable", rows: [] };
   }
   renderSymbolUniverse(state.symbolUniverse);
   renderCongressStatus(state.congressFeedStatus);
+  renderMarketIndexDiagnostics(state.marketIndexData);
   renderScanSettingsStatus();
 }
 
