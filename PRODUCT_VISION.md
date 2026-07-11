@@ -29,3 +29,8 @@ The product goal is to make sophisticated stock prediction intelligence simple, 
 
 Public Trade Intel should feel like a professional research dashboard, not a raw admin tool. A user should be able to open the app, understand the market mood, see the strongest opportunities by timeframe, and open a clear trade brief in one or two clicks.
 
+## Responsiveness Goal
+
+The prediction engine should feel active, transparent, and broad enough to discover fresh ideas. Scans should show progress while they run, report how many symbols were actually screened, explain data freshness, and avoid repeating the same names across every dashboard role unless the evidence truly supports it.
+
+Congressional trading data is valuable context, but it should remain a secondary catalyst inside a larger evidence stack that includes market data, technical conditions, sector strength, policy/news signals, risk, and data quality.

@@ -49,6 +49,8 @@ const adminSectionLabels = {
   engine: "Prediction Engine",
   market: "Market Data",
   universe: "Prediction Scan Settings",
+  discovery: "Discovery Settings",
+  weights: "Model Weights",
   users: "Users",
   congress: "Congress Feed",
   policy: "Policy Feed",
@@ -60,6 +62,10 @@ const adminHashTargets = {
   "prediction-engine": "engine",
   "prediction-scan-settings": "universe",
   "scan-universe": "universe",
+  "prediction-discovery-settings": "discovery",
+  "discovery-settings": "discovery",
+  "prediction-model-weights": "weights",
+  "model-weights": "weights",
   "market-data": "market",
   users: "users",
   "congress-feed": "congress",
@@ -111,6 +117,10 @@ function runAdminSearch() {
   const target =
     query.includes("scan") || query.includes("universe") || query.includes("ticker")
       ? "universe"
+      : query.includes("discovery") || query.includes("broad") || query.includes("sector allocation")
+        ? "discovery"
+        : query.includes("weight") || query.includes("congress cap") || query.includes("model")
+          ? "weights"
       : query.includes("market") || query.includes("quote")
         ? "market"
         : query.includes("congress") || query.includes("representative")
@@ -125,6 +135,104 @@ function runAdminSearch() {
                   ? "engine"
                   : "overview";
   setAdminSection(target);
+}
+
+const discoveryFieldIds = {
+  broadScreenTarget: "discoveryTargetSymbolCount",
+  targetSymbolCount: "discoveryTargetSymbolCount",
+  minimumPrice: "discoveryMinimumPrice",
+  minimumAverageVolume: "discoveryMinimumAverageVolume",
+  marketHoursDeepCount: "discoveryMarketHoursDeepCount",
+  afterHoursDeepCount: "discoveryAfterHoursDeepCount",
+  batchSize: "discoveryBatchSize",
+  requestConcurrency: "discoveryRequestConcurrency",
+  providerConcurrencyLimit: "discoveryRequestConcurrency",
+  providerRequestBudget: "discoveryProviderRequestBudget",
+  maxScanDurationMs: "discoveryMaxScanDurationMs",
+  retryCount: "discoveryRetryCount",
+  strongSectorPercent: "discoveryStrongSectorPercent",
+  improvingSectorPercent: "discoveryImprovingSectorPercent",
+  contrarianPercent: "discoveryContrarianPercent",
+  catalystPercent: "discoveryCatalystPercent",
+  minimumPerSector: "discoveryMinimumPerSector",
+};
+
+function discoveryDefaults() {
+  return {
+    broadScreenTarget: 2500,
+    targetSymbolCount: 2500,
+    includeEtfs: true,
+    includeSmallCaps: false,
+    excludeOtc: true,
+    minimumPrice: 3,
+    minimumAverageVolume: 250000,
+    marketHoursDeepCount: 300,
+    afterHoursDeepCount: 600,
+    batchSize: 8,
+    requestConcurrency: 4,
+    providerConcurrencyLimit: 4,
+    providerRequestBudget: 2500,
+    maxScanDurationMs: 180000,
+    retryCount: 1,
+    strongSectorPercent: 60,
+    improvingSectorPercent: 20,
+    contrarianPercent: 10,
+    catalystPercent: 10,
+    minimumPerSector: 2,
+  };
+}
+
+function modelWeightDefaults() {
+  return {
+    modelVersion: "v5-responsive-discovery",
+    oneDay: { congressional: 5 },
+    sevenDay: { congressional: 7.5 },
+    oneMonth: { congressional: 10 },
+    oneYear: { congressional: 10 },
+  };
+}
+
+function renderDiscoverySettings(config) {
+  const settings = { ...discoveryDefaults(), ...(config.discoverySettings || {}) };
+  Object.entries(discoveryFieldIds).forEach(([key, id]) => {
+    const input = document.querySelector(`#${id}`);
+    if (input) input.value = settings[key];
+  });
+  const includeEtfs = document.querySelector("#discoveryIncludeEtfs");
+  const includeSmallCaps = document.querySelector("#discoveryIncludeSmallCaps");
+  const excludeOtc = document.querySelector("#discoveryExcludeOtc");
+  if (includeEtfs) includeEtfs.value = String(settings.includeEtfs !== false);
+  if (includeSmallCaps) includeSmallCaps.value = String(settings.includeSmallCaps === true);
+  if (excludeOtc) excludeOtc.value = String(settings.excludeOtc !== false);
+  const active = document.querySelector("#discoveryActiveConfig");
+  if (active) active.value = `${settings.broadScreenTarget || settings.targetSymbolCount} broad target, ${settings.marketHoursDeepCount}/${settings.afterHoursDeepCount} deep-analysis candidates, ${settings.providerRequestBudget} provider budget, ${settings.providerConcurrencyLimit || settings.requestConcurrency} concurrency`;
+}
+
+function renderModelWeights(config) {
+  const weights = { ...modelWeightDefaults(), ...(config.modelWeights || {}) };
+  const version = document.querySelector("#modelWeightVersion");
+  if (version) version.value = weights.modelVersion || "v5-responsive-discovery";
+  const fields = [
+    ["#weightOneDayCongress", weights.oneDay?.congressional ?? 5],
+    ["#weightSevenDayCongress", weights.sevenDay?.congressional ?? 7.5],
+    ["#weightOneMonthCongress", weights.oneMonth?.congressional ?? 10],
+    ["#weightOneYearCongress", weights.oneYear?.congressional ?? 10],
+  ];
+  fields.forEach(([selector, value]) => {
+    const input = document.querySelector(selector);
+    if (input) input.value = value;
+  });
+  const summary = document.querySelector("#modelWeightsSummary");
+  if (summary) {
+    summary.value = [
+      `Model: ${weights.modelVersion || "v5-responsive-discovery"}`,
+      `1-day congressional cap: ${weights.oneDay?.congressional ?? 5}%`,
+      `7-day congressional cap: ${weights.sevenDay?.congressional ?? 7.5}%`,
+      `1-month congressional cap: ${weights.oneMonth?.congressional ?? 10}%`,
+      `1-year congressional cap: ${weights.oneYear?.congressional ?? 10}%`,
+      "Short-term rankings prioritize price momentum, volume, VWAP/alignment, setups, sector strength, and freshness.",
+    ].join("\n");
+  }
 }
 
 function adminHeaders() {
@@ -455,6 +563,8 @@ function renderConfig(config) {
   if (scanUniverse) scanUniverse.value = config.scanSettings?.universe || "combined";
   if (customTickers) customTickers.value = config.scanSettings?.customTickers || "";
   renderScanSettingsStatus();
+  renderDiscoverySettings(config);
+  renderModelWeights(config);
   plansEditor.innerHTML = config.plans.map(planRow).join("");
   goalsEditor.innerHTML = config.goals.map(goalRow).join("");
   stocksEditor.innerHTML = (config.stockIdeas || []).map(stockRow).join("");
@@ -473,6 +583,8 @@ function collectConfig() {
       universe: scanUniverse?.value || "combined",
       customTickers: customTickers?.value || "",
     },
+    discoverySettings: readDiscoverySettings(),
+    modelWeights: readModelWeights(),
     plans: state.config.plans.map((plan) => ({ ...plan })),
     goals: state.config.goals.map((goal) => ({ ...goal })),
     stockIdeas: (state.config.stockIdeas || []).map((stock) => ({ ...stock })),
@@ -514,6 +626,37 @@ function collectConfig() {
   });
 
   return config;
+}
+
+function readDiscoverySettings() {
+  const settings = {};
+  Object.entries(discoveryFieldIds).forEach(([key, id]) => {
+    const input = document.querySelector(`#${id}`);
+    if (input) settings[key] = Number(input.value) || discoveryDefaults()[key];
+  });
+  settings.broadScreenTarget = Number(document.querySelector("#discoveryTargetSymbolCount")?.value) || discoveryDefaults().broadScreenTarget;
+  settings.targetSymbolCount = settings.broadScreenTarget;
+  settings.providerConcurrencyLimit = Number(document.querySelector("#discoveryRequestConcurrency")?.value) || discoveryDefaults().providerConcurrencyLimit;
+  settings.requestConcurrency = settings.providerConcurrencyLimit;
+  settings.includeEtfs = document.querySelector("#discoveryIncludeEtfs")?.value !== "false";
+  settings.includeSmallCaps = document.querySelector("#discoveryIncludeSmallCaps")?.value === "true";
+  settings.excludeOtc = document.querySelector("#discoveryExcludeOtc")?.value !== "false";
+  settings.lastChangedAt = new Date().toISOString();
+  return settings;
+}
+
+function readModelWeights() {
+  const defaults = modelWeightDefaults();
+  return {
+    ...defaults,
+    modelVersion: document.querySelector("#modelWeightVersion")?.value || defaults.modelVersion,
+    oneDay: { ...defaults.oneDay, congressional: Number(document.querySelector("#weightOneDayCongress")?.value) || 5 },
+    sevenDay: { ...defaults.sevenDay, congressional: Number(document.querySelector("#weightSevenDayCongress")?.value) || 7.5 },
+    oneMonth: { ...defaults.oneMonth, congressional: Number(document.querySelector("#weightOneMonthCongress")?.value) || 10 },
+    oneYear: { ...defaults.oneYear, congressional: Number(document.querySelector("#weightOneYearCongress")?.value) || 10 },
+    lastChangedAt: new Date().toISOString(),
+    changedBy: "admin",
+  };
 }
 
 loginForm.addEventListener("submit", async (event) => {
@@ -571,6 +714,16 @@ scanUniverse?.addEventListener("change", renderScanSettingsStatus);
 customTickers?.addEventListener("input", renderScanSettingsStatus);
 adminGlobalSearch?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") runAdminSearch();
+});
+document.querySelector("#resetDiscoveryDefaults")?.addEventListener("click", () => {
+  state.config.discoverySettings = discoveryDefaults();
+  renderDiscoverySettings(state.config);
+  scanSettingsMessage.textContent = "Discovery settings reset locally. Click Save settings to persist.";
+});
+document.querySelector("#resetModelWeights")?.addEventListener("click", () => {
+  state.config.modelWeights = modelWeightDefaults();
+  renderModelWeights(state.config);
+  scanSettingsMessage.textContent = "Model weights reset locally. Click Save settings to persist.";
 });
 
 document.querySelector("#refreshMarket").addEventListener("click", async () => {

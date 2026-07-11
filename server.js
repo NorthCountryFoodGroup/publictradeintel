@@ -23,10 +23,53 @@ const CONGRESS_REFRESH_MS = Number(process.env.CONGRESS_REFRESH_MS || 60 * 60 * 
 const PREDICTION_REFRESH_MS = Number(process.env.PREDICTION_REFRESH_MS || 60 * 60 * 1000);
 const SESSION_COOKIE = "pti_session";
 const sessions = new Map();
-const MAX_SCAN_UNIVERSE = 90;
+const BROAD_SCREEN_TARGET = 2500;
+const DEEP_ANALYSIS_MARKET_HOURS_TARGET = 300;
+const DEEP_ANALYSIS_AFTER_HOURS_TARGET = 600;
+const PROVIDER_CONCURRENCY_LIMIT = 4;
+const PROVIDER_REQUEST_BUDGET = 2500;
+const MAX_SCAN_DURATION = 180000;
 const MARKET_QUOTE_BATCH_SIZE = 8;
 const MARKET_QUOTE_RETRY_DELAY_MS = 350;
 const SCAN_UNIVERSE_MODES = ["watchlist", "sp500", "nasdaq100", "etfs", "combined"];
+const DEFAULT_DISCOVERY_SETTINGS = {
+  broadScreenTarget: BROAD_SCREEN_TARGET,
+  targetSymbolCount: BROAD_SCREEN_TARGET,
+  includeEtfs: true,
+  includeSmallCaps: false,
+  excludeOtc: true,
+  minimumPrice: 3,
+  minimumAverageVolume: 250000,
+  minimumMarketCap: 0,
+  maxBroadScreenDurationMs: 45000,
+  marketHoursDeepCount: DEEP_ANALYSIS_MARKET_HOURS_TARGET,
+  afterHoursDeepCount: DEEP_ANALYSIS_AFTER_HOURS_TARGET,
+  maxDeepAnalysisDurationMs: 120000,
+  batchSize: 8,
+  requestConcurrency: PROVIDER_CONCURRENCY_LIMIT,
+  providerConcurrencyLimit: PROVIDER_CONCURRENCY_LIMIT,
+  providerRequestBudget: PROVIDER_REQUEST_BUDGET,
+  maxScanDurationMs: MAX_SCAN_DURATION,
+  retryCount: 1,
+  strongSectorPercent: 60,
+  improvingSectorPercent: 20,
+  contrarianPercent: 10,
+  catalystPercent: 10,
+  minimumPerSector: 2,
+  scheduledScanningEnabled: false,
+  scheduledScanTimes: ["08:30", "09:45", "12:00", "15:30", "19:00"],
+  timezone: "America/New_York",
+};
+const DEFAULT_MODEL_WEIGHTS = {
+  modelVersion: "v5-responsive-discovery",
+  oneDay: { momentum: 24, technical: 18, volume: 18, multiTimeframe: 14, setup: 10, chartPattern: 6, marketRegime: 4, sectorStrength: 4, news: 5, policy: 2, congressional: 5, shortSqueeze: 5, fundamentals: 0, freshnessPenalty: -8, dataQualityPenalty: -8 },
+  sevenDay: { momentum: 20, technical: 18, volume: 10, multiTimeframe: 12, setup: 10, chartPattern: 8, marketRegime: 6, sectorStrength: 9, news: 7, policy: 4, congressional: 7.5, shortSqueeze: 3, fundamentals: 3, freshnessPenalty: -6, dataQualityPenalty: -7 },
+  oneMonth: { momentum: 14, technical: 16, volume: 6, multiTimeframe: 7, setup: 6, chartPattern: 8, marketRegime: 10, sectorStrength: 12, news: 8, policy: 7, congressional: 10, shortSqueeze: 2, fundamentals: 10, freshnessPenalty: -4, dataQualityPenalty: -6 },
+  oneYear: { momentum: 8, technical: 10, volume: 3, multiTimeframe: 3, setup: 2, chartPattern: 4, marketRegime: 10, sectorStrength: 12, news: 5, policy: 8, congressional: 10, shortSqueeze: 1, fundamentals: 24, freshnessPenalty: -3, dataQualityPenalty: -5 },
+  lastChangedAt: null,
+  changedBy: "system defaults",
+};
+let activePredictionScan = null;
 const BUILT_IN_UNIVERSES = {
   sp500: [
     "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "BRK.B", "LLY", "AVGO", "JPM", "TSLA",
@@ -203,6 +246,62 @@ function sanitizePortfolio(value) {
   return Array.isArray(value) ? value.slice(0, 200).map(sanitizePortfolioPosition) : [];
 }
 
+function boundedNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function sanitizeDiscoverySettings(settings = {}) {
+  const source = { ...DEFAULT_DISCOVERY_SETTINGS, ...(settings || {}) };
+  const broadScreenTarget = boundedNumber(source.broadScreenTarget ?? source.targetSymbolCount, BROAD_SCREEN_TARGET, 25, 5000);
+  const providerConcurrencyLimit = boundedNumber(source.providerConcurrencyLimit ?? source.requestConcurrency, PROVIDER_CONCURRENCY_LIMIT, 1, 20);
+  const providerRequestBudget = boundedNumber(source.providerRequestBudget, PROVIDER_REQUEST_BUDGET, 25, 5000);
+  return {
+    broadScreenTarget,
+    targetSymbolCount: broadScreenTarget,
+    includeEtfs: source.includeEtfs !== false,
+    includeSmallCaps: source.includeSmallCaps === true,
+    excludeOtc: source.excludeOtc !== false,
+    minimumPrice: boundedNumber(source.minimumPrice, 3, 0, 1000),
+    minimumAverageVolume: boundedNumber(source.minimumAverageVolume, 250000, 0, 100000000),
+    minimumMarketCap: boundedNumber(source.minimumMarketCap, 0, 0, 10000000000000),
+    maxBroadScreenDurationMs: boundedNumber(source.maxBroadScreenDurationMs, 45000, 5000, 300000),
+    marketHoursDeepCount: boundedNumber(source.marketHoursDeepCount, DEEP_ANALYSIS_MARKET_HOURS_TARGET, 25, 1000),
+    afterHoursDeepCount: boundedNumber(source.afterHoursDeepCount, DEEP_ANALYSIS_AFTER_HOURS_TARGET, 25, 1500),
+    maxDeepAnalysisDurationMs: boundedNumber(source.maxDeepAnalysisDurationMs, 120000, 10000, 600000),
+    batchSize: boundedNumber(source.batchSize, 8, 1, 50),
+    requestConcurrency: providerConcurrencyLimit,
+    providerConcurrencyLimit,
+    providerRequestBudget,
+    maxScanDurationMs: boundedNumber(source.maxScanDurationMs, MAX_SCAN_DURATION, 30000, 900000),
+    retryCount: boundedNumber(source.retryCount, 1, 0, 5),
+    strongSectorPercent: boundedNumber(source.strongSectorPercent, 60, 0, 100),
+    improvingSectorPercent: boundedNumber(source.improvingSectorPercent, 20, 0, 100),
+    contrarianPercent: boundedNumber(source.contrarianPercent, 10, 0, 100),
+    catalystPercent: boundedNumber(source.catalystPercent, 10, 0, 100),
+    minimumPerSector: boundedNumber(source.minimumPerSector, 2, 0, 25),
+    scheduledScanningEnabled: source.scheduledScanningEnabled === true,
+    scheduledScanTimes: Array.isArray(source.scheduledScanTimes) ? source.scheduledScanTimes.slice(0, 8).map((time) => String(time).slice(0, 8)) : DEFAULT_DISCOVERY_SETTINGS.scheduledScanTimes,
+    timezone: String(source.timezone || "America/New_York").slice(0, 80),
+    lastChangedAt: String(source.lastChangedAt || "").slice(0, 40),
+  };
+}
+
+function sanitizeModelWeights(weights = {}) {
+  const next = { ...DEFAULT_MODEL_WEIGHTS, ...(weights || {}) };
+  for (const key of ["oneDay", "sevenDay", "oneMonth", "oneYear"]) {
+    next[key] = { ...DEFAULT_MODEL_WEIGHTS[key], ...(weights?.[key] || {}) };
+    Object.keys(next[key]).forEach((name) => {
+      next[key][name] = boundedNumber(next[key][name], DEFAULT_MODEL_WEIGHTS[key][name] || 0, -50, 100);
+    });
+  }
+  next.modelVersion = String(next.modelVersion || DEFAULT_MODEL_WEIGHTS.modelVersion).slice(0, 80);
+  next.lastChangedAt = String(next.lastChangedAt || "").slice(0, 40);
+  next.changedBy = String(next.changedBy || "admin").slice(0, 80);
+  return next;
+}
+
 function sanitizeConfig(config) {
   return {
     thresholds: {
@@ -283,6 +382,8 @@ function sanitizeConfig(config) {
           marketProvider: String(trade.marketProvider || "").slice(0, 40),
         }))
       : [],
+    discoverySettings: sanitizeDiscoverySettings(config?.discoverySettings),
+    modelWeights: sanitizeModelWeights(config?.modelWeights),
     policySources: Array.isArray(config?.policySources)
       ? config.policySources.slice(0, 20).map((source) => ({
           name: String(source.name || "Policy source").slice(0, 100),
@@ -478,8 +579,7 @@ function universeCandidate(ticker, index, overrides = {}) {
   };
 }
 
-function buildScanUniverse(config, quotes = []) {
-  const quoteMap = new Map((quotes || []).map((quote) => [quote.ticker, quote]));
+function configuredUniverseTickers(config) {
   const watchlist = new Map((config.stockIdeas || []).map((stock) => [stock.ticker, stock]));
   const custom = parseTickerList(config.scanSettings?.customTickers);
   const mode = config.scanSettings?.universe || "combined";
@@ -488,24 +588,120 @@ function buildScanUniverse(config, quotes = []) {
     ...custom,
   ];
   if (mode === "combined") tickers.unshift(...watchlist.keys());
-  const unique = [...new Set(tickers.filter(Boolean))].slice(0, MAX_SCAN_UNIVERSE);
+  return [...new Set(tickers.filter(Boolean))];
+}
 
-  return unique.map((ticker, index) => {
-    const quote = quoteMap.get(ticker) || {};
-    const saved = watchlist.get(ticker) || {};
-    return universeCandidate(ticker, index, { ...saved, ...quote });
-  });
+function buildDiscoveryPipeline(config, quotes = []) {
+  const quoteMap = new Map((quotes || []).map((quote) => [quote.ticker, quote]));
+  const watchlist = new Map((config.stockIdeas || []).map((stock) => [stock.ticker, stock]));
+  const mode = config.scanSettings?.universe || "combined";
+  const discovery = sanitizeDiscoverySettings(config.discoverySettings);
+  const unique = configuredUniverseTickers(config);
+  const providerSupportedBroadCount = Math.min(unique.length, discovery.broadScreenTarget, discovery.providerRequestBudget);
+
+  const eligibleCandidates = unique
+    .map((ticker, index) => {
+      const quote = quoteMap.get(ticker) || {};
+      const saved = watchlist.get(ticker) || {};
+      return universeCandidate(ticker, index, { ...saved, ...quote });
+    })
+    .filter((candidate) => discovery.includeEtfs || candidate.type !== "ETF")
+    .filter((candidate) => {
+      const price = Number(candidate.marketPrice);
+      if (Number.isFinite(price) && price > 0 && price < discovery.minimumPrice) return false;
+      const volume = Number(candidate.marketVolume || candidate.averageVolume);
+      if (Number.isFinite(volume) && volume > 0 && volume < discovery.minimumAverageVolume) return false;
+      return true;
+    });
+
+  const deepLimit = new Date().getHours() >= 9 && new Date().getHours() < 16 ? discovery.marketHoursDeepCount : discovery.afterHoursDeepCount;
+  const broadScreenCandidates = eligibleCandidates
+    .map((candidate, index) => ({
+      ...candidate,
+      broadScreenScore: broadScreenScore(candidate, index),
+      broadScreenRank: index + 1,
+    }))
+    .sort((a, b) => b.broadScreenScore - a.broadScreenScore || Number(b.marketVolume || 0) - Number(a.marketVolume || 0) || a.ticker.localeCompare(b.ticker))
+    .slice(0, Math.min(providerSupportedBroadCount, eligibleCandidates.length));
+
+  const deepAnalysisCandidates = broadScreenCandidates
+    .slice(0, Math.min(deepLimit, broadScreenCandidates.length))
+    .map((candidate, index) => ({
+      ...candidate,
+      broadScreenRank: index + 1,
+      deepAnalysisSelected: true,
+    }));
+
+  const coverageLimitReasons = [];
+  if (unique.length < discovery.broadScreenTarget) coverageLimitReasons.push("configured universe smaller than broad-screen target");
+  if (discovery.providerRequestBudget < discovery.broadScreenTarget) coverageLimitReasons.push("provider request budget below broad-screen target");
+  if (eligibleCandidates.length < unique.length) coverageLimitReasons.push("eligibility filters removed symbols");
+  if (deepAnalysisCandidates.length < deepLimit) coverageLimitReasons.push("fewer candidates available than deep-analysis target");
+
+  return {
+    mode,
+    discovery,
+    allTickers: unique,
+    eligibleCandidates,
+    broadScreenCandidates,
+    deepAnalysisCandidates,
+    providerSupportedBroadCount,
+    deepLimit,
+    coverageLimitReasons,
+    actualCoverageNote: coverageLimitReasons.length
+      ? `Broad discovery screened ${broadScreenCandidates.length} of ${discovery.broadScreenTarget} requested symbols because ${coverageLimitReasons.join(", ")}.`
+      : `Broad discovery screened the requested ${discovery.broadScreenTarget} symbols.`,
+  };
+}
+
+function buildScanUniverse(config, quotes = []) {
+  return buildDiscoveryPipeline(config, quotes).deepAnalysisCandidates;
+}
+
+function broadUniverseStats(config, quotes = []) {
+  const quoteMap = new Map((quotes || []).map((quote) => [quote.ticker, quote]));
+  const custom = parseTickerList(config.scanSettings?.customTickers);
+  const pipeline = buildDiscoveryPipeline(config, quotes);
+  const withQuotes = pipeline.allTickers.filter((ticker) => quoteMap.has(ticker)).length;
+  return {
+    mode: pipeline.mode,
+    targetSymbolCount: pipeline.discovery.broadScreenTarget,
+    broadScreenTarget: pipeline.discovery.broadScreenTarget,
+    deepAnalysisMarketHoursTarget: pipeline.discovery.marketHoursDeepCount,
+    deepAnalysisAfterHoursTarget: pipeline.discovery.afterHoursDeepCount,
+    providerConcurrencyLimit: pipeline.discovery.providerConcurrencyLimit,
+    providerRequestBudget: pipeline.discovery.providerRequestBudget,
+    maxScanDurationMs: pipeline.discovery.maxScanDurationMs,
+    totalSymbolsAvailable: pipeline.allTickers.length,
+    eligibleSymbols: pipeline.eligibleCandidates.length,
+    broadScreenedSymbols: pipeline.broadScreenCandidates.length,
+    deepAnalysisSelectedSymbols: pipeline.deepAnalysisCandidates.length,
+    customTickerCount: custom.length,
+    freshQuoteCount: withQuotes,
+    coverageLimitReasons: pipeline.coverageLimitReasons,
+    actualCoverageNote: pipeline.actualCoverageNote,
+  };
+}
+
+function broadScreenScore(candidate, index = 0) {
+  const marketChange = numberPercent(candidate.marketChangePercent);
+  const volume = Number(candidate.marketVolume || 0);
+  const relativeVolume = Number(candidate.relativeVolume || 0);
+  const freshnessBoost = candidate.marketUpdatedAt ? 12 : 0;
+  const activity = clamp(Math.abs(marketChange) * 8 + Math.min(25, volume / 1000000) + relativeVolume * 12);
+  return Math.round(clamp((Number(candidate.momentumScore) || 0) * 0.32 + (Number(candidate.qualityScore) || 0) * 0.18 + activity * 0.24 + (Number(candidate.pressScore) || 0) * 0.14 + freshnessBoost + (index % 7) * 0.3));
 }
 
 function uniqueTickers(config) {
   const tickers = new Set();
-  for (const stock of buildScanUniverse(config)) tickers.add(stock.ticker);
+  for (const ticker of buildDiscoveryPipeline(config).allTickers) tickers.add(ticker);
   for (const trade of config.congressTrades || []) tickers.add(trade.ticker);
   return [...tickers].filter(Boolean);
 }
 
 function scanUniverseTickers(config) {
-  return buildScanUniverse(config).map((stock) => stock.ticker).filter(Boolean);
+  const pipeline = buildDiscoveryPipeline(config);
+  return pipeline.allTickers.slice(0, pipeline.providerSupportedBroadCount).filter(Boolean);
 }
 
 function quoteTickerSymbol(ticker) {
@@ -652,12 +848,18 @@ async function fetchMarketQuoteWithRetry(ticker, retryCount = 1) {
 async function refreshMarketData(config) {
   const quotes = [];
   const errors = [];
+  const discovery = sanitizeDiscoverySettings(config.discoverySettings);
   const requestedTickers = scanUniverseTickers(config);
   const tickers = [...new Set(requestedTickers)].filter(Boolean);
+  const startedAt = Date.now();
 
-  for (let index = 0; index < tickers.length; index += MARKET_QUOTE_BATCH_SIZE) {
-    const batch = tickers.slice(index, index + MARKET_QUOTE_BATCH_SIZE);
-    const results = await Promise.all(batch.map((ticker) => fetchMarketQuoteWithRetry(ticker, 1)));
+  for (let index = 0; index < tickers.length; index += (discovery.batchSize || MARKET_QUOTE_BATCH_SIZE)) {
+    if (Date.now() - startedAt > discovery.maxScanDurationMs) {
+      errors.push({ ticker: "SCAN", error: `Market quote refresh stopped after ${discovery.maxScanDurationMs}ms max scan duration.` });
+      break;
+    }
+    const batch = tickers.slice(index, index + (discovery.batchSize || MARKET_QUOTE_BATCH_SIZE));
+    const results = await Promise.all(batch.map((ticker) => fetchMarketQuoteWithRetry(ticker, discovery.retryCount)));
     for (const result of results) {
       quotes.push(result);
       if (!Number(result.marketPrice)) {
@@ -685,6 +887,16 @@ async function refreshMarketData(config) {
     quotes,
     errors,
     requestedTickers: tickers,
+    providerLimits: {
+      broadScreenTarget: discovery.broadScreenTarget,
+      providerRequestBudget: discovery.providerRequestBudget,
+      providerConcurrencyLimit: discovery.providerConcurrencyLimit,
+      batchSize: discovery.batchSize,
+      retryCount: discovery.retryCount,
+      maxScanDurationMs: discovery.maxScanDurationMs,
+      requestedTickerCount: tickers.length,
+      quoteResultCount: quotes.length,
+    },
   };
 }
 
@@ -1727,7 +1939,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const macro = clamp(assetGroup(stock) === "Gold/Silver" ? 70 + Math.max(0, marketChange) * 2 : (Number(stock.committeeScore) || 0) * 0.52 + policy.score * 0.48);
   const sectorStrength = clamp((Number(stock.committeeScore) || 0) * 0.34 + newsImpact * 0.34 + momentum * 0.32);
   const relativeStrength = clamp(momentum * 0.7 + (Number(stock.qualityScore) || 0) * 0.3);
-  const institutionalFlow = clamp(congress.score * 0.46 + (Number(stock.qualityScore) || 0) * 0.28 + (Number(stock.pressScore) || 0) * 0.26);
+  const institutionalFlow = clamp(congress.score * 0.12 + (Number(stock.qualityScore) || 0) * 0.48 + (Number(stock.pressScore) || 0) * 0.4);
   const volatilityRisk = clamp(100 - (Number(stock.volatilityScore) || 0));
   const liquidity = stock.type === "ETF" ? 84 : clamp((Number(stock.qualityScore) || 0) * 0.48 + (Number(stock.momentumScore) || 0) * 0.52);
   const congressionalActivity = congress.score;
@@ -1773,7 +1985,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const revenueGrowthProxy = clamp((Number(stock.qualityScore) || 0) * 0.42 + (Number(stock.pressScore) || 0) * 0.34 + trend * 0.24);
   const earningsGrowthProxy = clamp((Number(stock.qualityScore) || 0) * 0.5 + trend * 0.28 + newsImpact * 0.22);
   const valuation = clamp(Number(stock.valuationScore) || 0);
-  const insiderBuyingProxy = clamp(congressionalActivity * 0.55 + institutionalFlow * 0.45);
+  const insiderBuyingProxy = clamp(congressionalActivity * 0.18 + institutionalFlow * 0.82);
   const thirtyNinetyMomentum = clamp(momentum * 0.45 + relativeStrength * 0.4 + trend * 0.15);
   const companyGuidance = clamp(newsImpact * 0.55 + (Number(stock.qualityScore) || 0) * 0.45);
   const profitMargins = clamp((Number(stock.qualityScore) || 0) * 0.64 + valuation * 0.18 + liquidity * 0.18);
@@ -1811,12 +2023,12 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     { score: earningsGrowthProxy, weight: 0.11 },
     { score: valuation, weight: 0.1 },
     { score: macro, weight: 0.11 },
-    { score: congressionalActivity, weight: 0.13 },
+    { score: congressionalActivity, weight: 0.08 },
     { score: insiderBuyingProxy, weight: 0.08 },
     { score: sectorStrength, weight: 0.11 },
     { score: thirtyNinetyMomentum, weight: 0.11 },
-    { score: companyGuidance, weight: 0.09 },
-    { score: institutionalFlow, weight: 0.05 },
+    { score: companyGuidance, weight: 0.11 },
+    { score: institutionalFlow, weight: 0.08 },
   ]);
   const oneYearScore = weightedScore([
     { score: revenueGrowthProxy, weight: 0.11 },
@@ -2000,6 +2212,29 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     alignmentType: alignment.type,
   });
   const portfolio = portfolioImpact(stock, config, { riskScore, bestTimeframe });
+  const quoteTimestamp = stock.marketUpdatedAt || null;
+  const scanTimestamp = new Date().toISOString();
+  const quoteAgeHours = quoteTimestamp ? (Date.now() - Date.parse(quoteTimestamp)) / 3600000 : null;
+  const freshnessStatus = !quoteTimestamp ? "unavailable" : quoteAgeHours <= 1 ? "live" : quoteAgeHours <= 24 ? "recent" : quoteAgeHours <= 72 ? "delayed" : "stale";
+  const signalContribution = {
+    currentPriceMomentum: Math.round(momentum * 0.12),
+    intradayMomentum: Math.round(intradayTrend * 0.08),
+    technicalAnalysis: Math.round(technicalAnalysis.oneDay.technicalSignalScore * 0.12),
+    multiTimeframeAlignment: Math.round(multiTimeframeAlignment.alignmentScore * 0.1),
+    setupConfirmation: Math.round(setupSignals.setupScore * 0.08),
+    chartPattern: Math.round(chartPatternSignal.patternScore * 0.06),
+    volumeAndRelativeVolume: Math.round(unusualVolume * 0.08),
+    volatilityAndRisk: -Math.round(volatilityRisk * 0.05),
+    marketRegime: Math.round(macro * 0.05),
+    sectorStrength: Math.round(sectorStrength * 0.08),
+    newsSentiment: Math.round(newsImpact * 0.07),
+    policyCatalyst: Math.round(policy.score * 0.04),
+    congressionalActivity: Math.min(10, Math.round(congressionalActivity * 0.05)),
+    shortSqueezeSignal: Math.round(shortSqueezeSignal.squeezeScore * 0.03),
+    fundamentals: Math.round((revenueGrowthProxy + earningsGrowthProxy + valuation) / 3 * 0.08),
+    dataQualityPenalty: -Math.round((100 - dataQuality.score) * 0.04),
+    staleDataPenalty: freshnessStatus === "stale" ? -8 : freshnessStatus === "delayed" ? -4 : freshnessStatus === "unavailable" ? -10 : 0,
+  };
 
   return {
     ticker,
@@ -2012,6 +2247,20 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     marketQuoteRequested: stock.marketQuoteRequested !== false,
     marketQuoteRetryCount: Number(stock.marketQuoteRetryCount) || 0,
     marketQuoteError: stock.marketQuoteError || "",
+    quoteTimestamp,
+    intradayDataTimestamp: quoteTimestamp,
+    volumeTimestamp: quoteTimestamp,
+    newsTimestamp: policy.strongest?.updatedAt || policySignals?.updatedAt || null,
+    policyTimestamp: policySignals?.updatedAt || null,
+    congressTimestamp: congress.latestDate || null,
+    fundamentalsTimestamp: null,
+    scanTimestamp,
+    freshnessStatus,
+    freshnessNotes: [
+      quoteTimestamp ? `Quote data as of ${quoteTimestamp}.` : "Quote timestamp unavailable.",
+      freshnessStatus === "stale" ? "Short-term rankings are penalized for stale price data." : "",
+    ].filter(Boolean),
+    signalContribution,
     technicalAnalysis,
     multiTimeframeAlignment,
     setupSignals,
@@ -2160,7 +2409,7 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     plainEnglish:
       `${ticker} scores 1-Day ${dailyModel.score}, 7-Day ${weeklyModel.score}, 1-Month ${monthlyModel.score}, and 1-Year ${oneYearModel.score}. Best current timeframe: ${bestTimeframe}.`,
     whatChanged: previous ? `Score ${status} by ${scoreChange >= 0 ? "+" : ""}${scoreChange} points since the last scan.` : "New prediction in this scan.",
-    scannedAt: new Date().toISOString(),
+    scannedAt: scanTimestamp,
   };
 }
 
@@ -2391,6 +2640,17 @@ function averageUnifiedScore(rows) {
   return scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
 }
 
+function sectorAllocationSummary(candidates) {
+  const bySector = new Map();
+  for (const candidate of candidates || []) {
+    const sector = candidate.sector || candidate.assetGroup || candidate.type || "Unclassified";
+    bySector.set(sector, (bySector.get(sector) || 0) + 1);
+  }
+  return [...bySector.entries()]
+    .map(([sector, count]) => ({ sector, count }))
+    .sort((a, b) => b.count - a.count || a.sector.localeCompare(b.sector));
+}
+
 function countBy(items, key, values) {
   const counts = Object.fromEntries(values.map((value) => [value, 0]));
   items.forEach((item) => {
@@ -2565,7 +2825,10 @@ async function refreshPredictions(options = {}) {
   const config = sanitizeConfig(options.config || readJson(CONFIG_FILE, {}));
   const policySignals = options.policySignals || readJson(POLICY_FILE, { updatedAt: null, signals: [], errors: [] });
   const warnings = Array.isArray(options.warnings) ? [...options.warnings] : [];
-  const scanUniverse = buildScanUniverse(config, options.quotes || []);
+  const scanStartedAt = options.scanStartedAt || new Date().toISOString();
+  const discoveryPipeline = buildDiscoveryPipeline(config, options.quotes || []);
+  const scanUniverse = discoveryPipeline.deepAnalysisCandidates;
+  const broadStats = broadUniverseStats(config, options.quotes || []);
   const previous = readJson(PREDICTIONS_FILE, { predictions: [] });
   const previousByTicker = new Map((previous.predictions || []).map((item) => [item.ticker, item]));
   const predictions = scanUniverse
@@ -2574,16 +2837,72 @@ async function refreshPredictions(options = {}) {
   const updatedAt = new Date().toISOString();
   const sections = predictionSections(predictions, previous.sections || {});
   const predictionEngineHealth = buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt });
+  const durationMs = Date.parse(updatedAt) - Date.parse(scanStartedAt);
+  const scanHealth = {
+    scanStartedAt,
+    scanCompletedAt: updatedAt,
+    durationMs: Number.isFinite(durationMs) ? durationMs : 0,
+    selectedScanUniverse: config.scanSettings?.universe || "combined",
+    targetSymbolCount: broadStats.targetSymbolCount,
+    totalSymbolsAvailable: broadStats.totalSymbolsAvailable,
+    symbolsScreened: broadStats.broadScreenedSymbols,
+    symbolsPassingFilters: broadStats.eligibleSymbols,
+    broadScreenTarget: broadStats.broadScreenTarget,
+    broadScreenedSymbols: broadStats.broadScreenedSymbols,
+    broadScreenCoveragePercent: Math.round((broadStats.broadScreenedSymbols / Math.max(1, broadStats.broadScreenTarget)) * 100),
+    deepAnalysisMarketHoursTarget: broadStats.deepAnalysisMarketHoursTarget,
+    deepAnalysisAfterHoursTarget: broadStats.deepAnalysisAfterHoursTarget,
+    activeDeepAnalysisTarget: discoveryPipeline.deepLimit,
+    deepAnalysisCandidatesSelected: scanUniverse.length,
+    candidatesSuccessfullyAnalyzed: predictions.length,
+    predictionsGenerated: predictions.length,
+    dataQualitySummary: predictionEngineHealth.dataQualityStatusCounts || {},
+    failedAndSkippedSymbols: predictionEngineHealth.failedTickers || [],
+    lastSuccessfulScan: updatedAt,
+    dataAsOf: predictions.map((item) => item.quoteTimestamp).filter(Boolean).sort().reverse()[0] || null,
+    providerCapacity: {
+      providerName: MARKET_API_KEY ? "Alpha Vantage + Yahoo fallback" : "Yahoo fallback / cached data",
+      estimatedRequestLimit: MARKET_API_KEY ? "Depends on Alpha Vantage plan" : "No authenticated provider limit configured",
+      requestsUsedLatestScan: Number(options.marketRequestsUsed) || scanUniverse.length,
+      configuredRequestBudget: broadStats.providerRequestBudget,
+      configuredConcurrencyLimit: broadStats.providerConcurrencyLimit,
+      configuredMaxScanDurationMs: broadStats.maxScanDurationMs,
+      actualProviderLimits: options.providerLimits || null,
+      estimatedRemainingCapacity: "Unknown without provider usage endpoint",
+      rateLimitWarnings: warnings.filter((warning) => /rate|limit|api key|provider/i.test(warning)),
+    },
+    broadScreen: broadStats,
+    sectorAllocation: sectorAllocationSummary(scanUniverse),
+    stages: [
+      { name: "Preparing scan", completed: true, completedCount: 1, totalCount: 1 },
+      { name: "Broad screening", completed: true, completedCount: broadStats.broadScreenedSymbols, totalCount: broadStats.targetSymbolCount },
+      { name: "Selecting deep-analysis candidates", completed: true, completedCount: scanUniverse.length, totalCount: discoveryPipeline.deepLimit },
+      { name: "Refreshing market and news data", completed: true, completedCount: scanUniverse.length, totalCount: scanUniverse.length },
+      { name: "Analyzing candidates", completed: true, completedCount: predictions.length, totalCount: scanUniverse.length },
+      { name: "Building timeframe rankings", completed: true, completedCount: 4, totalCount: 4 },
+      { name: "Validating prediction results", completed: true, completedCount: 1, totalCount: 1 },
+      { name: "Saving predictions", completed: true, completedCount: 1, totalCount: 1 },
+    ],
+  };
   const result = {
     updatedAt,
     predictions,
     sections,
     predictionEngineHealth,
+    scanHealth,
     scanUniverse: {
       mode: config.scanSettings?.universe || "combined",
       customTickerCount: parseTickerList(config.scanSettings?.customTickers).length,
       candidateCount: scanUniverse.length,
-      maxCandidates: MAX_SCAN_UNIVERSE,
+      totalSymbolsAvailable: broadStats.totalSymbolsAvailable,
+      targetSymbolCount: broadStats.targetSymbolCount,
+      broadScreenTarget: broadStats.broadScreenTarget,
+      broadScreenedSymbols: broadStats.broadScreenedSymbols,
+      deepAnalysisCandidatesSelected: scanUniverse.length,
+      providerRequestBudget: broadStats.providerRequestBudget,
+      providerConcurrencyLimit: broadStats.providerConcurrencyLimit,
+      maxScanDurationMs: broadStats.maxScanDurationMs,
+      actualCoverageNote: broadStats.actualCoverageNote,
     },
     refreshCadence: {
       top25OneDay: "hourly",
@@ -2624,11 +2943,22 @@ async function refreshPredictions(options = {}) {
 }
 
 async function runPredictionScan() {
+  if (activePredictionScan) return activePredictionScan;
+  activePredictionScan = runPredictionScanInternal().finally(() => {
+    activePredictionScan = null;
+  });
+  return activePredictionScan;
+}
+
+async function runPredictionScanInternal() {
+  const scanStartedAt = new Date().toISOString();
   const warnings = [];
   let config = sanitizeConfig(readJson(CONFIG_FILE, {}));
   const tickers = uniqueTickers(config);
   const developmentMode = process.env.NODE_ENV !== "production";
   let refreshedQuotes = [];
+  let marketRequestsUsed = 0;
+  let providerLimits = null;
 
   if (!tickers.length) {
     if (!developmentMode) {
@@ -2648,6 +2978,8 @@ async function runPredictionScan() {
     const market = await refreshMarketData(config);
     config = market.config;
     refreshedQuotes = market.quotes || [];
+    marketRequestsUsed = (market.requestedTickers || []).length;
+    providerLimits = market.providerLimits || null;
     if (market.errors.length) {
       warnings.push(`Market data unavailable for ${market.errors.length} ticker(s). Scores used saved or sample market values where needed.`);
     }
@@ -2682,7 +3014,7 @@ async function runPredictionScan() {
   }
 
   try {
-    const result = await refreshPredictions({ config, policySignals, warnings, quotes: refreshedQuotes });
+    const result = await refreshPredictions({ config, policySignals, warnings, quotes: refreshedQuotes, scanStartedAt, marketRequestsUsed, providerLimits });
     if (!Array.isArray(result.predictions) || !result.predictions.length) {
       if (!developmentMode) {
         const error = new Error("Prediction scan failed");
@@ -2690,13 +3022,13 @@ async function runPredictionScan() {
         throw error;
       }
       warnings.push("Prediction scan produced no rows. Development sample predictions were used.");
-      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes });
+      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes, scanStartedAt, marketRequestsUsed, providerLimits });
     }
     return result;
   } catch (error) {
     if (developmentMode && error.code !== "DATABASE_WRITE_FAILED") {
       warnings.push(`Prediction scan failed: ${error.message}. Development sample predictions were used.`);
-      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes });
+      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes, scanStartedAt, marketRequestsUsed, providerLimits });
     }
     throw error;
   }

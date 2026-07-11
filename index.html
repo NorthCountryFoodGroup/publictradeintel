@@ -120,6 +120,27 @@
           <button type="button" data-run-prediction-scan>Run prediction scan</button>
         </div>
         <div class="executive-dashboard">
+          <section class="dashboard-card executive-section ai-market-brief-card">
+            <div class="card-heading">
+              <span>AI Market Brief</span>
+              <strong id="aiDashboardBriefStatus">Waiting for scan</strong>
+            </div>
+            <p id="aiDashboardBrief">Run a prediction scan to generate a concise market brief from the active universe, sector strength, policy/news signals, congressional disclosures, and data quality.</p>
+            <div class="hero-links">
+              <button type="button" data-page-target="predictions">View Today's Opportunities</button>
+            </div>
+          </section>
+
+          <section class="dashboard-card executive-section scan-progress-card" id="scanProgressCard">
+            <div class="card-heading">
+              <span>Prediction Scan Progress</span>
+              <strong id="scanProgressStage">Idle</strong>
+            </div>
+            <div class="scan-progress-track"><span id="scanProgressBar"></span></div>
+            <p id="scanProgressMessage">Last successful scan details will appear here.</p>
+            <div class="executive-card-grid compact-executive-grid" id="scanProgressSummaryGrid"></div>
+          </section>
+
           <section class="dashboard-card executive-section">
             <div class="card-heading">
               <span>Market Overview</span>

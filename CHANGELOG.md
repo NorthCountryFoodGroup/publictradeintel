@@ -1,5 +1,21 @@
 # Public Trade Intel Changelog
 
+## Version 2.0 Prediction Responsiveness and Broad Discovery
+
+- Added Dashboard AI Market Brief guidance.
+- Added visible scan progress lifecycle and duplicate-scan prevention.
+- Added scan health metadata with duration, candidate counts, data freshness, provider capacity, and sector allocation.
+- Added broad discovery settings targeting 2,500 symbols with a 5,000-symbol system ceiling.
+- Added two-stage broad screen then deep-analysis selection.
+- Added Admin Prediction Discovery Settings.
+- Added Admin Prediction Model Weights.
+- Added signal contribution transparency to prediction records.
+- Reduced congressional signal dominance and capped congressional contribution reporting.
+- Added prediction freshness metadata.
+- Added dashboard opportunity diversity so one ticker does not dominate every role.
+- Added `PREDICTION_RESPONSIVENESS.md`, `PREDICTION_RESPONSIVENESS_DIAGNOSTIC.md`, and `DISCOVERY_PIPELINE.md`.
+- Added `npm run smoke:broad` and `npm run smoke:scan-progress`.
+
 ## Version 2.0 Functional Stabilization
 
 - Froze feature development and focused on core workflow reliability.

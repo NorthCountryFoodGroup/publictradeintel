@@ -115,6 +115,12 @@ const output = {
   economicCalendarGrid: document.querySelector("#economicCalendarGrid"),
   aiMarketSummary: document.querySelector("#aiMarketSummary"),
   predictionEngineGrid: document.querySelector("#predictionEngineGrid"),
+  aiDashboardBriefStatus: document.querySelector("#aiDashboardBriefStatus"),
+  aiDashboardBrief: document.querySelector("#aiDashboardBrief"),
+  scanProgressStage: document.querySelector("#scanProgressStage"),
+  scanProgressBar: document.querySelector("#scanProgressBar"),
+  scanProgressMessage: document.querySelector("#scanProgressMessage"),
+  scanProgressSummaryGrid: document.querySelector("#scanProgressSummaryGrid"),
   opportunityCount: document.querySelector("#opportunityCount"),
   todayOpportunitiesGrid: document.querySelector("#todayOpportunitiesGrid"),
   watchlistSummaryGrid: document.querySelector("#watchlistSummaryGrid"),
@@ -375,12 +381,18 @@ function compactPickCard(label, item) {
     `;
   }
   const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+  const timeframe = item.bestTimeframe || item.timeframe || "Research";
+  const direction = item.unifiedDirection || item.signalAlignment?.type || "neutral";
+  const pattern = item.chartPatternSignal?.primaryPattern || item.primaryPattern || item.setupSignals?.setupDirection || "setup pending";
+  const rankChange = Number(item.rankChange ?? item.rankMovement?.change ?? item.scoreChange ?? 0);
   return `
     <article class="summary-tile pick-tile clickable-card">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(item.ticker)} ${score}/100</strong>
       <small>${escapeHtml(item.name || item.company || item.ticker)}</small>
-      <small>${escapeHtml(item.label || item.recommendation || "Research candidate")} | ${escapeHtml(item.confidenceTier || "confidence pending")}</small>
+      <small>${escapeHtml(item.label || item.recommendation || "Research candidate")} | ${escapeHtml(item.confidenceTier || "confidence pending")} | ${escapeHtml(direction)}</small>
+      <small>${escapeHtml(timeframe)} | ${escapeHtml(pattern)} | ${rankChange ? `Rank/score change ${rankChange > 0 ? "+" : ""}${rankChange}` : "No prior change yet"}</small>
+      ${item.roleQualificationReason ? `<small>${escapeHtml(item.roleQualificationReason)}</small>` : ""}
       <button type="button" data-view-brief="${escapeHtml(item.ticker)}">View Trade Brief</button>
     </article>
   `;
@@ -1082,6 +1094,69 @@ function addTickerToActiveWatchlist(ticker) {
   return true;
 }
 
+function pickDistinctOpportunity(label, candidates, usedTickers, roleReason) {
+  const rows = (Array.isArray(candidates) ? candidates : [candidates]).filter(Boolean);
+  const preferred = rows.find((item) => !usedTickers.has(item.ticker)) || rows[0] || null;
+  if (preferred) {
+    usedTickers.add(preferred.ticker);
+    return compactPickCard(label, {
+      ...preferred,
+      roleQualificationReason: preferred.roleQualificationReason || roleReason,
+    });
+  }
+  return compactPickCard(label, null);
+}
+
+function renderDashboardBrief({ predictions, marketMood, signals, positiveSignals, negativeSignals, health }) {
+  if (!output.aiDashboardBrief) return;
+  const highConfidence = predictions.filter((item) => ["high", "very high"].includes(item.confidenceTier)).length;
+  const sector = sectorStrengthSummary(predictions);
+  const warningCount = Number(health.incompleteMarketDataCount) || predictions.filter((item) => ["partial", "stale", "failed"].includes(item.dataQualityStatus)).length;
+  const risks = [
+    warningCount ? `${warningCount} ticker(s) have partial, stale, or missing market data` : "",
+    negativeSignals.length ? `${negativeSignals.length} negative policy/news signal(s)` : "",
+    health.dataQualityStatus && !["good", "Good"].includes(health.dataQualityStatus) ? `market data quality is ${health.dataQualityStatus}` : "",
+  ].filter(Boolean);
+  if (output.aiDashboardBriefStatus) output.aiDashboardBriefStatus.textContent = predictions.length ? "Generated from latest scan" : "Waiting for scan";
+  output.aiDashboardBrief.textContent = predictions.length
+    ? `Market read: ${marketMood}. Sector leadership currently points to ${sector}. The scan found ${highConfidence} high-confidence opportunity candidate(s) across ${predictions.length} analyzed securities. Positive policy/news signals: ${positiveSignals.length}; negative signals: ${negativeSignals.length}; total active signals: ${signals.length}. Main warning: ${risks[0] || "no major data-quality warning in the saved scan"}. Review Today's Opportunities first, then open the Trade Brief before acting. This is research guidance, not a guaranteed investment outcome.`
+    : "Run a prediction scan to generate a concise market brief from available market, sector, policy, news, congressional, and data-quality signals.";
+}
+
+function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0) {
+  const scan = predictionEngine.scanHealth || {};
+  if (output.scanProgressStage) output.scanProgressStage.textContent = stage;
+  if (output.scanProgressBar) output.scanProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  if (output.scanProgressMessage) {
+    if (isActive) {
+      output.scanProgressMessage.textContent = stage;
+    } else if (scan.scanCompletedAt || predictionEngine.updatedAt) {
+      const completed = scan.scanCompletedAt || predictionEngine.updatedAt;
+      const dataAsOf = scan.dataAsOf || "market data timestamp unavailable";
+      output.scanProgressMessage.textContent = `Scan complete. Last scan: ${new Date(completed).toLocaleString()}. Data as of: ${dataAsOf === "market data timestamp unavailable" ? dataAsOf : new Date(dataAsOf).toLocaleString()}.`;
+    } else {
+      output.scanProgressMessage.textContent = "No successful scan is saved yet.";
+    }
+  }
+  if (output.scanProgressSummaryGrid) {
+    output.scanProgressSummaryGrid.innerHTML = [
+      metricCard("Symbols Available", String(scan.totalSymbolsAvailable || predictionEngine.scanUniverse?.totalSymbolsAvailable || 0), "Actual configured provider/universe coverage", "predictions"),
+      metricCard("Symbols Screened", String(scan.symbolsScreened || 0), `Target ${scan.targetSymbolCount || predictionEngine.scanUniverse?.targetSymbolCount || 2500}`, "predictions"),
+      metricCard("Deep Candidates", String(scan.deepAnalysisCandidatesSelected || predictionEngine.scanUniverse?.candidateCount || 0), "Selected for full analysis", "predictions"),
+      metricCard("Predictions Generated", String(scan.predictionsGenerated || predictionEngine.predictions?.length || 0), "Published after validation", "predictions"),
+      metricCard("Duration", scan.durationMs ? `${(scan.durationMs / 1000).toFixed(1)}s` : "Not recorded", "Scan completion duration", "predictions"),
+      metricCard("Data Quality", predictionEngine.predictionEngineHealth?.dataQualityStatus || "Not run", "Separate from engine health", "predictions"),
+    ].join("");
+  }
+}
+
+function setScanUi(stage, percent, message) {
+  if (output.scanProgressStage) output.scanProgressStage.textContent = stage;
+  if (output.scanProgressBar) output.scanProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  if (output.scanProgressMessage) output.scanProgressMessage.textContent = message || stage;
+  if (output.predictionScanMessage) output.predictionScanMessage.textContent = message || stage;
+}
+
 function renderDashboard() {
   if (!output.marketOverviewGrid) return;
   const health = predictionEngine.predictionEngineHealth || {};
@@ -1115,13 +1190,15 @@ function renderDashboard() {
   const needsAttention = watchlistRows.filter((item) => item.badges.includes("Needs Attention")).length;
 
   if (output.marketOverviewTone) output.marketOverviewTone.textContent = marketMood;
+  renderDashboardBrief({ predictions, marketMood, signals, positiveSignals, negativeSignals, health });
+  renderScanProgressSummary(false, predictionEngine.updatedAt ? "Scan complete" : "Idle", predictionEngine.updatedAt ? 100 : 0);
   output.marketOverviewGrid.innerHTML = [
     metricCard("Overall market sentiment", marketMood, "Based on latest prediction scan", "market"),
-    metricCard("Fear / Greed", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "Pending", "Proxy until live index is connected", "market"),
-    metricCard("S&P 500", "Proxy", "Broad-market quote connection planned", "market"),
-    metricCard("Nasdaq", "Proxy", "Growth/tech tape from candidates", "market"),
-    metricCard("Dow", "Proxy", "Large-cap industrial read pending", "market"),
-    metricCard("VIX", "Proxy", "Volatility detail pending", "market"),
+    metricCard("Fear / Greed", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "Historical outcomes not available yet", "Using prediction-universe estimate", "market"),
+    metricCard("S&P 500", "Live index data not connected", "Using prediction-universe estimate", "market"),
+    metricCard("Nasdaq", "Live index data not connected", "Growth/tech tape from candidates", "market"),
+    metricCard("Dow", "Live index data not connected", "Large-cap industrial read pending", "market"),
+    metricCard("VIX", "Waiting for live volatility feed", "Volatility detail pending", "market"),
     metricCard("Sector strength", sectorStrengthSummary(predictions), "Top scoring asset group", "market"),
   ].join("");
 
@@ -1135,12 +1212,20 @@ function renderDashboard() {
     metricCard("Average Unified Score", `${averageUnifiedScore(predictions)}/100`, "Across generated predictions", "predictions"),
   ].join("");
 
+  const usedTickers = new Set();
+  const byMomentum = [...predictions].sort((a, b) => Number(b.modelScores?.momentum || 0) - Number(a.modelScores?.momentum || 0));
+  const byRiskReward = [...predictions].sort((a, b) => Number(b.riskRewardRatio || 0) - Number(a.riskRewardRatio || 0));
+  const contrarian = [...predictions].filter((item) => item.unifiedDirection !== "bearish" && Number(item.riskScore) < 65).sort((a, b) => Number(b.scoreChange || 0) - Number(a.scoreChange || 0));
   const opportunities = [
-    compactPickCard("Top Pick Today", topToday),
-    compactPickCard("Best Swing Trade", topWeek || topMonth),
-    compactPickCard("Best Long-Term Pick", topYear),
-    compactPickCard("Most Improved Stock", mostImproved),
-    compactPickCard("Highest Confidence Prediction", highestConfidence),
+    pickDistinctOpportunity("Top 1-Day Opportunity", predictionEngine.sections?.top25OneDay || topToday, usedTickers, "Highest qualified 1-day ranking."),
+    pickDistinctOpportunity("Best 7-Day Opportunity", predictionEngine.sections?.top25SevenDay || topWeek, usedTickers, "Highest qualified 7-day setup."),
+    pickDistinctOpportunity("Best 1-Month Opportunity", predictionEngine.sections?.top25OneMonth || topMonth, usedTickers, "Highest qualified 1-month swing candidate."),
+    pickDistinctOpportunity("Best 1-Year Opportunity", predictionEngine.sections?.top25OneYear || topYear, usedTickers, "Highest qualified 1-year hold candidate."),
+    pickDistinctOpportunity("Highest Momentum", byMomentum, usedTickers, "Highest current momentum contribution."),
+    pickDistinctOpportunity("Most Improved", [...predictions].sort((a, b) => Number(b.scoreChange || 0) - Number(a.scoreChange || 0)), usedTickers, "Largest score improvement versus prior scan."),
+    pickDistinctOpportunity("Highest Confidence", [...predictions].sort((a, b) => Number(b.confidenceScore || b.unifiedPredictionScore || 0) - Number(a.confidenceScore || a.unifiedPredictionScore || 0)), usedTickers, "Highest confidence among analyzed candidates."),
+    pickDistinctOpportunity("Contrarian Watch", contrarian, usedTickers, "Qualified lower-risk name with improving score."),
+    pickDistinctOpportunity("Best Risk/Reward", byRiskReward, usedTickers, "Strongest available risk/reward ratio."),
   ];
   if (output.opportunityCount) output.opportunityCount.textContent = opportunities.length;
   output.todayOpportunitiesGrid.innerHTML = opportunities.join("");
@@ -2937,12 +3022,34 @@ function renderPerformanceCenter() {
 
 async function runPredictionScan() {
   if (!output.runPredictionScan && !output.predictionGrid) return;
+  if (runPredictionScan.active) return;
+  runPredictionScan.active = true;
+  const startedAt = performance.now();
   const buttons = [output.runPredictionScan, ...document.querySelectorAll("[data-run-prediction-scan]")].filter(Boolean);
   buttons.forEach((button) => {
     button.disabled = true;
-    button.textContent = "Scanning...";
+    button.textContent = "Preparing scan...";
   });
-  if (output.predictionScanMessage) output.predictionScanMessage.textContent = "Running prediction scan...";
+  const stages = [
+    ["Preparing scan...", 8],
+    ["Screening broad universe...", 20],
+    ["Selecting deep-analysis candidates...", 34],
+    ["Refreshing market and news data...", 48],
+    ["Analyzing candidates...", 64],
+    ["Building timeframe rankings...", 78],
+    ["Validating prediction results...", 90],
+    ["Saving predictions...", 96],
+  ];
+  let stageIndex = 0;
+  setScanUi("Preparing scan...", 8, "Preparing scan...");
+  const stageTimer = setInterval(() => {
+    stageIndex = Math.min(stageIndex + 1, stages.length - 1);
+    const [stage, percent] = stages[stageIndex];
+    buttons.forEach((button) => {
+      button.textContent = stage;
+    });
+    setScanUi(stage, percent, stage);
+  }, 850);
 
   try {
     const response = await fetch("api/predictions/scan", {
@@ -2958,19 +3065,24 @@ async function runPredictionScan() {
     }
     if (!response.ok) throw new Error(result.error || result.detail || "Prediction scan failed");
     predictionEngine = result;
+    localStorage.setItem("publicTradeIntelLastSuccessfulScan", JSON.stringify(result.scanHealth || { scanCompletedAt: result.updatedAt }));
     const warningText = Array.isArray(result.warnings) && result.warnings.length ? ` Warnings: ${result.warnings.join(" ")}` : "";
-    if (output.predictionScanMessage) output.predictionScanMessage.textContent = `Prediction scan complete. ${result.predictions?.length || 0} records generated.${warningText}`;
+    const duration = ((performance.now() - startedAt) / 1000).toFixed(1);
+    setScanUi("Scan complete", 100, `Prediction scan complete. ${result.predictions?.length || 0} records generated in ${duration}s.${warningText}`);
     renderPredictions();
     renderMarketIntelligence();
     renderPerformanceCenter();
     renderAlertsCenter();
+    renderDashboard();
   } catch (error) {
-    if (output.predictionScanMessage) output.predictionScanMessage.textContent = predictionErrorMessage(error);
+    setScanUi("Scan failed - Retry", 100, predictionErrorMessage(error));
   } finally {
+    clearInterval(stageTimer);
     buttons.forEach((button) => {
       button.disabled = false;
       button.textContent = "Run prediction scan";
     });
+    runPredictionScan.active = false;
   }
 }
 

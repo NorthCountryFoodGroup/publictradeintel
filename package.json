@@ -12,6 +12,8 @@
     "smoke:core": "node scripts/smoke-test-core-workflows.js",
     "smoke:controls": "node scripts/smoke-test-visible-controls.js",
     "smoke:admin": "node scripts/smoke-test-admin-workflow.js",
+    "smoke:broad": "node scripts/smoke-test-broad-discovery.js",
+    "smoke:scan-progress": "node scripts/smoke-test-scan-progress.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }

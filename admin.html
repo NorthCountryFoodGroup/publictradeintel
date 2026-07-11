@@ -18,6 +18,8 @@
           <button type="button" class="admin-nav-link is-active" data-admin-target="overview">Admin Dashboard</button>
           <button type="button" class="admin-nav-link" data-admin-target="engine">Prediction Engine</button>
           <button type="button" class="admin-nav-link" data-admin-target="universe">Prediction Scan Settings</button>
+          <button type="button" class="admin-nav-link" data-admin-target="discovery">Discovery Settings</button>
+          <button type="button" class="admin-nav-link" data-admin-target="weights">Model Weights</button>
           <button type="button" class="admin-nav-link" data-admin-target="market">Market Data</button>
           <button type="button" class="admin-nav-link" data-admin-target="users">Users</button>
           <button type="button" class="admin-nav-link" data-admin-target="congress">Congress Feed</button>
@@ -157,6 +159,16 @@
             <button type="button" data-admin-target="universe">Open Prediction Scan Settings</button>
           </article>
           <article class="dashboard-card">
+            <div class="card-heading"><span>Discovery</span><strong>Broad screen</strong></div>
+            <p class="muted-copy">Control target universe size, liquidity filters, deep-analysis counts, and provider safety.</p>
+            <button type="button" data-admin-target="discovery">Open Discovery Settings</button>
+          </article>
+          <article class="dashboard-card">
+            <div class="card-heading"><span>Model Weights</span><strong>Caps</strong></div>
+            <p class="muted-copy">Review timeframe weights and congressional contribution caps.</p>
+            <button type="button" data-admin-target="weights">Open Model Weights</button>
+          </article>
+          <article class="dashboard-card">
             <div class="card-heading"><span>Market Data</span><strong>Quotes</strong></div>
             <p class="muted-copy">Refresh market data and review current provider status.</p>
             <button type="button" data-admin-target="market">Open Market Data</button>
@@ -244,6 +256,51 @@
         </div>
         <p class="form-message admin-section-block" data-admin-section="universe" id="scanSettingsMessage"></p>
 
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="discovery">
+          <div>
+            <h2>Prediction Discovery Settings</h2>
+            <p class="muted-copy">Broad-screen thousands when provider capacity allows, then select a safe deep-analysis candidate set.</p>
+          </div>
+          <button type="button" id="resetDiscoveryDefaults">Reset to recommended defaults</button>
+        </div>
+        <div class="admin-editor scan-settings-panel admin-section-block" data-admin-section="discovery">
+          <label><span>Broad-screen target</span><input type="number" id="discoveryTargetSymbolCount" min="25" max="5000" step="25" /></label>
+          <label><span>Minimum price</span><input type="number" id="discoveryMinimumPrice" min="0" step="0.5" /></label>
+          <label><span>Minimum average volume</span><input type="number" id="discoveryMinimumAverageVolume" min="0" step="10000" /></label>
+          <label><span>Market-hours candidates</span><input type="number" id="discoveryMarketHoursDeepCount" min="25" max="1000" step="25" /></label>
+          <label><span>After-hours candidates</span><input type="number" id="discoveryAfterHoursDeepCount" min="25" max="1500" step="25" /></label>
+          <label><span>Batch size</span><input type="number" id="discoveryBatchSize" min="1" max="50" step="1" /></label>
+          <label><span>Request concurrency</span><input type="number" id="discoveryRequestConcurrency" min="1" max="20" step="1" /></label>
+          <label><span>Provider request budget</span><input type="number" id="discoveryProviderRequestBudget" min="25" max="5000" step="25" /></label>
+          <label><span>Max scan duration ms</span><input type="number" id="discoveryMaxScanDurationMs" min="30000" max="900000" step="10000" /></label>
+          <label><span>Retry count</span><input type="number" id="discoveryRetryCount" min="0" max="5" step="1" /></label>
+          <label><span>Strong sector %</span><input type="number" id="discoveryStrongSectorPercent" min="0" max="100" step="1" /></label>
+          <label><span>Improving sector %</span><input type="number" id="discoveryImprovingSectorPercent" min="0" max="100" step="1" /></label>
+          <label><span>Contrarian %</span><input type="number" id="discoveryContrarianPercent" min="0" max="100" step="1" /></label>
+          <label><span>Catalyst/watchlist %</span><input type="number" id="discoveryCatalystPercent" min="0" max="100" step="1" /></label>
+          <label><span>Minimum per sector</span><input type="number" id="discoveryMinimumPerSector" min="0" max="25" step="1" /></label>
+          <label><span>Include ETFs</span><select id="discoveryIncludeEtfs"><option value="true">Yes</option><option value="false">No</option></select></label>
+          <label><span>Include small caps</span><select id="discoveryIncludeSmallCaps"><option value="false">No</option><option value="true">Yes</option></select></label>
+          <label><span>Exclude OTC</span><select id="discoveryExcludeOtc"><option value="true">Yes</option><option value="false">No</option></select></label>
+          <label class="wide-field"><span>Current active configuration</span><input id="discoveryActiveConfig" readonly /></label>
+        </div>
+
+        <div class="section-heading editor-heading admin-section-block" data-admin-section="weights">
+          <div>
+            <h2>Prediction Model Weights</h2>
+            <p class="muted-copy">Congressional activity is capped as a secondary catalyst; price, technical, volume, and freshness dominate short-term rankings.</p>
+          </div>
+          <button type="button" id="resetModelWeights">Reset to recommended defaults</button>
+        </div>
+        <div class="admin-editor scan-settings-panel admin-section-block" data-admin-section="weights">
+          <label><span>Active model version</span><input id="modelWeightVersion" /></label>
+          <label><span>1-day congress cap %</span><input type="number" id="weightOneDayCongress" min="0" max="20" step="0.5" /></label>
+          <label><span>7-day congress cap %</span><input type="number" id="weightSevenDayCongress" min="0" max="20" step="0.5" /></label>
+          <label><span>1-month congress cap %</span><input type="number" id="weightOneMonthCongress" min="0" max="20" step="0.5" /></label>
+          <label><span>1-year congress cap %</span><input type="number" id="weightOneYearCongress" min="0" max="20" step="0.5" /></label>
+          <label class="wide-field"><span>Current weights summary</span><textarea id="modelWeightsSummary" rows="6" readonly></textarea></label>
+        </div>
+
         <div class="section-heading editor-heading admin-section-block" data-admin-section="users">
           <div>
             <h2>Users</h2>
@@ -324,6 +381,7 @@
     <nav class="mobile-nav" aria-label="Admin mobile navigation">
       <button type="button" class="admin-nav-link is-active" data-admin-target="overview">Admin</button>
       <button type="button" class="admin-nav-link" data-admin-target="universe">Universe</button>
+      <button type="button" class="admin-nav-link" data-admin-target="discovery">Discover</button>
       <button type="button" class="admin-nav-link" data-admin-target="market">Market</button>
       <button type="button" class="admin-nav-link" data-admin-target="engine">Engine</button>
       <button type="button" class="admin-nav-link" data-admin-target="health">Health</button>
