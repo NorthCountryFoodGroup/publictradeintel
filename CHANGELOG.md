@@ -1,5 +1,17 @@
 # Public Trade Intel Changelog
 
+## Version 2.0 Functional Stabilization
+
+- Froze feature development and focused on core workflow reliability.
+- Wired main global search to the Opportunities workflow.
+- Wired admin global search to route to the matching admin section.
+- Repaired Trade Brief `Add to Watchlist` so it adds the selected ticker.
+- Repaired Trade Brief `Create Alert` so it creates an in-app alert rule immediately.
+- Added validation for blank alert ticker submissions.
+- Corrected mobile admin navigation to open Admin Dashboard first.
+- Added `FUNCTIONAL_STABILIZATION.md` and `BETA_READINESS.md`.
+- Added smoke tests for core workflows, visible controls, and admin workflow.
+
 ## Public Trade Intel UX Acceptance Pass
 
 - Added cache-busting query strings for `styles.css`, `app.js`, and `admin.js`.

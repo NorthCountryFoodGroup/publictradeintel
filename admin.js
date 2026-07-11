@@ -30,6 +30,7 @@ const activeScanUniverse = document.querySelector("#activeScanUniverse");
 const scanCandidateCount = document.querySelector("#scanCandidateCount");
 const adminBreadcrumb = document.querySelector("#adminBreadcrumb");
 const adminPageTitle = document.querySelector("#adminPageTitle");
+const adminGlobalSearch = document.querySelector("#adminGlobalSearch");
 const adminProfileMenuButton = document.querySelector("#adminProfileMenuButton");
 const adminProfileDropdown = document.querySelector("#adminProfileDropdown");
 const adminAlertsMenuButton = document.querySelector("#adminAlertsMenuButton");
@@ -102,6 +103,28 @@ function toggleAdminTopbarMenu(menuName) {
 function adminSectionFromHash() {
   const key = String(location.hash || "").replace("#", "").trim().toLowerCase();
   return adminHashTargets[key] || "overview";
+}
+
+function runAdminSearch() {
+  const query = String(adminGlobalSearch?.value || "").trim().toLowerCase();
+  if (!query) return;
+  const target =
+    query.includes("scan") || query.includes("universe") || query.includes("ticker")
+      ? "universe"
+      : query.includes("market") || query.includes("quote")
+        ? "market"
+        : query.includes("congress") || query.includes("representative")
+          ? "congress"
+          : query.includes("policy")
+            ? "policy"
+            : query.includes("health") || query.includes("status") || query.includes("validation")
+              ? "health"
+              : query.includes("user")
+                ? "users"
+                : query.includes("engine") || query.includes("prediction")
+                  ? "engine"
+                  : "overview";
+  setAdminSection(target);
 }
 
 function adminHeaders() {
@@ -546,6 +569,9 @@ document.querySelector("#saveScanSettings")?.addEventListener("click", async () 
 
 scanUniverse?.addEventListener("change", renderScanSettingsStatus);
 customTickers?.addEventListener("input", renderScanSettingsStatus);
+adminGlobalSearch?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") runAdminSearch();
+});
 
 document.querySelector("#refreshMarket").addEventListener("click", async () => {
   marketMessage.textContent = "Refreshing market data...";

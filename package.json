@@ -9,6 +9,9 @@
     "smoke:watchlists": "node scripts/smoke-test-watchlists.js",
     "smoke:alerts": "node scripts/smoke-test-alerts.js",
     "smoke:layout": "node scripts/smoke-test-layout.js",
+    "smoke:core": "node scripts/smoke-test-core-workflows.js",
+    "smoke:controls": "node scripts/smoke-test-visible-controls.js",
+    "smoke:admin": "node scripts/smoke-test-admin-workflow.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }

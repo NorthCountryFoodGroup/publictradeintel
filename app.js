@@ -57,6 +57,7 @@ const output = {
   runPredictionScan: document.querySelector("#runPredictionScan"),
   predictionScanMessage: document.querySelector("#predictionScanMessage"),
   predictionSearch: document.querySelector("#predictionSearch"),
+  globalSearch: document.querySelector("#globalSearch"),
   filterTimeframe: document.querySelector("#filterTimeframe"),
   filterRecommendation: document.querySelector("#filterRecommendation"),
   filterConfidence: document.querySelector("#filterConfidence"),
@@ -1036,6 +1037,49 @@ function renderWatchlistAlerts() {
         .map((alert) => `<article class="watchlist-alert-card"><strong>${escapeHtml(alert.ticker)}</strong><span>${escapeHtml(alert.type)}</span><small>${escapeHtml(alert.threshold || "No threshold")} | ${new Date(alert.createdAt).toLocaleDateString()}</small><button type="button" class="pti-button ghost" data-alert-delete="${escapeHtml(alert.id)}">Remove</button></article>`)
         .join("")
     : `<article class="watchlist-empty"><strong>No active alerts</strong><p>Create an in-app alert rule for score, recommendation, confidence, trend, congress, or policy changes.</p></article>`;
+}
+
+function addAlertRuleForTicker(ticker, source = "alerts") {
+  const normalized = normalizeTicker(ticker);
+  if (!normalized) return null;
+  const prediction = predictionForTicker(normalized);
+  const score = Math.max(70, Math.round(Number(prediction?.unifiedPredictionScore) || 75));
+  const rule = createAlertRule({
+    ticker: normalized,
+    type: "scoreAbove",
+    priority: "High",
+    threshold: String(score),
+    source,
+  });
+  watchlistAlerts.unshift(rule);
+  saveWatchlists();
+  renderAlertsCenter();
+  renderWatchlists();
+  renderDashboard();
+  return rule;
+}
+
+function addTickerToActiveWatchlist(ticker) {
+  const normalized = normalizeTicker(ticker);
+  if (!normalized) return false;
+  if (!Array.isArray(settings.stockIdeas)) settings.stockIdeas = [];
+  if (!settings.stockIdeas.some((stock) => normalizeTicker(stock.ticker) === normalized)) {
+    const prediction = findPredictionByTicker(normalized);
+    settings.stockIdeas.unshift({
+      ticker: normalized,
+      name: prediction?.name || normalized,
+      risk: "AI watchlist",
+      horizon: prediction?.bestTimeframe || prediction?.timeframe || "Research",
+      priceNote: prediction?.finalReasonSummary || prediction?.plainEnglish || "Added from Predictions screener.",
+    });
+  }
+  if (!watchlists.length) loadWatchlists();
+  const list = watchlists.find((item) => item.id === selectedWatchlistId) || watchlists[0];
+  if (list && !list.tickers.includes(normalized)) list.tickers.push(normalized);
+  saveWatchlists();
+  renderWatchlists();
+  renderDashboard();
+  return true;
 }
 
 function renderDashboard() {
@@ -2417,7 +2461,7 @@ function renderTradeBrief() {
 
       <footer class="brief-actions">
         <button type="button" data-page-target="predictions">Return to Predictions</button>
-        <button type="button" data-page-target="watchlist">Add to Watchlist</button>
+        <button type="button" data-add-watchlist="${escapeHtml(item.ticker)}">Add to Watchlist</button>
         <button type="button" data-create-alert-for="${escapeHtml(item.ticker)}">Create Alert</button>
         <button type="button" disabled>Share Report <small>Coming Soon</small></button>
       </footer>
@@ -3581,6 +3625,17 @@ function setPage(pageName) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+function runGlobalSearch() {
+  const query = String(output.globalSearch?.value || "").trim();
+  if (!query) return;
+  setPage("predictions");
+  if (output.predictionSearch) {
+    output.predictionSearch.value = query;
+    renderPredictions();
+  }
+  if (output.predictionScanMessage) output.predictionScanMessage.textContent = `Showing prediction matches for "${query}". Clear the search box to reset.`;
+}
+
 function openTradeBrief(ticker) {
   selectedBriefTicker = String(ticker || "").toUpperCase();
   renderTradeBrief();
@@ -3637,7 +3692,10 @@ output.watchlistAddTickerForm?.addEventListener("submit", (event) => {
 output.watchlistAlertForm?.addEventListener("submit", (event) => {
   event.preventDefault();
   const ticker = normalizeTicker(output.alertTickerInput.value);
-  if (!ticker) return;
+  if (!ticker) {
+    if (output.alertsDashboardStatus) output.alertsDashboardStatus.textContent = "Enter a ticker";
+    return;
+  }
   watchlistAlerts.unshift(createAlertRule({
     ticker,
     type: output.alertTypeInput.value,
@@ -3654,8 +3712,14 @@ output.watchlistAlertForm?.addEventListener("submit", (event) => {
 });
 output.alertRuleForm?.addEventListener("submit", (event) => {
   event.preventDefault();
+  const ticker = normalizeTicker(output.alertRuleTicker.value);
+  if (!ticker) {
+    if (output.alertsDashboardStatus) output.alertsDashboardStatus.textContent = "Enter a ticker or sector before creating a rule.";
+    output.alertRuleTicker?.focus();
+    return;
+  }
   watchlistAlerts.unshift(createAlertRule({
-    ticker: output.alertRuleTicker.value,
+    ticker,
     type: output.alertRuleType.value,
     priority: output.alertRulePriority.value,
     threshold: output.alertRuleThreshold.value,
@@ -3796,6 +3860,9 @@ document.querySelectorAll("[data-prediction-view]").forEach((button) => {
   });
 });
 output.predictionSort?.addEventListener("change", renderPredictions);
+output.globalSearch?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") runGlobalSearch();
+});
 output.performanceSearch?.addEventListener("input", () => renderPredictionAudit(predictionPerformanceRecords()));
 [
   output.predictionSearch,
@@ -3830,24 +3897,8 @@ output.predictionGrid?.addEventListener("click", (event) => {
   if (briefButton) openTradeBrief(briefButton.dataset.viewBrief);
   const watchButton = event.target.closest("[data-add-watchlist]");
   if (watchButton) {
-    const ticker = String(watchButton.dataset.addWatchlist || "").toUpperCase();
-    if (!Array.isArray(settings.stockIdeas)) settings.stockIdeas = [];
-    if (ticker && !settings.stockIdeas.some((stock) => String(stock.ticker || "").toUpperCase() === ticker)) {
-      const prediction = findPredictionByTicker(ticker);
-      settings.stockIdeas.unshift({
-        ticker,
-        name: prediction?.name || ticker,
-        risk: "AI watchlist",
-        horizon: prediction?.bestTimeframe || prediction?.timeframe || "Research",
-        priceNote: prediction?.finalReasonSummary || prediction?.plainEnglish || "Added from Predictions screener.",
-      });
-    }
-    if (!watchlists.length) loadWatchlists();
-    const list = watchlists.find((item) => item.id === selectedWatchlistId) || watchlists[0];
-    if (ticker && list && !list.tickers.includes(ticker)) list.tickers.push(ticker);
-    saveWatchlists();
-    renderWatchlists();
-    renderDashboard();
+    const ticker = normalizeTicker(watchButton.dataset.addWatchlist);
+    addTickerToActiveWatchlist(ticker);
     if (output.predictionScanMessage) output.predictionScanMessage.textContent = ticker ? `${ticker} added to the watchlist view on this device.` : "Watchlist action ready.";
   }
   const compareButton = event.target.closest("[data-quick-compare]");
@@ -3900,9 +3951,16 @@ document.addEventListener("click", (event) => {
   const createAlertButton = event.target.closest("[data-create-alert-for]");
   if (createAlertButton) {
     const ticker = normalizeTicker(createAlertButton.dataset.createAlertFor);
+    const rule = addAlertRuleForTicker(ticker, "tradeBrief");
     setPage("alerts");
-    if (output.alertRuleTicker) output.alertRuleTicker.value = ticker;
-    output.alertRuleTicker?.focus();
+    if (output.alertsDashboardStatus) output.alertsDashboardStatus.textContent = rule ? `${ticker} alert created.` : "We could not create that alert. Please retry.";
+  }
+  const watchButton = event.target.closest("[data-add-watchlist]");
+  if (watchButton && !output.predictionGrid?.contains(watchButton)) {
+    const ticker = normalizeTicker(watchButton.dataset.addWatchlist);
+    const added = addTickerToActiveWatchlist(ticker);
+    setPage("watchlist");
+    if (output.watchlistActiveName) output.watchlistActiveName.textContent = added ? `${ticker} added to watchlist` : "Could not add ticker";
   }
   if (!event.target.closest(".topbar-menu-wrap")) closeTopbarMenus();
 });
