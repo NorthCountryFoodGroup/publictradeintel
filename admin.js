@@ -503,7 +503,7 @@ async function reloadSymbolSnapshot() {
   }
 }
 
-function renderPredictionHealth(health) {
+function renderPredictionHealth(health, scanHealth = null) {
   if (!predictionHealthPanel) return;
   if (!health) {
     predictionHealthPanel.innerHTML = `<article class="editor-row"><p class="muted-copy">Run a prediction scan to generate health checks.</p></article>`;
@@ -524,6 +524,14 @@ function renderPredictionHealth(health) {
         <input readonly value="${escapeHtml(health.dataQualityStatus || "Unknown")} (${Number(health.incompleteMarketDataPercent) || 0}% incomplete)" />
       </label>
       <label>
+        <span>Data Availability</span>
+        <input readonly value="${escapeHtml(health.dataAvailability || "Unknown")}" />
+      </label>
+      <label>
+        <span>Data Freshness</span>
+        <input readonly value="${escapeHtml(health.dataFreshness || "Unknown")}" />
+      </label>
+      <label>
         <span>Scan completed</span>
         <input readonly value="${escapeHtml(health.scanCompletedAt ? new Date(health.scanCompletedAt).toLocaleString() : "Not run")}" />
       </label>
@@ -537,7 +545,11 @@ function renderPredictionHealth(health) {
       </label>
       <label class="wide-field">
         <span>Data quality counts</span>
-        <input readonly value="good ${Number(quality.good) || 0}, partial ${Number(quality.partial) || 0}, stale ${Number(quality.stale) || 0}, failed ${Number(quality.failed) || 0}" />
+        <input readonly value="good ${Number(quality.good) || 0}, partial ${Number(quality.partial) || 0}, stale ${Number(quality.stale) || 0}, unavailable ${Number(quality.failed) || 0}, provider failures ${Number(health.providerFailures) || 0}, usable ${Number(health.usablePredictionRecords) || 0}" />
+      </label>
+      <label class="wide-field">
+        <span>Quality classification reason</span>
+        <input readonly value="${escapeHtml(health.dataQualityClassificationReason || "No quality classification reason recorded.")}" />
       </label>
       <label class="wide-field">
         <span>Average unified score</span>
@@ -559,6 +571,49 @@ function renderPredictionHealth(health) {
         <span>Ranking sanity checks</span>
         <input readonly value="${escapeHtml(Object.entries(checks).map(([name, passed]) => `${name}: ${passed ? "pass" : "fail"}`).join("; "))}" />
       </label>
+      <details class="wide-field">
+        <summary>Latest scan metadata diagnostic</summary>
+        <textarea rows="14" readonly>${escapeHtml(JSON.stringify({
+          scanId: scanHealth?.scanId || null,
+          utcTimestamps: {
+            scanStartedAt: scanHealth?.scanStartedAt || null,
+            scanCompletedAt: scanHealth?.scanCompletedAt || health.scanCompletedAt || null,
+            providerFetchedAt: scanHealth?.providerFetchedAt || null,
+            latestUnderlyingQuoteAt: scanHealth?.latestUnderlyingQuoteAt || null,
+            latestDailyBarAt: scanHealth?.latestDailyBarAt || null,
+            latestIntradayBarAt: scanHealth?.latestIntradayBarAt || null,
+            lastRegularSessionClose: scanHealth?.lastRegularSessionClose || null,
+            nextRegularSessionOpen: scanHealth?.nextRegularSessionOpen || null,
+          },
+          easternDisplay: {
+            scanCompletedAt: scanHealth?.scanCompletedAt ? new Date(scanHealth.scanCompletedAt).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" }) : null,
+            providerFetchedAt: scanHealth?.providerFetchedAt ? new Date(scanHealth.providerFetchedAt).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" }) : null,
+            latestUnderlyingQuoteAt: scanHealth?.latestUnderlyingQuoteAt ? new Date(scanHealth.latestUnderlyingQuoteAt).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" }) : null,
+            lastRegularSessionClose: scanHealth?.lastRegularSessionClose ? new Date(scanHealth.lastRegularSessionClose).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" }) : null,
+            nextRegularSessionOpen: scanHealth?.nextRegularSessionOpen ? new Date(scanHealth.nextRegularSessionOpen).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" }) : null,
+          },
+          universeSourceDecision: {
+            universeSource: scanHealth?.universeSource || null,
+            universeSourceStatus: scanHealth?.universeSourceStatus || null,
+            universeRawCount: scanHealth?.universeRawCount || null,
+            universeEligibleCount: scanHealth?.universeEligibleCount || null,
+            symbolsAvailable: scanHealth?.symbolsAvailable || null,
+            symbolsScreened: scanHealth?.symbolsScreened || null,
+          },
+          fallbackFlags: {
+            packagedSnapshotUsed: scanHealth?.packagedSnapshotUsed || false,
+            liveListingRefreshUsed: scanHealth?.liveListingRefreshUsed || false,
+            emergencyPresetUsed: scanHealth?.emergencyPresetUsed || false,
+            fallbackReason: scanHealth?.fallbackReason || null,
+          },
+          marketSession: scanHealth?.marketSession || null,
+          dataQualityCounts: scanHealth?.dataQualityCounts || null,
+          dataQualityThresholds: scanHealth?.dataQualityThresholds || health.dataQualityThresholds || null,
+          qualityClassificationReason: scanHealth?.dataQualityClassificationReason || health.dataQualityClassificationReason || null,
+          consistency: scanHealth?.metadataConsistency || null,
+          rawScanMetadata: scanHealth || null,
+        }, null, 2))}</textarea>
+      </details>
     </article>
   `;
 }
@@ -971,7 +1026,7 @@ document.querySelector("#refreshPredictions")?.addEventListener("click", async (
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Prediction scan failed.");
-    renderPredictionHealth(result.predictionEngineHealth);
+    renderPredictionHealth(result.predictionEngineHealth, result.scanHealth);
     predictionHealthMessage.textContent = `Scan complete. ${result.predictions?.length || 0} predictions generated.`;
   } catch (error) {
     predictionHealthMessage.textContent = error.message;

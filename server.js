@@ -990,41 +990,169 @@ function easternDateParts(date = new Date()) {
   };
 }
 
+function easternLocalDateToUtc(year, month, day, hour = 12, minute = 0) {
+  const desired = Date.UTC(year, month - 1, day, hour, minute);
+  let guess = desired;
+  for (let index = 0; index < 4; index += 1) {
+    const parts = easternDateParts(new Date(guess));
+    const actual = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+    const diff = desired - actual;
+    if (!diff) break;
+    guess += diff;
+  }
+  return new Date(guess);
+}
+
+function calendarDateAdd({ year, month, day }, offsetDays) {
+  const date = new Date(Date.UTC(year, month - 1, day + offsetDays, 12, 0, 0));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+
+function calendarDateKey(year, month, day) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function calendarWeekday({ year, month, day }) {
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0)).getUTCDay();
+}
+
+function nthWeekdayOfMonth(year, month, weekday, occurrence) {
+  let count = 0;
+  for (let day = 1; day <= 31; day += 1) {
+    const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+    if (date.getUTCMonth() !== month - 1) break;
+    if (date.getUTCDay() === weekday) {
+      count += 1;
+      if (count === occurrence) return day;
+    }
+  }
+  return null;
+}
+
+function lastWeekdayOfMonth(year, month, weekday) {
+  for (let day = 31; day >= 1; day -= 1) {
+    const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+    if (date.getUTCMonth() === month - 1 && date.getUTCDay() === weekday) return day;
+  }
+  return null;
+}
+
+function observedFixedHoliday(year, month, day) {
+  const base = { year, month, day };
+  const weekday = calendarWeekday(base);
+  if (weekday === 6) return calendarDateAdd(base, -1);
+  if (weekday === 0) return calendarDateAdd(base, 1);
+  return base;
+}
+
+function westernEasterDate(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return { year, month, day };
+}
+
 function marketHolidayName(parts) {
-  const fixed = new Set([`${parts.year}-01-01`, `${parts.year}-07-04`, `${parts.year}-12-25`]);
-  if (fixed.has(parts.dateKey)) return "Market Holiday";
+  const holidays = new Map();
+  const add = (date, name) => holidays.set(calendarDateKey(date.year, date.month, date.day), name);
+  add(observedFixedHoliday(parts.year, 1, 1), "New Year's Day");
+  add({ year: parts.year, month: 1, day: nthWeekdayOfMonth(parts.year, 1, 1, 3) }, "Martin Luther King Jr. Day");
+  add({ year: parts.year, month: 2, day: nthWeekdayOfMonth(parts.year, 2, 1, 3) }, "Presidents' Day");
+  add(calendarDateAdd(westernEasterDate(parts.year), -2), "Good Friday");
+  add({ year: parts.year, month: 5, day: lastWeekdayOfMonth(parts.year, 5, 1) }, "Memorial Day");
+  add(observedFixedHoliday(parts.year, 6, 19), "Juneteenth");
+  add(observedFixedHoliday(parts.year, 7, 4), "Independence Day");
+  add({ year: parts.year, month: 9, day: nthWeekdayOfMonth(parts.year, 9, 1, 1) }, "Labor Day");
+  add({ year: parts.year, month: 11, day: nthWeekdayOfMonth(parts.year, 11, 4, 4) }, "Thanksgiving Day");
+  add(observedFixedHoliday(parts.year, 12, 25), "Christmas Day");
+  return holidays.get(calendarDateKey(parts.year, parts.month, parts.day)) || null;
+}
+
+function marketEarlyCloseTime(parts) {
+  const weekday = calendarWeekday(parts);
+  const nextDay = calendarDateAdd(parts, 1);
+  if (parts.month === 11 && weekday === 5 && parts.day === nthWeekdayOfMonth(parts.year, 11, 4, 4) + 1) return { hour: 13, minute: 0, reason: "Day after Thanksgiving" };
+  if (parts.month === 12 && parts.day === 24 && weekday >= 1 && weekday <= 5) return { hour: 13, minute: 0, reason: "Christmas Eve" };
+  if (nextDay.month === 7 && nextDay.day === 4 && weekday >= 1 && weekday <= 5) return { hour: 13, minute: 0, reason: "Day before Independence Day" };
+  return null;
+}
+
+function isMarketTradingDate(parts) {
+  const weekday = calendarWeekday(parts);
+  return weekday !== 0 && weekday !== 6 && !marketHolidayName(parts);
+}
+
+function regularSessionForDate(parts) {
+  const earlyClose = marketEarlyCloseTime(parts);
+  const close = earlyClose || { hour: 16, minute: 0, reason: null };
+  return {
+    open: easternLocalDateToUtc(parts.year, parts.month, parts.day, 9, 30),
+    close: easternLocalDateToUtc(parts.year, parts.month, parts.day, close.hour, close.minute),
+    earlyCloseReason: close.reason,
+  };
+}
+
+function previousRegularSessionClose(date = new Date()) {
+  const current = easternDateParts(date);
+  for (let offset = 0; offset > -14; offset -= 1) {
+    const parts = calendarDateAdd(current, offset);
+    if (!isMarketTradingDate(parts)) continue;
+    const session = regularSessionForDate(parts);
+    if (offset < 0 || date.getTime() >= session.close.getTime()) return session.close;
+  }
+  return null;
+}
+
+function nextRegularSessionOpen(date = new Date()) {
+  const current = easternDateParts(date);
+  for (let offset = 0; offset < 21; offset += 1) {
+    const parts = calendarDateAdd(current, offset);
+    if (!isMarketTradingDate(parts)) continue;
+    const session = regularSessionForDate(parts);
+    if (offset > 0 || date.getTime() < session.open.getTime()) return session.open;
+  }
   return null;
 }
 
 function marketSessionStatus(date = new Date()) {
   const parts = easternDateParts(date);
-  const minutes = parts.hour * 60 + parts.minute;
-  const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
+  const weekday = calendarWeekday(parts);
+  const weekend = weekday === 0 || weekday === 6;
   const holiday = marketHolidayName(parts);
-  const status = weekend ? "Closed - Weekend" : holiday ? "Closed - Market Holiday" : minutes < 570 ? "Premarket" : minutes < 960 ? "Open" : "After Hours";
-  const scanMode = status === "Open" ? "Market-hours analysis" : status === "Premarket" || status === "After Hours" ? "After-hours analysis" : "Closed-market analysis";
-  const nextOpen = new Date(date);
-  nextOpen.setHours(9, 30, 0, 0);
-  while (true) {
-    const p = easternDateParts(nextOpen);
-    if (p.weekday !== "Sat" && p.weekday !== "Sun" && !marketHolidayName(p) && (p.dateKey !== parts.dateKey || minutes < 570)) break;
-    nextOpen.setDate(nextOpen.getDate() + 1);
-    nextOpen.setHours(9, 30, 0, 0);
+  let status = "Closed - Weekend";
+  let earlyCloseReason = null;
+  if (holiday) {
+    status = "Closed - Holiday";
+  } else if (!weekend) {
+    const session = regularSessionForDate(parts);
+    earlyCloseReason = session.earlyCloseReason;
+    if (date.getTime() < session.open.getTime()) status = "Premarket";
+    else if (date.getTime() < session.close.getTime()) status = "Open";
+    else status = "After Hours";
   }
-  const lastClose = new Date(date);
-  lastClose.setHours(16, 0, 0, 0);
-  while (true) {
-    const p = easternDateParts(lastClose);
-    if (p.weekday !== "Sat" && p.weekday !== "Sun" && !marketHolidayName(p) && (p.dateKey !== parts.dateKey || minutes >= 960)) break;
-    lastClose.setDate(lastClose.getDate() - 1);
-    lastClose.setHours(16, 0, 0, 0);
-  }
+  const scanMode = status === "Open" ? "Market-Hours Analysis" : status === "Premarket" || status === "After Hours" ? "After-Hours Analysis" : "Closed-Market Analysis";
+  const lastClose = previousRegularSessionClose(date);
+  const nextOpen = nextRegularSessionOpen(date);
   return {
     status,
     scanMode,
     timezone: "America/New_York",
-    lastMarketClose: lastClose.toISOString(),
-    nextMarketOpen: nextOpen.toISOString(),
+    lastRegularSessionClose: lastClose?.toISOString() || null,
+    nextRegularSessionOpen: nextOpen?.toISOString() || null,
+    lastMarketClose: lastClose?.toISOString() || null,
+    nextMarketOpen: nextOpen?.toISOString() || null,
+    earlyCloseReason,
     isClosed: status.startsWith("Closed"),
     isOpen: status === "Open",
     message: status.startsWith("Closed")
@@ -1110,6 +1238,18 @@ function broadUniverseStats(config, quotes = []) {
   const pipeline = buildDiscoveryPipeline(config, quotes);
   const symbolUniverse = loadSymbolUniverse();
   const withQuotes = pipeline.allTickers.filter((ticker) => quoteMap.has(ticker)).length;
+  const metadata = symbolUniverse.symbolUniverseMetadata || {};
+  const emergencyPresetCount = universePresetTickers("combined").length;
+  const emergencyPresetUsed = Boolean(metadata.emergencyFallbackActive || metadata.refreshStatus === "emergency-preset-fallback") && pipeline.allTickers.length <= emergencyPresetCount;
+  const packagedSnapshotUsed = !emergencyPresetUsed && (metadata.refreshStatus === "packaged-snapshot" || /Cached Public Snapshot|Cached public listing snapshot/i.test(metadata.source || ""));
+  const liveListingRefreshUsed = !emergencyPresetUsed && metadata.refreshStatus === "live";
+  const activeUniverseSource = liveListingRefreshUsed
+    ? "Live Listing Source"
+    : packagedSnapshotUsed || pipeline.allTickers.length > emergencyPresetCount
+      ? "Cached Public Snapshot"
+      : emergencyPresetUsed
+        ? "Emergency Preset Fallback"
+        : "Failed";
   return {
     mode: pipeline.mode,
     targetSymbolCount: pipeline.discovery.broadScreenTarget,
@@ -1127,12 +1267,50 @@ function broadUniverseStats(config, quotes = []) {
     freshQuoteCount: withQuotes,
     coverageLimitReasons: pipeline.coverageLimitReasons,
     actualCoverageNote: pipeline.actualCoverageNote,
-    symbolUniverseMetadata: symbolUniverse.symbolUniverseMetadata || null,
-    activeUniverseSource: symbolUniverse.symbolUniverseMetadata?.source || "Unknown",
-    emergencyFallbackActive: Boolean(symbolUniverse.symbolUniverseMetadata?.emergencyFallbackActive),
-    fallbackReason: symbolUniverse.symbolUniverseMetadata?.initializationDiagnostics?.fallbackReason || symbolUniverse.symbolUniverseMetadata?.lastRefreshError || null,
+    symbolUniverseMetadata: metadata || null,
+    activeUniverseSource,
+    universeSourceStatus: activeUniverseSource,
+    universeRawCount: Number(metadata.rawSymbolCount || pipeline.allTickers.length),
+    universeEligibleCount: Number(metadata.eligibleSymbolCount || pipeline.allTickers.length),
+    packagedSnapshotUsed,
+    liveListingRefreshUsed,
+    emergencyPresetUsed,
+    emergencyPresetCount,
+    emergencyFallbackActive: emergencyPresetUsed,
+    fallbackReason: metadata.initializationDiagnostics?.fallbackReason || metadata.lastRefreshError || null,
     marketSession: pipeline.marketSession,
     deepAnalysisTarget: pipeline.deepLimit,
+  };
+}
+
+function validateScanMetadata(scanHealth) {
+  const errors = [];
+  const emergencyCount = Number(scanHealth.emergencyPresetCount) || universePresetTickers("combined").length;
+  const symbolsAvailable = Number(scanHealth.symbolsAvailable || scanHealth.totalSymbolsAvailable || 0);
+  const symbolsScreened = Number(scanHealth.symbolsScreened || 0);
+  const deepCount = Number(scanHealth.deepCandidatesSelected || scanHealth.deepAnalysisCandidatesSelected || 0);
+  const predictionsGenerated = Number(scanHealth.predictionsGenerated || 0);
+  const successfulDeep = Number(scanHealth.candidatesSuccessfullyAnalyzed || 0);
+  const scanCompleted = Date.parse(scanHealth.scanCompletedAt || "");
+  const lastClose = Date.parse(scanHealth.lastRegularSessionClose || scanHealth.lastMarketClose || "");
+  const nextOpen = Date.parse(scanHealth.nextRegularSessionOpen || scanHealth.nextMarketOpen || "");
+  const providerFetched = Date.parse(scanHealth.providerFetchedAt || "");
+  const underlyingQuote = Date.parse(scanHealth.latestUnderlyingQuoteAt || "");
+
+  if (scanHealth.emergencyPresetUsed && symbolsAvailable !== emergencyCount) errors.push(`Emergency preset source reports ${symbolsAvailable} symbols, expected ${emergencyCount}.`);
+  if (symbolsAvailable > emergencyCount && scanHealth.emergencyPresetUsed) errors.push("Emergency preset flag is true even though symbols available exceeds the preset count.");
+  if (symbolsScreened > symbolsAvailable) errors.push("Screened count exceeds available symbol count.");
+  if (deepCount > symbolsScreened) errors.push("Deep-analysis count exceeds screened symbol count.");
+  if (predictionsGenerated > successfulDeep) errors.push("Generated predictions exceed successful deep-analysis count.");
+  if (Number.isFinite(scanCompleted) && Number.isFinite(lastClose) && lastClose > scanCompleted) errors.push("Last regular market close is after scan completion.");
+  if (Number.isFinite(scanCompleted) && Number.isFinite(nextOpen) && nextOpen < scanCompleted) errors.push("Next regular market open is before scan completion.");
+  if (Number.isFinite(providerFetched) && Number.isFinite(underlyingQuote) && underlyingQuote > providerFetched) errors.push("Underlying quote timestamp is after provider fetch timestamp.");
+  if (String(scanHealth.marketStatus || "").startsWith("Closed") && scanHealth.scanMode !== "Closed-Market Analysis") errors.push("Closed market status does not match closed-market scan mode.");
+
+  return {
+    passed: !errors.length,
+    errors,
+    checkedAt: isoNow(),
   };
 }
 
@@ -1181,9 +1359,17 @@ function findCachedQuote(ticker) {
     marketVolume: Number(match.marketVolume) || null,
     marketChangePercent: String(match.marketChangePercent || ""),
         marketUpdatedAt: String(match.marketUpdatedAt || ""),
+        providerFetchedAt: String(match.providerFetchedAt || match.marketUpdatedAt || ""),
+        latestUnderlyingQuoteAt: String(match.latestUnderlyingQuoteAt || match.marketUpdatedAt || ""),
         marketProvider: String(match.marketProvider || "Saved market data"),
       }
     : null;
+}
+
+function latestTradingDayCloseIso(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  return easternLocalDateToUtc(Number(match[1]), Number(match[2]), Number(match[3]), 16, 0).toISOString();
 }
 
 async function fetchAlphaVantageQuote(ticker) {
@@ -1207,6 +1393,8 @@ async function fetchAlphaVantageQuote(ticker) {
     throw new Error(message);
   }
 
+  const providerFetchedAt = new Date().toISOString();
+  const latestUnderlyingQuoteAt = latestTradingDayCloseIso(quote["07. latest trading day"]) || providerFetchedAt;
   return {
     ticker: symbol,
     marketProviderSymbol: symbol,
@@ -1216,7 +1404,9 @@ async function fetchAlphaVantageQuote(ticker) {
     marketChange: Number(quote["09. change"]) || null,
     marketVolume: Number(quote["06. volume"]) || null,
     marketChangePercent: String(quote["10. change percent"] || ""),
-    marketUpdatedAt: new Date().toISOString(),
+    marketUpdatedAt: latestUnderlyingQuoteAt,
+    providerFetchedAt,
+    latestUnderlyingQuoteAt,
     marketProvider: "Alpha Vantage",
   };
 }
@@ -1245,6 +1435,9 @@ async function fetchYahooChartQuote(ticker) {
   const marketChange = previousClose ? price - previousClose : null;
   const marketChangePercent = previousClose ? `${((marketChange / previousClose) * 100).toFixed(2)}%` : "";
 
+  const providerFetchedAt = new Date().toISOString();
+  const underlyingUnix = Number(meta.regularMarketTime || meta.currentTradingPeriod?.regular?.end || 0);
+  const latestUnderlyingQuoteAt = underlyingUnix ? new Date(underlyingUnix * 1000).toISOString() : providerFetchedAt;
   return {
     ticker: originalSymbol,
     marketProviderSymbol: providerSymbol,
@@ -1254,7 +1447,9 @@ async function fetchYahooChartQuote(ticker) {
     marketChange,
     marketVolume: Number(meta.regularMarketVolume) || null,
     marketChangePercent,
-    marketUpdatedAt: new Date().toISOString(),
+    marketUpdatedAt: latestUnderlyingQuoteAt,
+    providerFetchedAt,
+    latestUnderlyingQuoteAt,
     marketProvider: "Yahoo chart",
   };
 }
@@ -2880,8 +3075,10 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     alignmentType: alignment.type,
   });
   const portfolio = portfolioImpact(stock, config, { riskScore, bestTimeframe });
-  const quoteTimestamp = stock.marketUpdatedAt || null;
   const scanTimestamp = new Date().toISOString();
+  const quoteTimestamp = stock.marketUpdatedAt || null;
+  const providerFetchedAt = stock.providerFetchedAt || scanTimestamp;
+  const latestUnderlyingQuoteAt = stock.latestUnderlyingQuoteAt || quoteTimestamp;
   const quoteAgeHours = quoteTimestamp ? (Date.now() - Date.parse(quoteTimestamp)) / 3600000 : null;
   const freshnessStatus = !quoteTimestamp ? "unavailable" : quoteAgeHours <= 1 ? "live" : quoteAgeHours <= 24 ? "recent" : quoteAgeHours <= 72 ? "delayed" : "stale";
   const signalContribution = {
@@ -2916,6 +3113,8 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     marketQuoteRetryCount: Number(stock.marketQuoteRetryCount) || 0,
     marketQuoteError: stock.marketQuoteError || "",
     quoteTimestamp,
+    providerFetchedAt,
+    latestUnderlyingQuoteAt,
     intradayDataTimestamp: quoteTimestamp,
     volumeTimestamp: quoteTimestamp,
     newsTimestamp: policy.strongest?.updatedAt || policySignals?.updatedAt || null,
@@ -3375,14 +3574,34 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
   const dataQualityStatusCounts = countBy(quoteRequestedPredictions, "dataQualityStatus", ["good", "partial", "stale", "failed"]);
   const incompleteMarketDataCount = dataQualityStatusCounts.partial + dataQualityStatusCounts.stale + dataQualityStatusCounts.failed;
   const incompleteMarketDataPercent = quoteRequestedPredictions.length ? Number(((incompleteMarketDataCount / quoteRequestedPredictions.length) * 100).toFixed(1)) : 100;
-  const dataQualityStatus =
-    !predictions.length
-      ? "Failed"
-      : incompleteMarketDataPercent < 5
-      ? "Healthy"
-      : incompleteMarketDataPercent <= 20
-      ? "Warning"
-      : "Failed";
+  const providerFailures = dataQualityStatusCounts.failed;
+  const providerFailurePercent = quoteRequestedPredictions.length ? Number(((providerFailures / quoteRequestedPredictions.length) * 100).toFixed(1)) : 100;
+  const usablePredictionRecords = quoteRequestedPredictions.filter((item) => Number(item.currentPrice) > 0 && item.dataQualityStatus !== "failed").length;
+  const dataAvailability =
+    !predictions.length || providerFailurePercent >= 50
+      ? "Unavailable"
+      : providerFailurePercent === 0 && dataQualityStatusCounts.partial === 0
+      ? "Complete"
+      : "Partial";
+  const freshnessCounts = countBy(quoteRequestedPredictions, "freshnessStatus", ["live", "recent", "delayed", "stale", "unavailable"]);
+  const dominantFreshness = Object.entries(freshnessCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "unavailable";
+  const dataFreshness =
+    dominantFreshness === "live"
+      ? "Live"
+      : dominantFreshness === "recent"
+      ? "Recent"
+      : dominantFreshness === "delayed"
+      ? "Delayed"
+      : dominantFreshness === "stale"
+      ? "Stale"
+      : "Unavailable";
+  const dataQualityStatus = dataAvailability;
+  const dataQualityClassificationReason =
+    dataAvailability === "Unavailable"
+      ? "Required market data was unavailable for a critical percentage of analyzed candidates."
+      : dataFreshness === "Delayed" || dataFreshness === "Stale"
+      ? "The scan completed with usable latest-session data, but market timestamps are not live."
+      : "The scan completed with usable current provider data.";
   const highest = [...predictions].sort((a, b) => Number(b.unifiedPredictionScore || 0) - Number(a.unifiedPredictionScore || 0))[0] || null;
   const lowest = [...predictions].sort((a, b) => Number(a.unifiedPredictionScore || 0) - Number(b.unifiedPredictionScore || 0))[0] || null;
   const checkFailures = Object.entries(rankingChecks).filter(([, passed]) => !passed).map(([name]) => name);
@@ -3403,6 +3622,25 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
     predictionEngineStatus: status,
     predictionEngineStatusReasons: engineFailureReasons,
     dataQualityStatus,
+    dataAvailability,
+    dataFreshness,
+    dataQualityClassificationReason,
+    dataQualityThresholds: {
+      completeProviderFailurePercent: 0,
+      unavailableProviderFailurePercent: 50,
+      partialWhenMissingFieldsOrAnyProviderFailure: true,
+      freshnessLiveHours: 1,
+      freshnessRecentHours: 24,
+      freshnessDelayedHours: 72,
+    },
+    goodRecords: dataQualityStatusCounts.good,
+    partialRecords: dataQualityStatusCounts.partial,
+    staleRecords: dataQualityStatusCounts.stale,
+    unavailableRecords: dataQualityStatusCounts.failed,
+    providerFailures,
+    providerFailurePercent,
+    usablePredictionRecords,
+    dataFreshnessCounts: freshnessCounts,
     incompleteMarketDataCount,
     incompleteMarketDataPercent,
     incompleteMarketDataTickers,
@@ -3652,11 +3890,19 @@ async function refreshPredictions(options = {}) {
   const predictionEngineHealth = buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt });
   const durationMs = Date.parse(updatedAt) - Date.parse(scanStartedAt);
   const scanId = `scan-${Date.parse(updatedAt) || Date.now()}`;
-  const marketDataAsOfTimestamp = predictions.map((item) => item.quoteTimestamp).filter(Boolean).sort().reverse()[0] || null;
+  const latestUnderlyingQuoteAt = predictions.map((item) => item.latestUnderlyingQuoteAt || item.quoteTimestamp).filter(Boolean).sort().reverse()[0] || broadStats.marketSession?.lastRegularSessionClose || null;
+  const providerFetchedAt = predictions.map((item) => item.providerFetchedAt || item.scanTimestamp).filter(Boolean).sort().reverse()[0] || updatedAt;
+  const latestDailyBarAt = latestUnderlyingQuoteAt;
+  const latestIntradayBarAt = predictions.map((item) => item.intradayDataTimestamp).filter(Boolean).sort().reverse()[0] || null;
+  const marketDataAsOfTimestamp = latestUnderlyingQuoteAt;
   const scanHealth = {
     scanId,
     scanStartedAt,
     scanCompletedAt: updatedAt,
+    providerFetchedAt,
+    latestUnderlyingQuoteAt,
+    latestDailyBarAt,
+    latestIntradayBarAt,
     lastSuccessfulScanTimestamp: updatedAt,
     lastScanAttemptTimestamp: scanStartedAt,
     scanCompletedTimestamp: updatedAt,
@@ -3682,10 +3928,20 @@ async function refreshPredictions(options = {}) {
     marketStatus: broadStats.marketSession?.status || null,
     marketSession: broadStats.marketSession || null,
     scanMode: broadStats.marketSession?.scanMode || null,
-    lastMarketClose: broadStats.marketSession?.lastMarketClose || null,
-    nextMarketOpen: broadStats.marketSession?.nextMarketOpen || null,
-    marketDataAgeMs: broadStats.marketSession?.lastMarketClose ? ageMs(broadStats.marketSession.lastMarketClose) : null,
+    lastMarketClose: broadStats.marketSession?.lastRegularSessionClose || broadStats.marketSession?.lastMarketClose || null,
+    nextMarketOpen: broadStats.marketSession?.nextRegularSessionOpen || broadStats.marketSession?.nextMarketOpen || null,
+    lastRegularSessionClose: broadStats.marketSession?.lastRegularSessionClose || broadStats.marketSession?.lastMarketClose || null,
+    nextRegularSessionOpen: broadStats.marketSession?.nextRegularSessionOpen || broadStats.marketSession?.nextMarketOpen || null,
+    marketDataAgeMs: latestUnderlyingQuoteAt ? ageMs(latestUnderlyingQuoteAt) : null,
+    underlyingMarketDataAgeMs: latestUnderlyingQuoteAt ? ageMs(latestUnderlyingQuoteAt) : null,
     universeSource: broadStats.activeUniverseSource || "Unknown",
+    universeSourceStatus: broadStats.universeSourceStatus || broadStats.activeUniverseSource || "Unknown",
+    universeRawCount: broadStats.universeRawCount,
+    universeEligibleCount: broadStats.universeEligibleCount,
+    packagedSnapshotUsed: Boolean(broadStats.packagedSnapshotUsed),
+    liveListingRefreshUsed: Boolean(broadStats.liveListingRefreshUsed),
+    emergencyPresetUsed: Boolean(broadStats.emergencyPresetUsed),
+    emergencyPresetCount: broadStats.emergencyPresetCount,
     fallbackReason: broadStats.fallbackReason || null,
     emergencyFallbackActive: Boolean(broadStats.emergencyFallbackActive),
     coverageWarning: broadStats.emergencyFallbackActive
@@ -3694,6 +3950,19 @@ async function refreshPredictions(options = {}) {
     candidatesSuccessfullyAnalyzed: predictions.length,
     predictionsGenerated: predictions.length,
     dataQualitySummary: predictionEngineHealth.dataQualityStatusCounts || {},
+    dataAvailability: predictionEngineHealth.dataAvailability,
+    dataFreshness: predictionEngineHealth.dataFreshness,
+    dataQualityStatus: predictionEngineHealth.dataQualityStatus,
+    dataQualityCounts: {
+      good: predictionEngineHealth.goodRecords,
+      partial: predictionEngineHealth.partialRecords,
+      stale: predictionEngineHealth.staleRecords,
+      unavailable: predictionEngineHealth.unavailableRecords,
+      providerFailures: predictionEngineHealth.providerFailures,
+      usablePredictionRecords: predictionEngineHealth.usablePredictionRecords,
+    },
+    dataQualityThresholds: predictionEngineHealth.dataQualityThresholds,
+    dataQualityClassificationReason: predictionEngineHealth.dataQualityClassificationReason,
     failedAndSkippedSymbols: predictionEngineHealth.failedTickers || [],
     lastSuccessfulScan: updatedAt,
     dataAsOf: marketDataAsOfTimestamp,
@@ -3722,6 +3991,11 @@ async function refreshPredictions(options = {}) {
       { name: "Saving predictions", completed: true, completedCount: 1, totalCount: 1 },
     ],
   };
+  scanHealth.metadataConsistency = validateScanMetadata(scanHealth);
+  if (!scanHealth.metadataConsistency.passed) {
+    warnings.push(`Scan metadata consistency warning: ${scanHealth.metadataConsistency.errors.join(" ")}`);
+    scanHealth.summaryWarning = "Scan metadata consistency warning. Raw diagnostic details are available in Admin.";
+  }
   const predictionHistory = appendPredictionHistory(historicalPredictionRows({ predictions, sections, scanId, scanHealth, updatedAt }));
   const outcomeSettlement = settlePredictionOutcomes(config);
   const result = {
@@ -3747,8 +4021,14 @@ async function refreshPredictions(options = {}) {
       deepCandidatesSelected: scanUniverse.length,
       deepAnalysisCandidatesSelected: scanUniverse.length,
       universeSource: broadStats.activeUniverseSource || "Unknown",
+      universeSourceStatus: broadStats.universeSourceStatus || broadStats.activeUniverseSource || "Unknown",
+      packagedSnapshotUsed: Boolean(broadStats.packagedSnapshotUsed),
+      liveListingRefreshUsed: Boolean(broadStats.liveListingRefreshUsed),
+      emergencyPresetUsed: Boolean(broadStats.emergencyPresetUsed),
       marketStatus: broadStats.marketSession?.status || null,
       scanMode: broadStats.marketSession?.scanMode || null,
+      lastRegularSessionClose: broadStats.marketSession?.lastRegularSessionClose || null,
+      nextRegularSessionOpen: broadStats.marketSession?.nextRegularSessionOpen || null,
       providerRequestBudget: broadStats.providerRequestBudget,
       providerConcurrencyLimit: broadStats.providerConcurrencyLimit,
       maxScanDurationMs: broadStats.maxScanDurationMs,

@@ -148,6 +148,12 @@ function assertPredictionShape(result) {
   assert.ok(result.scanUniverse, "scan universe metadata exists");
   assert.equal(result.scanUniverse.mode, "combined", "scan universe mode is returned");
   assert.ok(result.scanUniverse.candidateCount >= 25, "scan universe has enough candidates");
+  assert.ok(result.scanHealth, "scan health metadata exists");
+  assert.ok(result.scanHealth.providerFetchedAt, "scan health includes provider fetch timestamp");
+  assert.ok(result.scanHealth.latestUnderlyingQuoteAt || result.scanHealth.marketDataAsOfTimestamp, "scan health includes underlying market data timestamp");
+  assert.ok(result.scanHealth.lastRegularSessionClose, "scan health includes last regular session close");
+  assert.ok(result.scanHealth.nextRegularSessionOpen, "scan health includes next regular session open");
+  assert.ok(result.scanHealth.metadataConsistency, "scan health includes metadata consistency checks");
   assertPredictionEngineHealth(result.predictionEngineHealth);
 }
 
@@ -215,7 +221,12 @@ function assertPredictionEngineHealth(health) {
   assert.ok(health, "predictionEngineHealth exists");
   assert.ok(["Healthy", "Warning", "Failed"].includes(health.status), "health status exists");
   assert.ok(["Healthy", "Failed"].includes(health.predictionEngineStatus), "prediction engine status exists");
-  assert.ok(["Healthy", "Warning", "Failed"].includes(health.dataQualityStatus), "data quality status exists");
+  assert.ok(["Complete", "Partial", "Unavailable"].includes(health.dataQualityStatus), "data quality status exists");
+  assert.ok(["Complete", "Partial", "Unavailable"].includes(health.dataAvailability), "data availability exists");
+  assert.ok(["Live", "Recent", "Delayed", "Stale", "Unavailable"].includes(health.dataFreshness), "data freshness exists");
+  assert.ok(health.dataQualityThresholds, "data quality thresholds exist");
+  assert.ok(typeof health.dataQualityClassificationReason === "string", "data quality classification reason exists");
+  assert.ok(Number.isFinite(Number(health.usablePredictionRecords)), "usable prediction records count exists");
   assert.ok(Number.isFinite(Number(health.incompleteMarketDataCount)), "incomplete market data count exists");
   assert.ok(Number.isFinite(Number(health.incompleteMarketDataPercent)), "incomplete market data percent exists");
   assert.ok(Array.isArray(health.incompleteMarketDataTickers), "incomplete market data tickers exists");

@@ -318,7 +318,15 @@ function relativeTime(timestamp) {
 
 function exactEt(timestamp) {
   const time = Date.parse(timestamp || "");
-  return Number.isFinite(time) ? new Date(time).toLocaleString(undefined, { timeZoneName: "short" }) : "Unavailable";
+  return Number.isFinite(time) ? new Date(time).toLocaleString(undefined, { timeZone: "America/New_York", timeZoneName: "short" }) : "Unavailable";
+}
+
+function compactDuration(msOrSeconds) {
+  const totalSeconds = Number(msOrSeconds) > 1000 ? Math.round(Number(msOrSeconds) / 1000) : Math.round(Number(msOrSeconds) || 0);
+  if (!totalSeconds) return "Not recorded";
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
 function marketIndexRow(key) {
@@ -1173,13 +1181,14 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
     } else if (scan.scanCompletedAt || predictionEngine.updatedAt) {
       const completed = scan.lastSuccessfulScanTimestamp || scan.scanCompletedAt || predictionEngine.updatedAt;
       const attempt = scan.lastScanAttemptTimestamp;
-      const dataAsOf = scan.marketDataAsOfTimestamp || scan.dataAsOf;
+      const providerFetchedAt = scan.providerFetchedAt || scan.scanCompletedAt || predictionEngine.updatedAt;
+      const underlyingDataAt = scan.latestUnderlyingQuoteAt || scan.marketDataAsOfTimestamp || scan.dataAsOf;
       const failureLine = scan.scanStatus === "failed" && attempt ? `Latest attempt failed ${relativeTime(attempt)}. ` : "";
       const marketSession = scan.marketSession || {};
       const closedNote = String(scan.marketStatus || marketSession.status || "").startsWith("Closed")
-        ? " Live intraday market data is unavailable. The scan uses the most recent completed market session, available news, policy data, and saved signals. 1-day rankings are based on the latest completed session."
+        ? " The scan uses the latest completed market session together with available news, policy, and saved catalyst data. 1-day rankings are based on the latest completed session and are not live intraday recommendations."
         : "";
-      output.scanProgressMessage.textContent = `${failureLine}Last successful scan: ${relativeTime(completed)}. Completed: ${exactEt(completed)}. Market data as of: ${dataAsOf ? exactEt(dataAsOf) : "Unavailable"}. Timezone: ET.${closedNote}`;
+      output.scanProgressMessage.textContent = `${failureLine}Scan completed: ${exactEt(completed)}. Provider data fetched: ${exactEt(providerFetchedAt)}. Underlying market data as of: ${underlyingDataAt ? exactEt(underlyingDataAt) : "Unavailable"}.${closedNote}`;
     } else {
       output.scanProgressMessage.textContent = "No successful scan is saved yet.";
     }
@@ -1188,23 +1197,29 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
     const session = scan.marketSession || predictionEngine.scanUniverse?.marketSession || {};
     const marketStatus = scan.marketStatus || predictionEngine.scanUniverse?.marketStatus || session.status || "Unknown";
     const scanMode = scan.scanMode || predictionEngine.scanUniverse?.scanMode || session.scanMode || "Standard analysis";
-    const universeSource = scan.universeSource || predictionEngine.scanUniverse?.universeSource || symbolUniverseStatus.activeSource || "Unknown";
+    const universeSource = scan.universeSourceStatus || scan.universeSource || predictionEngine.scanUniverse?.universeSourceStatus || predictionEngine.scanUniverse?.universeSource || "Unknown";
     const broadTarget = scan.broadScreenTarget || predictionEngine.scanUniverse?.broadScreenTarget || scan.targetSymbolCount || 2500;
     const deepTarget = scan.deepAnalysisTarget || predictionEngine.scanUniverse?.deepAnalysisTarget || scan.activeDeepAnalysisTarget || 0;
-    const coverageWarning = scan.coverageWarning || (scan.emergencyFallbackActive ? "Broad-market discovery is unavailable. Results currently use 117 preset symbols." : "");
+    const symbolsAvailable = scan.symbolsAvailable || scan.totalSymbolsAvailable || predictionEngine.scanUniverse?.symbolsAvailable || predictionEngine.scanUniverse?.totalSymbolsAvailable || 0;
+    const screened = scan.symbolsScreened || predictionEngine.scanUniverse?.symbolsScreened || 0;
+    const deepSelected = scan.deepCandidatesSelected || scan.deepAnalysisCandidatesSelected || predictionEngine.scanUniverse?.deepCandidatesSelected || predictionEngine.scanUniverse?.candidateCount || 0;
+    const predictionsGenerated = scan.predictionsGenerated || predictionEngine.predictions?.length || 0;
+    const coverageWarning = scan.summaryWarning || scan.coverageWarning || (scan.emergencyPresetUsed || scan.emergencyFallbackActive ? "Broad-market discovery is unavailable. Results currently use the emergency preset universe." : "");
+    const providerFetchedAt = scan.providerFetchedAt || scan.scanCompletedAt || predictionEngine.updatedAt;
+    const underlyingDataAt = scan.latestUnderlyingQuoteAt || scan.marketDataAsOfTimestamp || scan.dataAsOf;
     output.scanProgressSummaryGrid.innerHTML = [
       metricCard("Market Status", marketStatus, scanMode, "predictions"),
-      metricCard("Universe Source", universeSource, coverageWarning || "Active symbol source used for this scan", "predictions"),
-      metricCard("Symbols Available", String(scan.symbolsAvailable || scan.totalSymbolsAvailable || predictionEngine.scanUniverse?.symbolsAvailable || predictionEngine.scanUniverse?.totalSymbolsAvailable || 0), "Actual configured provider/universe coverage", "predictions"),
-      metricCard("Broad Screen Target", String(broadTarget), `${scan.symbolsScreened || predictionEngine.scanUniverse?.symbolsScreened || 0} screened`, "predictions"),
-      metricCard("Symbols Screened", String(scan.symbolsScreened || predictionEngine.scanUniverse?.symbolsScreened || 0), `Target ${scan.targetSymbolCount || predictionEngine.scanUniverse?.targetSymbolCount || broadTarget}`, "predictions"),
-      metricCard("Deep Analysis Target", String(deepTarget || "Not recorded"), `${scan.deepCandidatesSelected || scan.deepAnalysisCandidatesSelected || predictionEngine.scanUniverse?.deepCandidatesSelected || predictionEngine.scanUniverse?.candidateCount || 0} selected`, "predictions"),
-      metricCard("Deep Candidates", String(scan.deepCandidatesSelected || scan.deepAnalysisCandidatesSelected || predictionEngine.scanUniverse?.candidateCount || 0), "Selected for full analysis", "predictions"),
-      metricCard("Predictions Generated", String(scan.predictionsGenerated || predictionEngine.predictions?.length || 0), "Published after validation", "predictions"),
-      metricCard("Last Market Close", scan.lastMarketClose || session.lastMarketClose ? exactEt(scan.lastMarketClose || session.lastMarketClose) : "Not recorded", "Used when market is closed", "predictions"),
-      metricCard("Next Market Open", scan.nextMarketOpen || session.nextMarketOpen ? exactEt(scan.nextMarketOpen || session.nextMarketOpen) : "Not recorded", "ET schedule estimate", "predictions"),
-      metricCard("Duration", scan.scanDurationSeconds ? `${scan.scanDurationSeconds}s` : scan.durationMs ? `${(scan.durationMs / 1000).toFixed(1)}s` : "Not recorded", "Scan completion duration", "predictions"),
-      metricCard("Data Quality", predictionEngine.predictionEngineHealth?.dataQualityStatus || "Not run", "Separate from engine health", "predictions"),
+      metricCard("Universe Source", universeSource, coverageWarning || `${symbolsAvailable} eligible symbols`, "predictions"),
+      metricCard("Broad Screen", `${screened} screened`, `Target: ${broadTarget}`, "predictions"),
+      metricCard("Deep Analysis", `${deepSelected} analyzed`, `Target: ${deepTarget || "Not recorded"}`, "predictions"),
+      metricCard("Predictions", `${predictionsGenerated} published`, "Published after validation", "predictions"),
+      metricCard("Duration", compactDuration(scan.durationMs || scan.scanDurationSeconds), "Scan completion duration", "predictions"),
+      metricCard("Engine", predictionEngine.predictionEngineHealth?.predictionEngineStatus || predictionEngine.predictionEngineHealth?.status || "Not run", predictionEngine.predictionEngineHealth?.predictionEngineStatusReasons?.join("; ") || "Separate from market data freshness", "predictions"),
+      metricCard("Data Availability", predictionEngine.predictionEngineHealth?.dataAvailability || predictionEngine.predictionEngineHealth?.dataQualityStatus || "Not run", predictionEngine.predictionEngineHealth?.dataQualityClassificationReason || "Availability is separate from engine health", "predictions"),
+      metricCard("Data Freshness", predictionEngine.predictionEngineHealth?.dataFreshness || "Not run", underlyingDataAt ? `Underlying data: ${exactEt(underlyingDataAt)}` : "Underlying data unavailable", "predictions"),
+      metricCard("Provider Fetch", providerFetchedAt ? exactEt(providerFetchedAt) : "Not recorded", "When the app requested provider data", "predictions"),
+      metricCard("Last Regular Close", scan.lastRegularSessionClose || scan.lastMarketClose || session.lastRegularSessionClose || session.lastMarketClose ? exactEt(scan.lastRegularSessionClose || scan.lastMarketClose || session.lastRegularSessionClose || session.lastMarketClose) : "Not recorded", "Regular U.S. equity session", "predictions"),
+      metricCard("Next Regular Open", scan.nextRegularSessionOpen || scan.nextMarketOpen || session.nextRegularSessionOpen || session.nextMarketOpen ? exactEt(scan.nextRegularSessionOpen || scan.nextMarketOpen || session.nextRegularSessionOpen || session.nextMarketOpen) : "Not recorded", "Regular U.S. equity session", "predictions"),
     ].join("");
   }
 }
@@ -1228,7 +1243,7 @@ function renderDashboard() {
   const mostImproved = strongestBy(predictions, (item) => item.scoreChange || item.rankMovement?.change || 0);
   const highestConfidence = strongestBy(predictions, (item) => item.confidenceScore || item.unifiedPredictionScore || 0);
   const engineStatus = health.predictionEngineStatus || health.status || (predictionEngine.updatedAt ? "Healthy" : "Not run");
-  const dataStatus = health.dataQualityStatus || "Not run";
+  const dataStatus = health.dataAvailability || health.dataQualityStatus || "Not run";
   const predictionBias = predictionEngine.marketRegime?.primary || topToday?.marketRegime?.primary || "Neutral";
   const broadMarketTrend = marketIndexData.broadMarketTrend || "Unavailable";
   const trades = settings.congressTrades || [];
@@ -1267,7 +1282,7 @@ function renderDashboard() {
 
   output.predictionEngineGrid.innerHTML = [
     metricCard("Prediction Engine Status", engineStatus, `${Number(health.predictionsGenerated) || predictions.length} predictions generated`, "predictions"),
-    metricCard("Market Data Status", dataStatus, `${Number(health.marketQuotesSucceeded) || 0}/${Number(health.marketQuotesRequested) || 0} quotes succeeded`, "predictions"),
+    metricCard("Market Data Status", dataStatus, `${Number(health.marketQuotesSucceeded) || 0}/${Number(health.marketQuotesRequested) || 0} quotes succeeded; freshness ${health.dataFreshness || "unknown"}`, "predictions"),
     metricCard("Congress Feed", congressFeedStatus.status || "Saved Data Only", congressFeedStatus.userMessage || "Live congressional disclosures are not connected. Predictions are using saved disclosure records.", "congress"),
     metricCard("Policy Feed Status", policySignals.errors?.length ? "Warning" : "Active", `${signals.length} policy/news signals`, "policy"),
     metricCard("Last Scan", predictionEngine.updatedAt ? relativeTime(predictionEngine.scanHealth?.lastSuccessfulScanTimestamp || predictionEngine.updatedAt) : "Not scanned", predictionEngine.updatedAt ? `Completed ${exactEt(predictionEngine.scanHealth?.scanCompletedTimestamp || predictionEngine.updatedAt)}` : "Run scan for latest read", "predictions"),

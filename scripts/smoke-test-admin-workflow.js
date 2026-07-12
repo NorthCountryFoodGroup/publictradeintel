@@ -23,7 +23,7 @@ expect(/renderScanSettingsStatus\(\)/, "Scan universe status display updates");
 expect(/adminHashTargets[\s\S]*"scan-universe":\s*"universe"/, "Scan universe deep link routes correctly");
 expect(/"prediction-engine":\s*"engine"[\s\S]*"market-data":\s*"market"[\s\S]*"system-health":\s*"health"/, "Admin deep links cover core sections");
 expect(/refreshPredictions[\s\S]*\/api\/admin\/refresh-predictions/, "Admin Run Prediction Scan route is connected");
-expect(/renderPredictionHealth\(result\.predictionEngineHealth\)/, "Prediction Engine Health renders after scan");
+expect(/renderPredictionHealth\(result\.predictionEngineHealth,\s*result\.scanHealth\)/, "Prediction Engine Health renders after scan");
 expect(/Prediction Engine Status[\s\S]*Data Quality Status/, "Engine health and market data quality are shown separately");
 expect(/Engine failed tickers[\s\S]*Incomplete market data/, "Failed tickers and incomplete market data are distinct");
 expect(/adminProfileMenuButton\?\.addEventListener\("click"/, "Admin profile menu opens");
