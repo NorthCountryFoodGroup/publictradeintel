@@ -33,6 +33,7 @@ const DEEP_ANALYSIS_AFTER_HOURS_TARGET = 600;
 const PROVIDER_CONCURRENCY_LIMIT = 4;
 const PROVIDER_REQUEST_BUDGET = 2500;
 const MAX_SCAN_DURATION = 180000;
+const MIN_PUBLIC_SYMBOL_SNAPSHOT_COUNT = 2500;
 const MARKET_QUOTE_BATCH_SIZE = 8;
 const MARKET_QUOTE_RETRY_DELAY_MS = 350;
 const SCAN_UNIVERSE_MODES = ["watchlist", "sp500", "nasdaq100", "etfs", "combined", "symbolMaster"];
@@ -77,6 +78,7 @@ const DEFAULT_MODEL_WEIGHTS = {
   changedBy: "system defaults",
 };
 let activePredictionScan = null;
+let lastSymbolUniverseInitialization = null;
 const BUILT_IN_UNIVERSES = {
   sp500: [
     "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "BRK.B", "LLY", "AVGO", "JPM", "TSLA",
@@ -694,21 +696,122 @@ function emergencyPresetUniverseMetadata(tickers, notes = []) {
   };
 }
 
-function packagedSymbolUniverse() {
-  const snapshot = readJson(PUBLIC_SYMBOL_SNAPSHOT_FILE, null);
-  if (!snapshot?.symbols?.length) return null;
-  const metadata = snapshot.snapshotMetadata || snapshot.symbolUniverseMetadata || {};
+function normalizedSnapshotRow(row, index, rejectionReasons) {
+  const rawTicker = row?.canonicalTicker || row?.displayTicker || row?.providerTicker || row?.ticker || row?.symbol || row?.Symbol || "";
+  const canonicalTicker = quoteTickerSymbol(rawTicker);
+  if (!canonicalTicker) {
+    rejectionReasons.missingTicker = (rejectionReasons.missingTicker || 0) + 1;
+    return null;
+  }
+  if (row.active === false || row.eligible === false || row.testIssue === true || row["Test Issue"] === "Y") {
+    rejectionReasons.inactiveOrTestIssue = (rejectionReasons.inactiveOrTestIssue || 0) + 1;
+    return null;
+  }
+  if (/[\^$]/.test(canonicalTicker) || /Warrant|Right|Unit|Preferred|Delisted/i.test(`${row.securityType || ""} ${row.name || ""}`)) {
+    rejectionReasons.unsupportedSecurity = (rejectionReasons.unsupportedSecurity || 0) + 1;
+    return null;
+  }
+  const securityType = row.securityType || row.type || (row.isETF || row.isEtf ? "ETF" : securityTypeForSymbol(canonicalTicker, index));
   return {
-    symbols: snapshot.symbols,
-    symbolUniverseMetadata: {
-      ...metadata,
-      source: metadata.source || "Cached public listing snapshot",
-      refreshStatus: metadata.refreshStatus || "packaged-snapshot",
-      refreshNotes: metadata.refreshNotes || ["Packaged public listing snapshot loaded at startup."],
-      packagedSnapshot: true,
-      emergencyFallbackActive: false,
-    },
+    canonicalTicker,
+    displayTicker: quoteTickerSymbol(row.displayTicker || row.ticker || row.symbol || canonicalTicker),
+    providerTicker: row.providerTicker || yahooTickerSymbol(canonicalTicker),
+    name: row.name || row.companyName || row.company || canonicalTicker,
+    exchange: row.exchange || row.listingExchange || "Unknown",
+    securityType,
+    isEtf: Boolean(row.isETF || row.isEtf || securityType === "ETF"),
+    testIssue: false,
+    active: true,
+    source: row.source || "Cached public listing snapshot",
   };
+}
+
+function snapshotInitializationBase() {
+  return {
+    initializedAt: isoNow(),
+    processCwd: process.cwd(),
+    serverDirname: __dirname,
+    resolvedSnapshotPath: PUBLIC_SYMBOL_SNAPSHOT_FILE,
+    snapshotFileExists: false,
+    snapshotFileSize: 0,
+    snapshotReadSuccess: false,
+    snapshotReadError: null,
+    jsonParseSuccess: false,
+    jsonParseError: null,
+    rawRecordCount: 0,
+    validRecordCount: 0,
+    rejectedRecordCount: 0,
+    rejectionReasons: {},
+    activeUniverseSource: "Failed",
+    finalActiveSymbolCount: 0,
+    fallbackReason: null,
+  };
+}
+
+function packagedSymbolUniverse() {
+  const diagnostics = snapshotInitializationBase();
+  try {
+    const stat = fs.existsSync(PUBLIC_SYMBOL_SNAPSHOT_FILE) ? fs.statSync(PUBLIC_SYMBOL_SNAPSHOT_FILE) : null;
+    diagnostics.snapshotFileExists = Boolean(stat);
+    diagnostics.snapshotFileSize = stat?.size || 0;
+    if (!stat) {
+      diagnostics.fallbackReason = "Packaged snapshot file is missing.";
+      lastSymbolUniverseInitialization = diagnostics;
+      return null;
+    }
+    const text = fs.readFileSync(PUBLIC_SYMBOL_SNAPSHOT_FILE, "utf8");
+    diagnostics.snapshotReadSuccess = true;
+    let snapshot;
+    try {
+      snapshot = JSON.parse(text);
+      diagnostics.jsonParseSuccess = true;
+    } catch (error) {
+      diagnostics.jsonParseError = error.message;
+      diagnostics.fallbackReason = `Packaged snapshot JSON parse failed: ${error.message}`;
+      lastSymbolUniverseInitialization = diagnostics;
+      return null;
+    }
+    const rawRows = Array.isArray(snapshot.symbols) ? snapshot.symbols : Array.isArray(snapshot) ? snapshot : [];
+    diagnostics.rawRecordCount = rawRows.length;
+    const rejectionReasons = {};
+    const normalized = rawRows.map((row, index) => normalizedSnapshotRow(row, index, rejectionReasons)).filter(Boolean);
+    const unique = [...new Map(normalized.map((row) => [row.canonicalTicker, row])).values()];
+    diagnostics.validRecordCount = unique.length;
+    diagnostics.rejectedRecordCount = rawRows.length - unique.length;
+    diagnostics.rejectionReasons = rejectionReasons;
+    if (unique.length < MIN_PUBLIC_SYMBOL_SNAPSHOT_COUNT) {
+      diagnostics.fallbackReason = `Packaged snapshot loaded only ${unique.length} valid symbols.`;
+      lastSymbolUniverseInitialization = diagnostics;
+      return null;
+    }
+    const metadata = snapshot.snapshotMetadata || snapshot.symbolUniverseMetadata || {};
+    diagnostics.activeUniverseSource = "Cached Public Snapshot";
+    diagnostics.finalActiveSymbolCount = unique.length;
+    lastSymbolUniverseInitialization = diagnostics;
+    return {
+      symbols: unique,
+      symbolUniverseMetadata: {
+        ...metadata,
+        source: "Cached Public Snapshot",
+        generatedAt: metadata.generatedAt || metadata.fetchedAt || null,
+        rawSymbolCount: rawRows.length,
+        normalizedSymbolCount: unique.length,
+        eligibleSymbolCount: unique.length,
+        excludedCount: diagnostics.rejectedRecordCount,
+        exclusionReasons: rejectionReasons,
+        refreshStatus: "packaged-snapshot",
+        refreshNotes: metadata.refreshNotes || ["Packaged public symbol snapshot loaded successfully."],
+        packagedSnapshot: true,
+        emergencyFallbackActive: false,
+        initializationDiagnostics: diagnostics,
+      },
+    };
+  } catch (error) {
+    diagnostics.snapshotReadError = error.message;
+    diagnostics.fallbackReason = `Packaged snapshot read failed: ${error.message}`;
+    lastSymbolUniverseInitialization = diagnostics;
+    return null;
+  }
 }
 
 function buildFallbackSymbolUniverse(note = "Official exchange listing refresh unavailable; using generated fixture universe for development/testing.") {
@@ -792,9 +895,17 @@ async function refreshSymbolUniverse() {
 
 function loadSymbolUniverse() {
   const saved = readJson(SYMBOL_UNIVERSE_FILE, null);
-  if (saved?.symbols?.length) return saved;
+  const savedCount = Number(saved?.symbols?.length || saved?.symbolUniverseMetadata?.eligibleSymbolCount || 0);
+  const savedIsEmergency = saved?.symbolUniverseMetadata?.emergencyFallbackActive || saved?.symbolUniverseMetadata?.refreshStatus === "emergency-preset-fallback";
+  if (saved?.symbols?.length && savedCount >= MIN_PUBLIC_SYMBOL_SNAPSHOT_COUNT && !savedIsEmergency) return saved;
   const packaged = packagedSymbolUniverse();
-  if (packaged?.symbols?.length) return packaged;
+  if (packaged?.symbols?.length) {
+    if (!saved?.symbols?.length || savedCount < MIN_PUBLIC_SYMBOL_SNAPSHOT_COUNT || savedIsEmergency) {
+      writeJson(SYMBOL_UNIVERSE_FILE, packaged);
+    }
+    return packaged;
+  }
+  if (saved?.symbols?.length) return saved;
   const fallback = buildFallbackSymbolUniverse("No cached symbol master or packaged snapshot exists yet. This is an explicit emergency fallback, not live exchange coverage.");
   fallback.symbolUniverseMetadata = {
     ...(fallback.symbolUniverseMetadata || {}),
@@ -842,12 +953,86 @@ function configuredUniverseTickers(config) {
   const watchlist = new Map((config.stockIdeas || []).map((stock) => [stock.ticker, stock]));
   const custom = parseTickerList(config.scanSettings?.customTickers);
   const mode = config.scanSettings?.universe || "combined";
+  const broadUniverse = symbolMasterTickers(config);
   const tickers = [
-    ...(mode === "watchlist" ? [...watchlist.keys()] : mode === "symbolMaster" ? symbolMasterTickers(config) : universePresetTickers(mode)),
+    ...(mode === "watchlist"
+      ? [...watchlist.keys()]
+      : mode === "combined"
+        ? [...broadUniverse, ...watchlist.keys(), ...universePresetTickers("combined")]
+        : mode === "symbolMaster"
+          ? broadUniverse
+          : universePresetTickers(mode)),
     ...custom,
   ];
-  if (mode === "combined") tickers.unshift(...watchlist.keys());
   return [...new Set(tickers.filter(Boolean))];
+}
+
+function easternDateParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    weekday: parts.weekday,
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+  };
+}
+
+function marketHolidayName(parts) {
+  const fixed = new Set([`${parts.year}-01-01`, `${parts.year}-07-04`, `${parts.year}-12-25`]);
+  if (fixed.has(parts.dateKey)) return "Market Holiday";
+  return null;
+}
+
+function marketSessionStatus(date = new Date()) {
+  const parts = easternDateParts(date);
+  const minutes = parts.hour * 60 + parts.minute;
+  const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
+  const holiday = marketHolidayName(parts);
+  const status = weekend ? "Closed - Weekend" : holiday ? "Closed - Market Holiday" : minutes < 570 ? "Premarket" : minutes < 960 ? "Open" : "After Hours";
+  const scanMode = status === "Open" ? "Market-hours analysis" : status === "Premarket" || status === "After Hours" ? "After-hours analysis" : "Closed-market analysis";
+  const nextOpen = new Date(date);
+  nextOpen.setHours(9, 30, 0, 0);
+  while (true) {
+    const p = easternDateParts(nextOpen);
+    if (p.weekday !== "Sat" && p.weekday !== "Sun" && !marketHolidayName(p) && (p.dateKey !== parts.dateKey || minutes < 570)) break;
+    nextOpen.setDate(nextOpen.getDate() + 1);
+    nextOpen.setHours(9, 30, 0, 0);
+  }
+  const lastClose = new Date(date);
+  lastClose.setHours(16, 0, 0, 0);
+  while (true) {
+    const p = easternDateParts(lastClose);
+    if (p.weekday !== "Sat" && p.weekday !== "Sun" && !marketHolidayName(p) && (p.dateKey !== parts.dateKey || minutes >= 960)) break;
+    lastClose.setDate(lastClose.getDate() - 1);
+    lastClose.setHours(16, 0, 0, 0);
+  }
+  return {
+    status,
+    scanMode,
+    timezone: "America/New_York",
+    lastMarketClose: lastClose.toISOString(),
+    nextMarketOpen: nextOpen.toISOString(),
+    isClosed: status.startsWith("Closed"),
+    isOpen: status === "Open",
+    message: status.startsWith("Closed")
+      ? "Live intraday market data is unavailable. The scan uses the most recent completed market session, available news, policy data, and saved signals."
+      : status === "Open"
+        ? "Market is open. Quotes may be live, recent, or delayed depending on provider support."
+        : "Market is outside regular hours. The scan uses latest available quotes and saved signals.",
+  };
 }
 
 function buildDiscoveryPipeline(config, quotes = []) {
@@ -855,6 +1040,7 @@ function buildDiscoveryPipeline(config, quotes = []) {
   const watchlist = new Map((config.stockIdeas || []).map((stock) => [stock.ticker, stock]));
   const mode = config.scanSettings?.universe || "combined";
   const discovery = sanitizeDiscoverySettings(config.discoverySettings);
+  const session = marketSessionStatus();
   const unique = configuredUniverseTickers(config);
   const providerSupportedBroadCount = Math.min(unique.length, discovery.broadScreenTarget, discovery.providerRequestBudget);
 
@@ -873,7 +1059,7 @@ function buildDiscoveryPipeline(config, quotes = []) {
       return true;
     });
 
-  const deepLimit = new Date().getHours() >= 9 && new Date().getHours() < 16 ? discovery.marketHoursDeepCount : discovery.afterHoursDeepCount;
+  const deepLimit = session.isOpen ? discovery.marketHoursDeepCount : discovery.afterHoursDeepCount;
   const broadScreenCandidates = eligibleCandidates
     .map((candidate, index) => ({
       ...candidate,
@@ -906,6 +1092,7 @@ function buildDiscoveryPipeline(config, quotes = []) {
     deepAnalysisCandidates,
     providerSupportedBroadCount,
     deepLimit,
+    marketSession: session,
     coverageLimitReasons,
     actualCoverageNote: coverageLimitReasons.length
       ? `Broad discovery screened ${broadScreenCandidates.length} of ${discovery.broadScreenTarget} requested symbols because ${coverageLimitReasons.join(", ")}.`
@@ -941,6 +1128,11 @@ function broadUniverseStats(config, quotes = []) {
     coverageLimitReasons: pipeline.coverageLimitReasons,
     actualCoverageNote: pipeline.actualCoverageNote,
     symbolUniverseMetadata: symbolUniverse.symbolUniverseMetadata || null,
+    activeUniverseSource: symbolUniverse.symbolUniverseMetadata?.source || "Unknown",
+    emergencyFallbackActive: Boolean(symbolUniverse.symbolUniverseMetadata?.emergencyFallbackActive),
+    fallbackReason: symbolUniverse.symbolUniverseMetadata?.initializationDiagnostics?.fallbackReason || symbolUniverse.symbolUniverseMetadata?.lastRefreshError || null,
+    marketSession: pipeline.marketSession,
+    deepAnalysisTarget: pipeline.deepLimit,
   };
 }
 
@@ -1325,16 +1517,17 @@ function symbolUniverseStatus() {
   const metadata = universe.symbolUniverseMetadata || universe.snapshotMetadata || {};
   const eligible = Number(metadata.eligibleSymbolCount || universe.symbols?.length || 0);
   const fallback117 = eligible <= 117 || metadata.refreshStatus === "emergency-preset-fallback";
+  const diagnostics = metadata.initializationDiagnostics || lastSymbolUniverseInitialization || {};
   const activeSource =
     metadata.refreshStatus === "live"
       ? "Live listing source"
       : metadata.refreshStatus === "packaged-snapshot"
-        ? "Cached public snapshot"
+        ? "Cached Public Snapshot"
         : fallback117
           ? "Emergency preset fallback"
-          : metadata.refreshStatus === "stale"
-            ? "Cached public snapshot"
-            : "Cached public snapshot";
+        : metadata.refreshStatus === "stale"
+            ? "Cached Public Snapshot"
+            : "Cached Public Snapshot";
   return {
     status: fallback117 ? "Emergency Preset Fallback" : activeSource,
     activeSource,
@@ -1350,6 +1543,20 @@ function symbolUniverseStatus() {
     lastSuccessfulRefresh: metadata.refreshStatus === "live" ? metadata.fetchedAt : null,
     lastRefreshError: metadata.lastRefreshError || null,
     nextScheduledRefresh: metadata.fetchedAt ? new Date(Date.parse(metadata.fetchedAt) + sanitizeDiscoverySettings(readJson(CONFIG_FILE, {}).discoverySettings).symbolUniverseRefreshHours * 3600000).toISOString() : null,
+    initializationDiagnostics: diagnostics,
+    processCwd: diagnostics.processCwd || null,
+    serverDirname: diagnostics.serverDirname || null,
+    resolvedSnapshotPath: diagnostics.resolvedSnapshotPath || PUBLIC_SYMBOL_SNAPSHOT_FILE,
+    snapshotFileExists: Boolean(diagnostics.snapshotFileExists),
+    snapshotFileSize: Number(diagnostics.snapshotFileSize || 0),
+    snapshotReadSuccess: Boolean(diagnostics.snapshotReadSuccess),
+    jsonParseSuccess: Boolean(diagnostics.jsonParseSuccess),
+    rawRecordCount: Number(diagnostics.rawRecordCount || metadata.rawSymbolCount || eligible || 0),
+    validRecordCount: Number(diagnostics.validRecordCount || eligible || 0),
+    rejectedRecordCount: Number(diagnostics.rejectedRecordCount || metadata.excludedCount || 0),
+    rejectionReasons: diagnostics.rejectionReasons || metadata.exclusionReasons || {},
+    finalActiveSymbolCount: Number(diagnostics.finalActiveSymbolCount || eligible || 0),
+    fallbackReason: diagnostics.fallbackReason || metadata.lastRefreshError || null,
     sourceDetails: fallback117
       ? "Broad-market discovery is unavailable. Results currently use 117 preset symbols."
       : `${activeSource}: ${eligible} eligible symbols available.`,
@@ -3468,7 +3675,22 @@ async function refreshPredictions(options = {}) {
     deepAnalysisMarketHoursTarget: broadStats.deepAnalysisMarketHoursTarget,
     deepAnalysisAfterHoursTarget: broadStats.deepAnalysisAfterHoursTarget,
     activeDeepAnalysisTarget: discoveryPipeline.deepLimit,
+    deepAnalysisTarget: broadStats.deepAnalysisTarget,
     deepAnalysisCandidatesSelected: scanUniverse.length,
+    symbolsAvailable: broadStats.totalSymbolsAvailable,
+    deepCandidatesSelected: scanUniverse.length,
+    marketStatus: broadStats.marketSession?.status || null,
+    marketSession: broadStats.marketSession || null,
+    scanMode: broadStats.marketSession?.scanMode || null,
+    lastMarketClose: broadStats.marketSession?.lastMarketClose || null,
+    nextMarketOpen: broadStats.marketSession?.nextMarketOpen || null,
+    marketDataAgeMs: broadStats.marketSession?.lastMarketClose ? ageMs(broadStats.marketSession.lastMarketClose) : null,
+    universeSource: broadStats.activeUniverseSource || "Unknown",
+    fallbackReason: broadStats.fallbackReason || null,
+    emergencyFallbackActive: Boolean(broadStats.emergencyFallbackActive),
+    coverageWarning: broadStats.emergencyFallbackActive
+      ? "Broad-market discovery is unavailable. Results currently use 117 preset symbols."
+      : null,
     candidatesSuccessfullyAnalyzed: predictions.length,
     predictionsGenerated: predictions.length,
     dataQualitySummary: predictionEngineHealth.dataQualityStatusCounts || {},
@@ -3518,8 +3740,15 @@ async function refreshPredictions(options = {}) {
       totalSymbolsAvailable: broadStats.totalSymbolsAvailable,
       targetSymbolCount: broadStats.targetSymbolCount,
       broadScreenTarget: broadStats.broadScreenTarget,
+      symbolsAvailable: broadStats.totalSymbolsAvailable,
+      symbolsScreened: broadStats.broadScreenedSymbols,
       broadScreenedSymbols: broadStats.broadScreenedSymbols,
+      deepAnalysisTarget: broadStats.deepAnalysisTarget,
+      deepCandidatesSelected: scanUniverse.length,
       deepAnalysisCandidatesSelected: scanUniverse.length,
+      universeSource: broadStats.activeUniverseSource || "Unknown",
+      marketStatus: broadStats.marketSession?.status || null,
+      scanMode: broadStats.marketSession?.scanMode || null,
       providerRequestBudget: broadStats.providerRequestBudget,
       providerConcurrencyLimit: broadStats.providerConcurrencyLimit,
       maxScanDurationMs: broadStats.maxScanDurationMs,
@@ -4061,6 +4290,22 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "POST" && pathname === "/api/admin/refresh-symbol-universe") {
     sendJson(response, 200, await refreshSymbolUniverse());
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/admin/reload-symbol-snapshot") {
+    const packaged = packagedSymbolUniverse();
+    const diagnostics = lastSymbolUniverseInitialization || {};
+    if (!packaged?.symbols?.length || packaged.symbols.length < MIN_PUBLIC_SYMBOL_SNAPSHOT_COUNT || packaged.symbolUniverseMetadata?.emergencyFallbackActive) {
+      sendJson(response, 400, {
+        error: "Packaged symbol snapshot failed validation",
+        diagnostics,
+        status: symbolUniverseStatus(),
+      });
+      return;
+    }
+    writeJson(SYMBOL_UNIVERSE_FILE, packaged);
+    sendJson(response, 200, symbolUniverseStatus());
     return;
   }
 

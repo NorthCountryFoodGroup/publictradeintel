@@ -301,6 +301,8 @@ function renderScanSettingsStatus() {
 function renderSymbolUniverse(universe) {
   if (!symbolUniversePanel) return;
   const metadata = universe?.metadata || universe?.symbolUniverseMetadata || {};
+  const diagnostics = universe?.initializationDiagnostics || metadata.initializationDiagnostics || {};
+  const rejectionReasons = universe?.rejectionReasons || diagnostics.rejectionReasons || metadata.exclusionReasons || {};
   const eligibleCount = Number(universe?.eligibleSymbolCount || metadata.eligibleSymbolCount || universe?.symbols?.length) || 0;
   const notes = metadata.notes || universe?.notes || [];
   symbolUniversePanel.innerHTML = `
@@ -329,11 +331,41 @@ function renderSymbolUniverse(universe) {
         <span>Exchange counts</span>
         <input readonly value="${escapeHtml(Object.entries(universe?.exchangeCounts || metadata.exchangeCounts || {}).map(([name, count]) => `${name}: ${count}`).join("; ") || "Unavailable")}" />
       </label>
+      <label>
+        <span>Snapshot file exists</span>
+        <input readonly value="${universe?.snapshotFileExists || diagnostics.snapshotFileExists ? "Yes" : "No"}" />
+      </label>
+      <label>
+        <span>Snapshot file size</span>
+        <input readonly value="${Number(universe?.snapshotFileSize || diagnostics.snapshotFileSize || 0)} bytes" />
+      </label>
+      <label>
+        <span>Snapshot read / parse</span>
+        <input readonly value="Read: ${universe?.snapshotReadSuccess || diagnostics.snapshotReadSuccess ? "yes" : "no"}; JSON: ${universe?.jsonParseSuccess || diagnostics.jsonParseSuccess ? "yes" : "no"}" />
+      </label>
+      <label>
+        <span>Raw / valid / rejected</span>
+        <input readonly value="${Number(universe?.rawRecordCount || diagnostics.rawRecordCount || 0)} / ${Number(universe?.validRecordCount || diagnostics.validRecordCount || eligibleCount)} / ${Number(universe?.rejectedRecordCount || diagnostics.rejectedRecordCount || 0)}" />
+      </label>
+      <label class="wide-field">
+        <span>Snapshot path</span>
+        <input readonly value="${escapeHtml(universe?.resolvedSnapshotPath || diagnostics.resolvedSnapshotPath || "Not reported")}" />
+      </label>
+      <label class="wide-field">
+        <span>Last universe error</span>
+        <input readonly value="${escapeHtml(universe?.fallbackReason || diagnostics.fallbackReason || universe?.lastRefreshError || metadata.lastRefreshError || "No universe error reported.")}" />
+      </label>
+      <label class="wide-field">
+        <span>Rejected record summary</span>
+        <textarea rows="4" readonly>${escapeHtml(Object.entries(rejectionReasons).map(([reason, count]) => `${reason}: ${count}`).join("\n") || "No rejected records reported.")}</textarea>
+      </label>
       <div class="button-row">
-        <button type="button" id="refreshSymbolUniverse">Refresh symbol universe</button>
+        <button type="button" id="reloadSymbolSnapshot">Reload Packaged Symbol Snapshot</button>
+        <button type="button" id="refreshSymbolUniverse">Refresh Live Listing Source</button>
       </div>
     </article>
   `;
+  document.querySelector("#reloadSymbolSnapshot")?.addEventListener("click", reloadSymbolSnapshot);
   document.querySelector("#refreshSymbolUniverse")?.addEventListener("click", refreshSymbolUniverse);
 }
 
@@ -447,6 +479,25 @@ async function refreshSymbolUniverse() {
     renderSymbolUniverse(result);
     renderScanSettingsStatus();
     scanSettingsMessage.textContent = `Symbol universe refreshed. ${result.symbols?.length || 0} eligible symbols cached.`;
+  } catch (error) {
+    scanSettingsMessage.textContent = error.message;
+  }
+}
+
+async function reloadSymbolSnapshot() {
+  scanSettingsMessage.textContent = "Reloading packaged symbol snapshot...";
+  try {
+    const response = await fetch("/api/admin/reload-symbol-snapshot", {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({}),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Packaged symbol snapshot reload failed.");
+    state.symbolUniverse = result;
+    renderSymbolUniverse(result);
+    renderScanSettingsStatus();
+    scanSettingsMessage.textContent = `Packaged symbol snapshot loaded. ${result.eligibleSymbolCount || result.validRecordCount || 0} eligible symbols available.`;
   } catch (error) {
     scanSettingsMessage.textContent = error.message;
   }
