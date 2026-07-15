@@ -16,9 +16,17 @@ The app records:
 - `saveDuration`
 - `publishDuration`
 - `totalDuration`
+- `totalWallClockTimeMs`
+- `parallelStageTiming`
 
-The displayed duration uses total scan lifecycle time, not only the final save/publish step.
+The displayed duration uses total scan lifecycle wall-clock time, not only the final save/publish step.
+
+## Parallel Stage Timing
+
+Some stage timings are measured independently and can overlap. For example, broad discovery, quote refresh, deep analysis, ranking, and publishing can be recorded as separate durations without implying the user waited for the sum of every stage.
+
+The dashboard labels this as Total Wall Clock Time and Parallel Stage Timing.
 
 ## Consistency Checks
 
-Before scan health is published, metadata checks verify that total duration is not shorter than major stage durations by more than normal overhead. If a mismatch exists, the scan diagnostic is marked inconsistent and raw details remain available in Admin.
+Before scan health is published, metadata checks verify timestamp consistency, universe counts, prediction counts, and availability labels. Parallel stage durations are informational and are not treated as sequential totals.

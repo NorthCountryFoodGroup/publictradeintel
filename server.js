@@ -1323,11 +1323,14 @@ function validateScanMetadata(scanHealth) {
   if (Number.isFinite(scanCompleted) && Number.isFinite(nextOpen) && nextOpen < scanCompleted) errors.push("Next regular market open is before scan completion.");
   if (Number.isFinite(providerFetched) && Number.isFinite(underlyingQuote) && underlyingQuote > providerFetched) errors.push("Underlying quote timestamp is after provider fetch timestamp.");
   if (String(scanHealth.marketStatus || "").startsWith("Closed") && scanHealth.scanMode !== "Closed-Market Analysis") errors.push("Closed market status does not match closed-market scan mode.");
-  if (totalDuration && majorStageTotal > totalDuration * 1.25 + 500) errors.push("Stage durations exceed total scan duration by more than expected overhead.");
+  if (totalDuration && majorStageTotal > totalDuration * 1.25 + 500 && scanHealth.stageTimingMode !== "parallel") {
+    errors.push("Stage durations exceed total scan duration by more than expected overhead.");
+  }
   if (scanHealth.marketDataCoverage?.criticalFieldCoveragePercent !== undefined) {
     const coverage = Number(scanHealth.marketDataCoverage.criticalFieldCoveragePercent);
     const availability = scanHealth.dataAvailability;
-    if (coverage >= 90 && availability === "Unavailable") errors.push("Availability status conflicts with critical-field coverage percentage.");
+    const expectedAvailability = marketDataAvailabilityFromCoverage(coverage);
+    if (availability !== expectedAvailability) errors.push(`Availability status ${availability} conflicts with ${coverage}% critical-field coverage; expected ${expectedAvailability}.`);
     if (coverage < 40 && availability !== "Unavailable") errors.push("Availability status should be unavailable below 40% critical-field coverage.");
   }
   if (scanHealth.marketDataTimestampStats?.representativeUnderlyingTimestamp && scanHealth.latestUnderlyingQuoteAt !== scanHealth.marketDataTimestampStats.representativeUnderlyingTimestamp) {
@@ -1370,6 +1373,23 @@ function yahooTickerSymbol(ticker) {
   return quoteTickerSymbol(ticker).replace(/\./g, "-");
 }
 
+function marketDataAvailabilityFromCoverage(coveragePercent) {
+  const percent = Number(coveragePercent);
+  if (!Number.isFinite(percent) || percent < 40) return "Unavailable";
+  if (percent < 70) return "Degraded";
+  if (percent < 90) return "Partial";
+  if (percent < 95) return "Good";
+  return "Complete";
+}
+
+function marketDataQualityLabel(score) {
+  const value = Number(score);
+  if (value >= 85) return "Excellent";
+  if (value >= 70) return "Good";
+  if (value >= 50) return "Fair";
+  return "Poor";
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1397,6 +1417,8 @@ function emptyProviderDiagnostics() {
   return {
     providers: {},
     stages: [],
+    providerPriority: ["Yahoo", "Alpha Vantage", "Cached snapshot", "Saved quote fallback"],
+    requestLog: [],
     latestError: null,
     requestedSymbols: [],
     returnedSymbols: [],
@@ -1415,17 +1437,22 @@ function emptyProviderDiagnostics() {
 function providerDiagnostic(providerName, fallbackSource = "") {
   return {
     providerName,
-    status: providerName === "Alpha Vantage" && !MARKET_API_KEY ? "Not Configured" : "Healthy",
+    priority: ["Yahoo", "Alpha Vantage", "Cached snapshot", "Saved quote fallback"].indexOf(providerName) + 1 || null,
+    enabled: providerName === "Alpha Vantage" ? Boolean(MARKET_API_KEY) : true,
+    status: providerName === "Alpha Vantage" && !MARKET_API_KEY ? "Disabled" : "Healthy",
     lastSuccessfulRequest: null,
     lastFailedRequest: null,
     symbolsRequested: 0,
     symbolsReturned: 0,
     coveragePercent: 0,
+    averageLatencyMs: 0,
+    successRatePercent: 0,
     medianQuoteAgeMs: null,
     errorCount: 0,
     timeoutCount: 0,
     rateLimitCount: 0,
     parseFailureCount: 0,
+    fallbackUsage: 0,
     latestError: "",
     currentFallbackSource: fallbackSource,
   };
@@ -1473,21 +1500,40 @@ function quoteStageDiagnostic({ name, providerName, operation, startedAt, comple
 
 function updateProviderDiagnostics(diagnostics, quotes = [], errors = [], requestedTickers = []) {
   const providers = diagnostics.providers || {};
-  for (const providerName of ["Alpha Vantage", "Yahoo chart fallback", "Saved market data cache"]) {
-    providers[providerName] ||= providerDiagnostic(providerName, providerName === "Alpha Vantage" ? "Yahoo chart fallback" : providerName === "Yahoo chart fallback" ? "Saved market data cache" : "");
-  }
-  for (const ticker of requestedTickers) {
-    providers["Yahoo chart fallback"].symbolsRequested += 1;
-    if (MARKET_API_KEY) providers["Alpha Vantage"].symbolsRequested += 1;
+  const providerNames = ["Yahoo", "Alpha Vantage", "Cached snapshot", "Saved quote fallback"];
+  for (const providerName of providerNames) {
+    providers[providerName] ||= providerDiagnostic(providerName, providerName === "Yahoo" ? "Alpha Vantage" : providerName === "Alpha Vantage" ? "Cached snapshot" : providerName === "Cached snapshot" ? "Saved quote fallback" : "");
   }
   const quoteAges = [];
-  for (const quote of quotes) {
-    const providerName = /Saved/i.test(quote.marketProvider || "") ? "Saved market data cache" : /Yahoo/i.test(quote.marketProvider || "") ? "Yahoo chart fallback" : "Alpha Vantage";
+  const requestLog = [];
+  const attemptRows = quotes.flatMap((quote) => quote.providerAttemptLog || []);
+  for (const error of errors || []) {
+    if (Array.isArray(error.providerAttemptLog)) attemptRows.push(...error.providerAttemptLog);
+  }
+  for (const attempt of attemptRows) {
+    const providerName = attempt.provider || "Yahoo";
     const provider = providers[providerName] || providerDiagnostic(providerName);
-    provider.symbolsReturned += Number(quote.marketPrice) > 0 ? 1 : 0;
+    provider.symbolsRequested += Number(attempt.symbolCount) || 1;
+    provider.symbolsReturned += attempt.success ? Number(attempt.symbolCount) || 1 : 0;
+    provider.errorCount += attempt.success ? 0 : 1;
+    provider.timeoutCount += attempt.timeout ? 1 : 0;
+    provider.rateLimitCount += attempt.rateLimited ? 1 : 0;
+    provider.parseFailureCount += attempt.parseFailure ? 1 : 0;
+    provider.fallbackUsage += attempt.fallback ? Number(attempt.symbolCount) || 1 : 0;
+    if (attempt.success) provider.lastSuccessfulRequest = attempt.completedAt || attempt.startedAt || isoNow();
+    if (!attempt.success) provider.lastFailedRequest = attempt.completedAt || attempt.startedAt || isoNow();
+    if (attempt.failure) provider.latestError = attempt.failure;
+    provider._latencyTotal = (provider._latencyTotal || 0) + (Number(attempt.latencyMs) || 0);
+    provider._latencyCount = (provider._latencyCount || 0) + 1;
+    providers[providerName] = provider;
+    requestLog.push(attempt);
+  }
+  for (const quote of quotes) {
+    const providerName = quote.providerUsed || (/Cached snapshot/i.test(quote.marketProvider || "") ? "Cached snapshot" : /Saved/i.test(quote.marketProvider || "") ? "Saved quote fallback" : /Alpha/i.test(quote.marketProvider || "") ? "Alpha Vantage" : "Yahoo");
+    const provider = providers[providerName] || providerDiagnostic(providerName);
     if (Number(quote.marketPrice) > 0) provider.lastSuccessfulRequest = quote.providerFetchedAt || quote.marketUpdatedAt || isoNow();
-    if (/fallback/i.test(quote.marketProvider || "")) diagnostics.fallbackUsage += 1;
-    if (/Saved/i.test(quote.marketProvider || "")) diagnostics.cacheUsage += 1;
+    if (quote.fallbackUsed || /fallback/i.test(quote.marketProvider || "")) diagnostics.fallbackUsage += 1;
+    if (quote.marketCacheUsed || /Saved|Cached snapshot/i.test(quote.marketProvider || "")) diagnostics.cacheUsage += 1;
     const age = ageMs(quote.latestUnderlyingQuoteAt || quote.marketUpdatedAt);
     if (Number.isFinite(age)) quoteAges.push(age);
     providers[providerName] = provider;
@@ -1498,7 +1544,8 @@ function updateProviderDiagnostics(diagnostics, quotes = [], errors = [], reques
     diagnostics.timeoutCount += flags.timeout ? 1 : 0;
     diagnostics.parseFailures += flags.parseFailure ? 1 : 0;
     diagnostics.latestError = error.error || diagnostics.latestError;
-    const providerName = flags.rateLimited && MARKET_API_KEY ? "Alpha Vantage" : "Yahoo chart fallback";
+    if (error.providerAttemptLog?.length) continue;
+    const providerName = flags.rateLimited && MARKET_API_KEY ? "Alpha Vantage" : "Yahoo";
     const provider = providers[providerName] || providerDiagnostic(providerName);
     provider.errorCount += 1;
     provider.timeoutCount += flags.timeout ? 1 : 0;
@@ -1510,21 +1557,26 @@ function updateProviderDiagnostics(diagnostics, quotes = [], errors = [], reques
   }
   for (const provider of Object.values(providers)) {
     provider.coveragePercent = percentOf(provider.symbolsReturned, provider.symbolsRequested);
+    provider.successRatePercent = percentOf(provider.symbolsReturned, provider.symbolsRequested);
+    provider.averageLatencyMs = provider._latencyCount ? Math.round(provider._latencyTotal / provider._latencyCount) : 0;
     provider.medianQuoteAgeMs = quoteAges.length ? percentile(quoteAges, 50) : null;
     provider.status =
       provider.providerName === "Alpha Vantage" && !MARKET_API_KEY
-        ? "Not Configured"
+        ? "Disabled"
         : provider.rateLimitCount
           ? "Rate Limited"
-          : provider.errorCount && provider.symbolsReturned
-            ? "Partial"
-            : provider.errorCount && !provider.symbolsReturned
+          : provider.errorCount && !provider.symbolsReturned && provider.symbolsRequested
               ? "Failed"
               : provider.medianQuoteAgeMs !== null && provider.medianQuoteAgeMs > 15 * 60 * 1000
                 ? "Delayed"
                 : "Healthy";
+    delete provider._latencyTotal;
+    delete provider._latencyCount;
   }
   diagnostics.providers = providers;
+  diagnostics.requestLog = requestLog
+    .sort((a, b) => Date.parse(b.completedAt || b.startedAt || "") - Date.parse(a.completedAt || a.startedAt || ""))
+    .slice(0, 500);
   return diagnostics;
 }
 
@@ -1616,23 +1668,156 @@ async function fetchYahooChartQuote(ticker) {
   };
 }
 
+async function attemptQuoteProvider({ provider, symbol, operation, fallback = false, cache = false }) {
+  const startedAt = isoNow();
+  const start = Date.now();
+  try {
+    const quote = await operation();
+    const completedAt = isoNow();
+    return {
+      quote: {
+        ...quote,
+        providerUsed: provider,
+        providerPriorityUsed: ["Yahoo", "Alpha Vantage", "Cached snapshot", "Saved quote fallback"].indexOf(provider) + 1,
+        fallbackUsed: fallback,
+        marketCacheUsed: cache || Boolean(quote.marketCacheUsed),
+        providerAttemptLog: [{
+          request: `${provider} quote ${symbol}`,
+          provider,
+          ticker: symbol,
+          latencyMs: elapsedMs(start),
+          success: true,
+          failure: "",
+          retry: false,
+          cache,
+          fallback,
+          symbolCount: 1,
+          startedAt,
+          completedAt,
+        }],
+      },
+      attempt: null,
+    };
+  } catch (error) {
+    const completedAt = isoNow();
+    const flags = classifyProviderError(error.message || "");
+    const attempt = {
+      request: `${provider} quote ${symbol}`,
+      provider,
+      ticker: symbol,
+      latencyMs: elapsedMs(start),
+      success: false,
+      failure: publicErrorMessage(error, "Provider did not return usable market data."),
+      retry: false,
+      cache,
+      fallback,
+      symbolCount: 1,
+      rateLimited: flags.rateLimited,
+      timeout: flags.timeout,
+      parseFailure: flags.parseFailure,
+      startedAt,
+      completedAt,
+    };
+    return { quote: null, attempt };
+  }
+}
+
 async function fetchMarketQuote(ticker) {
   const symbol = quoteTickerSymbol(ticker);
-  try {
-    return { ...(await fetchAlphaVantageQuote(symbol)), ticker: symbol };
-  } catch (alphaError) {
-    const fallback = await fetchYahooChartQuote(symbol);
-    return {
-      ...fallback,
+  const attempts = [];
+
+  const yahooAttempt = await attemptQuoteProvider({
+    provider: "Yahoo",
+    symbol,
+    operation: () => fetchYahooChartQuote(symbol),
+  });
+  if (yahooAttempt.quote) return { ...yahooAttempt.quote, ticker: symbol };
+  attempts.push(yahooAttempt.attempt);
+
+  if (MARKET_API_KEY) {
+    const alphaAttempt = await attemptQuoteProvider({
+      provider: "Alpha Vantage",
+      symbol,
+      operation: () => fetchAlphaVantageQuote(symbol),
+      fallback: true,
+    });
+    if (alphaAttempt.quote) {
+      return {
+        ...alphaAttempt.quote,
+        ticker: symbol,
+        marketNote: "Yahoo was unavailable; Alpha Vantage quote used as secondary provider.",
+        providerAttemptLog: [...attempts, ...alphaAttempt.quote.providerAttemptLog],
+      };
+    }
+    attempts.push(alphaAttempt.attempt);
+  } else {
+    attempts.push({
+      request: `Alpha Vantage quote ${symbol}`,
+      provider: "Alpha Vantage",
       ticker: symbol,
-      marketProvider: `${fallback.marketProvider} fallback`,
-      marketNote: "Primary quote provider unavailable; fallback quote used.",
+      latencyMs: 0,
+      success: false,
+      failure: "ALPHA_VANTAGE_API_KEY is not configured; provider disabled.",
+      retry: false,
+      cache: false,
+      fallback: true,
+      symbolCount: 1,
+      startedAt: isoNow(),
+      completedAt: isoNow(),
+    });
+  }
+
+  const cached = findCachedQuote(symbol);
+  if (cached?.marketPrice && cached.marketUpdatedAt && ageMs(cached.marketUpdatedAt) <= 30 * 60 * 1000) {
+    const cachedAttempt = await attemptQuoteProvider({
+      provider: "Cached snapshot",
+      symbol,
+      cache: true,
+      fallback: true,
+      operation: async () => ({
+        ...cached,
+        marketProvider: "Cached snapshot",
+        marketCacheUsed: true,
+        fallbackDataUsed: true,
+      }),
+    });
+    return {
+      ...cachedAttempt.quote,
+      ticker: symbol,
+      marketNote: "Live providers unavailable; recent cached snapshot quote used.",
+      providerAttemptLog: [...attempts, ...cachedAttempt.quote.providerAttemptLog],
     };
   }
+
+  if (cached?.marketPrice) {
+    const savedAttempt = await attemptQuoteProvider({
+      provider: "Saved quote fallback",
+      symbol,
+      cache: true,
+      fallback: true,
+      operation: async () => ({
+        ...cached,
+        marketProvider: "Saved quote fallback",
+        marketCacheUsed: true,
+        fallbackDataUsed: true,
+      }),
+    });
+    return {
+      ...savedAttempt.quote,
+      ticker: symbol,
+      marketNote: "Live providers unavailable; older saved quote fallback used.",
+      providerAttemptLog: [...attempts, ...savedAttempt.quote.providerAttemptLog],
+    };
+  }
+
+  const error = new Error(attempts.map((attempt) => `${attempt.provider}: ${attempt.failure}`).join(" | ") || "Quote provider did not return usable market data.");
+  error.providerAttemptLog = attempts;
+  throw error;
 }
 
 async function fetchMarketQuoteWithRetry(ticker, retryCount = 1) {
   let lastError = null;
+  const providerAttemptLog = [];
   for (let attempt = 0; attempt <= retryCount; attempt += 1) {
     try {
       const quote = await fetchMarketQuote(ticker);
@@ -1640,29 +1825,21 @@ async function fetchMarketQuoteWithRetry(ticker, retryCount = 1) {
         ...quote,
         marketQuoteRequested: true,
         marketQuoteRetryCount: attempt,
+        providerAttemptLog: [...providerAttemptLog, ...(quote.providerAttemptLog || []).map((row) => ({ ...row, retry: attempt > 0 }))],
       };
     } catch (error) {
       lastError = error;
+      providerAttemptLog.push(...(error.providerAttemptLog || []).map((row) => ({ ...row, retry: attempt > 0 })));
       if (attempt < retryCount) await delay(MARKET_QUOTE_RETRY_DELAY_MS);
     }
   }
   const symbol = quoteTickerSymbol(ticker);
-  const cached = findCachedQuote(symbol);
-  if (cached?.marketPrice && cached.marketUpdatedAt && ageMs(cached.marketUpdatedAt) <= 30 * 60 * 1000) {
-    return {
-      ...cached,
-      marketQuoteRequested: true,
-      marketQuoteRetryCount: retryCount,
-      marketCacheUsed: true,
-      fallbackDataUsed: true,
-      marketProvider: "Saved market data cache",
-    };
-  }
   return {
     ticker: symbol,
     marketQuoteRequested: true,
     marketQuoteRetryCount: retryCount,
     marketQuoteError: publicErrorMessage(lastError, "Quote provider did not return usable market data."),
+    providerAttemptLog,
   };
 }
 
@@ -1778,7 +1955,11 @@ async function refreshMarketData(config) {
     for (const result of results) {
       quotes.push(result);
       if (!Number(result.marketPrice)) {
-        errors.push({ ticker: result.ticker, error: result.marketQuoteError || "Quote provider did not return usable market data." });
+        errors.push({
+          ticker: result.ticker,
+          error: result.marketQuoteError || "Quote provider did not return usable market data.",
+          providerAttemptLog: result.providerAttemptLog || [],
+        });
       }
     }
   }
@@ -1790,7 +1971,7 @@ async function refreshMarketData(config) {
   updateProviderDiagnostics(diagnostics, quotes, errors, tickers);
   diagnostics.stages.push(quoteStageDiagnostic({
     name: "Deep-analysis quote refresh",
-    providerName: MARKET_API_KEY ? "Alpha Vantage + Yahoo chart fallback" : "Yahoo chart fallback",
+    providerName: MARKET_API_KEY ? "Yahoo + Alpha Vantage secondary + cached fallback" : "Yahoo + cached fallback",
     operation: "Quote refresh for active scan universe",
     startedAt: diagnostics.startedAt,
     completedAt: diagnostics.completedAt,
@@ -3329,11 +3510,14 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     marketCap: Number(stock.marketCap) || null,
     marketChangePercent: stock.marketChangePercent || "",
     marketProvider: stock.marketProvider || "",
+    providerUsed: stock.providerUsed || stock.marketProvider || "",
+    providerPriorityUsed: Number(stock.providerPriorityUsed) || null,
     marketProviderSymbol: stock.marketProviderSymbol || ticker,
     marketQuoteRequested: stock.marketQuoteRequested !== false,
     marketQuoteRetryCount: Number(stock.marketQuoteRetryCount) || 0,
     marketQuoteError: stock.marketQuoteError || "",
     marketCacheUsed: Boolean(stock.marketCacheUsed),
+    fallbackUsed: Boolean(stock.fallbackUsed || fallbackDataUsed),
     fallbackDataUsed,
     staleDataUsed,
     criticalDataComplete,
@@ -3354,8 +3538,20 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     fundamentalsTimestamp: null,
     scanTimestamp,
     freshnessStatus,
+    freshness: freshnessStatus,
+    coverage: criticalDataComplete ? "Complete critical market data" : "Incomplete critical market data",
+    marketDataQuality: {
+      score: dataQuality.score,
+      status: dataQuality.dataQualityStatus,
+      label: marketDataQualityLabel(dataQuality.score),
+      providerUsed: stock.providerUsed || stock.marketProvider || "",
+      fallbackUsed: Boolean(stock.fallbackUsed || fallbackDataUsed),
+      freshness: freshnessStatus,
+      coverage: criticalDataComplete ? "complete" : "partial",
+    },
     freshnessNotes: [
       quoteTimestamp ? `Quote data as of ${quoteTimestamp}.` : "Quote timestamp unavailable.",
+      stock.fallbackUsed || fallbackDataUsed ? "This recommendation includes fallback daily-session data." : "This recommendation is based on live market data where the provider supplied a current quote.",
       freshnessStatus === "stale" ? "Short-term rankings are penalized for stale price data." : "",
     ].filter(Boolean),
     signalContribution,
@@ -3808,12 +4004,10 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
   const providerFailures = dataQualityStatusCounts.failed;
   const providerFailurePercent = quoteRequestedPredictions.length ? Number(((providerFailures / quoteRequestedPredictions.length) * 100).toFixed(1)) : 100;
   const usablePredictionRecords = quoteRequestedPredictions.filter((item) => Number(item.currentPrice) > 0 && item.dataQualityStatus !== "failed").length;
-  const dataAvailability =
-    !predictions.length || providerFailurePercent >= 50
-      ? "Unavailable"
-      : providerFailurePercent === 0 && dataQualityStatusCounts.partial === 0
-      ? "Complete"
-      : "Partial";
+  const coveragePercent = Number(marketDataAnalysis?.marketDataCoverage?.criticalFieldCoveragePercent);
+  const dataAvailability = predictions.length
+    ? marketDataAvailabilityFromCoverage(Number.isFinite(coveragePercent) ? coveragePercent : percentOf(usablePredictionRecords, quoteRequestedPredictions.length))
+    : "Unavailable";
   const freshnessCounts = countBy(quoteRequestedPredictions, "freshnessStatus", ["live", "recent", "delayed", "stale", "unavailable"]);
   const dominantFreshness = Object.entries(freshnessCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "unavailable";
   const dataFreshness =
@@ -3857,11 +4051,16 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
     dataQualityStatus,
     dataAvailability: finalDataAvailability,
     dataFreshness: finalDataFreshness,
+    marketDataQualityScore: marketDataAnalysis?.marketDataQualityScore?.score ?? null,
+    marketDataQualityLabel: marketDataAnalysis?.marketDataQualityScore?.label || "Unknown",
+    marketDataQualityComponents: marketDataAnalysis?.marketDataQualityScore?.components || {},
     dataQualityClassificationReason,
     dataQualityThresholds: {
-      completeProviderFailurePercent: 0,
-      unavailableProviderFailurePercent: 50,
-      partialWhenMissingFieldsOrAnyProviderFailure: true,
+      completeCriticalFieldCoveragePercent: 95,
+      goodCriticalFieldCoveragePercent: 90,
+      partialCriticalFieldCoveragePercent: 70,
+      degradedCriticalFieldCoveragePercent: 40,
+      unavailableCriticalFieldCoveragePercentBelow: 40,
       freshnessLiveHours: 1,
       freshnessRecentHours: 24,
       freshnessDelayedHours: 72,
@@ -3923,6 +4122,62 @@ function freshnessBucket(ageMsValue, sessionStatus = "") {
   return "stale";
 }
 
+function providerHealthScore(providerDiagnostics) {
+  const providers = Object.values(providerDiagnostics?.providers || {}).filter((provider) => provider.enabled !== false && provider.status !== "Disabled");
+  if (!providers.length) return 20;
+  const scores = providers.map((provider) => {
+    if (provider.status === "Healthy") return 100;
+    if (provider.status === "Delayed") return 75;
+    if (provider.status === "Rate Limited") return 45;
+    if (provider.status === "Failed") return 20;
+    return 60;
+  });
+  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+}
+
+function buildMarketDataQualityScore({ marketDataCoverage, freshnessDistribution, providerDiagnostics }) {
+  const coverageScore = clamp(Number(marketDataCoverage?.criticalFieldCoveragePercent) || 0);
+  const total = Number(marketDataCoverage?.symbolsRequested) || Number(marketDataCoverage?.symbolsReturned) || 0;
+  const freshnessScore = total
+    ? clamp((
+        (Number(freshnessDistribution?.liveCount) || 0) * 100 +
+        (Number(freshnessDistribution?.recentCount) || 0) * 85 +
+        (Number(freshnessDistribution?.delayedCount) || 0) * 55 +
+        (Number(freshnessDistribution?.staleCount) || 0) * 20
+      ) / total)
+    : 0;
+  const healthScore = providerHealthScore(providerDiagnostics);
+  const fallbackPercent = percentOf(Number(marketDataCoverage?.symbolsUsingFallback) || 0, total);
+  const fallbackScore = clamp(100 - fallbackPercent);
+  const missingCriticalPercent = percentOf(Number(marketDataCoverage?.symbolsMissingCriticalFields) || 0, total);
+  const missingCriticalScore = clamp(100 - missingCriticalPercent);
+  const score = Math.round(
+    coverageScore * 0.35 +
+    freshnessScore * 0.25 +
+    healthScore * 0.2 +
+    fallbackScore * 0.1 +
+    missingCriticalScore * 0.1
+  );
+  return {
+    score,
+    label: marketDataQualityLabel(score),
+    components: {
+      quoteCoverageScore: Math.round(coverageScore),
+      freshnessScore: Math.round(freshnessScore),
+      providerHealthScore: healthScore,
+      fallbackUsageScore: Math.round(fallbackScore),
+      missingCriticalFieldsScore: Math.round(missingCriticalScore),
+    },
+    weighting: {
+      quoteCoverage: 35,
+      freshness: 25,
+      providerHealth: 20,
+      fallbackUsage: 10,
+      missingCriticalFields: 10,
+    },
+  };
+}
+
 function buildMarketDataCoverage({ predictions, providerDiagnostics, marketSession, requestedCount }) {
   const rows = predictions || [];
   const total = rows.length;
@@ -3941,16 +4196,7 @@ function buildMarketDataCoverage({ predictions, providerDiagnostics, marketSessi
     unavailableCount: Math.max(0, total - quoteAges.length),
   };
   const withCriticalPercent = percentOf(criticalComplete, total);
-  const dataAvailability =
-    total === 0 || withCriticalPercent < 40
-      ? "Unavailable"
-      : withCriticalPercent < 70
-        ? "Degraded"
-        : withCriticalPercent < 90
-          ? "Partial"
-          : withCriticalPercent < 95
-            ? "Good"
-            : "Complete";
+  const dataAvailability = total === 0 ? "Unavailable" : marketDataAvailabilityFromCoverage(withCriticalPercent);
   const medianQuoteAgeMs = percentile(quoteAges, 50);
   const p90QuoteAgeMs = percentile(quoteAges, 90);
   const livePercent = percentOf(freshnessDistribution.liveCount, total);
@@ -3990,6 +4236,7 @@ function buildMarketDataCoverage({ predictions, providerDiagnostics, marketSessi
   for (const [key, value] of Object.entries({ ...marketDataCoverage, ...freshnessDistribution })) {
     if (typeof value === "number") marketDataCoverage[`${key}Percent`] = percentOf(value, total || marketDataCoverage.symbolsRequested);
   }
+  const marketDataQualityScore = buildMarketDataQualityScore({ marketDataCoverage, freshnessDistribution, providerDiagnostics });
   return {
     marketDataCoverage,
     freshnessDistribution: {
@@ -4014,6 +4261,7 @@ function buildMarketDataCoverage({ predictions, providerDiagnostics, marketSessi
     },
     dataAvailability,
     dataFreshness,
+    marketDataQualityScore,
     criticalDetails,
     classificationReason:
       `${criticalComplete} of ${total} analyzed symbols had critical market data (${withCriticalPercent}%). ` +
@@ -4322,6 +4570,10 @@ async function refreshPredictions(options = {}) {
     dataAvailability: predictionEngineHealth.dataAvailability,
     dataFreshness: predictionEngineHealth.dataFreshness,
     dataQualityStatus: predictionEngineHealth.dataQualityStatus,
+    marketDataQualityScore: marketDataAnalysis.marketDataQualityScore?.score ?? null,
+    marketDataQualityLabel: marketDataAnalysis.marketDataQualityScore?.label || "Unknown",
+    marketDataQualityComponents: marketDataAnalysis.marketDataQualityScore?.components || {},
+    marketDataQualityWeighting: marketDataAnalysis.marketDataQualityScore?.weighting || {},
     marketDataCoverage: marketDataAnalysis.marketDataCoverage,
     freshnessDistribution: marketDataAnalysis.freshnessDistribution,
     marketDataTimestampStats: marketDataAnalysis.timestampStats,
@@ -4340,8 +4592,8 @@ async function refreshPredictions(options = {}) {
     lastSuccessfulScan: updatedAt,
     dataAsOf: representativeUnderlyingQuoteAt,
     providerCapacity: {
-      providerName: MARKET_API_KEY ? "Alpha Vantage + Yahoo fallback" : "Yahoo fallback / cached data",
-      estimatedRequestLimit: MARKET_API_KEY ? "Depends on Alpha Vantage plan" : "No authenticated provider limit configured",
+      providerName: MARKET_API_KEY ? "Yahoo + Alpha Vantage secondary + cached fallback" : "Yahoo + cached fallback",
+      estimatedRequestLimit: MARKET_API_KEY ? "Yahoo public endpoint plus Alpha Vantage plan limits" : "No authenticated secondary provider limit configured",
       requestsUsedLatestScan: Number(options.marketRequestsUsed) || scanUniverse.length,
       configuredRequestBudget: broadStats.providerRequestBudget,
       configuredConcurrencyLimit: broadStats.providerConcurrencyLimit,
@@ -4351,6 +4603,11 @@ async function refreshPredictions(options = {}) {
       rateLimitWarnings: warnings.filter((warning) => /rate|limit|api key|provider/i.test(warning)),
     },
     stageDurations,
+    stageTimingMode: "parallel",
+    stageTimingLabel: "Parallel Stage Timing",
+    totalWallClockTimeMs: Number.isFinite(durationMs) ? durationMs : 0,
+    stageTimingNote: "Stage timings are measured independently and may overlap. Total duration is wall-clock time, not the sum of stage durations.",
+    parallelStageTiming: { ...stageDurations },
     totalDuration: Number.isFinite(durationMs) ? durationMs : 0,
     broadScreen: broadStats,
     symbolUniverseMetadata: broadStats.symbolUniverseMetadata,
@@ -4445,6 +4702,7 @@ async function refreshPredictions(options = {}) {
     stageDurations.saveDuration = elapsedMs(saveStartedAt);
     stageDurations.publishDuration = Math.max(0, Number(stageDurations.saveDuration) || 0);
     result.scanHealth.stageDurations = stageDurations;
+    result.scanHealth.parallelStageTiming = { ...stageDurations };
   } catch (error) {
     const wrapped = new Error(`Database write failed: ${error.message}`);
     wrapped.code = "DATABASE_WRITE_FAILED";

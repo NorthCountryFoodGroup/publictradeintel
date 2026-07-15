@@ -221,8 +221,10 @@ function assertPredictionEngineHealth(health) {
   assert.ok(health, "predictionEngineHealth exists");
   assert.ok(["Healthy", "Warning", "Failed"].includes(health.status), "health status exists");
   assert.ok(["Healthy", "Failed"].includes(health.predictionEngineStatus), "prediction engine status exists");
-  assert.ok(["Complete", "Partial", "Unavailable"].includes(health.dataQualityStatus), "data quality status exists");
-  assert.ok(["Complete", "Partial", "Unavailable"].includes(health.dataAvailability), "data availability exists");
+  assert.ok(["Complete", "Good", "Partial", "Degraded", "Unavailable"].includes(health.dataQualityStatus), "data quality status exists");
+  assert.ok(["Complete", "Good", "Partial", "Degraded", "Unavailable"].includes(health.dataAvailability), "data availability exists");
+  assert.ok(Number.isFinite(Number(health.marketDataQualityScore)), "market data quality score exists");
+  assert.ok(["Excellent", "Good", "Fair", "Poor"].includes(health.marketDataQualityLabel), "market data quality label exists");
   assert.ok(["Live", "Recent", "Delayed", "Stale", "Unavailable"].includes(health.dataFreshness), "data freshness exists");
   assert.ok(health.dataQualityThresholds, "data quality thresholds exist");
   assert.ok(typeof health.dataQualityClassificationReason === "string", "data quality classification reason exists");

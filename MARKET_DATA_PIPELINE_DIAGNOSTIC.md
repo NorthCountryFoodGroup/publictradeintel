@@ -11,13 +11,17 @@ Public Trade Intel now records market-data diagnostics for each completed predic
 - Volume: tracked through `marketVolume`.
 - Market cap: optional; missing market cap does not fail market-data availability.
 - Index/proxy requests: tracked separately in market-index diagnostics.
-- Provider fallback request: Alpha Vantage is attempted when configured, Yahoo chart fallback is used when primary quotes fail or no key exists.
+- Provider priority request: Yahoo is attempted first, Alpha Vantage is attempted second when configured, cached snapshot is attempted third, and saved quote fallback is attempted fourth.
 - Cached-data retrieval: fresh saved quotes may be reused and marked as cache/fallback usage.
 - Final normalized object: each prediction stores provider, price, volume, fetch time, underlying timestamp, fallback/cache flags, and missing-field lists.
 
 ## Recorded Fields
 
 For each scan, `scanHealth.providerHealth.stages` records provider name, operation, symbols requested, returned, missing, latency, retry count, rate-limit responses, timeout count, parse failures, fallback usage, cache usage, and oldest/newest underlying timestamps.
+
+`scanHealth.providerHealth.requestLog` records provider-level attempts newest-first with request, provider, latency, success, failure, retry, cache, fallback, and symbol count.
+
+`scanHealth.marketDataQualityScore` is a 0-100 score combining quote coverage, freshness, provider health, fallback usage, and missing critical fields.
 
 ## Current Root Cause Pattern
 

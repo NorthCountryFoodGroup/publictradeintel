@@ -514,8 +514,18 @@ function renderPredictionHealth(health, scanHealth = null) {
   const averages = health.averageUnifiedPredictionScoreByTimeframe || {};
   const checks = health.rankingSanityChecks || {};
   const providerRows = Object.values(scanHealth?.providerHealth?.providers || {});
+  const providerRequestLog = scanHealth?.providerHealth?.requestLog || [];
   const coverage = scanHealth?.marketDataCoverage || {};
   const timestampStats = scanHealth?.marketDataTimestampStats || {};
+  const providerScorecard = providerRows.map((provider) => `
+        <div class="mini-stat provider-status-${escapeHtml(String(provider.status || "unknown").toLowerCase().replace(/\s+/g, "-"))}">
+          <span>${escapeHtml(provider.providerName || "Provider")}</span>
+          <strong>${escapeHtml(provider.status || "Unknown")}</strong>
+          <small>Coverage ${Number(provider.coveragePercent) || 0}% | Success ${Number(provider.successRatePercent) || 0}% | Latency ${Number(provider.averageLatencyMs) || 0}ms</small>
+          <small>Timeouts ${Number(provider.timeoutCount) || 0} | Rate limits ${Number(provider.rateLimitCount) || 0} | Fallback ${Number(provider.fallbackUsage) || 0}</small>
+          <small>Last success ${provider.lastSuccessfulRequest ? new Date(provider.lastSuccessfulRequest).toLocaleString() : "n/a"}</small>
+          <small>Last failure ${provider.lastFailedRequest ? new Date(provider.lastFailedRequest).toLocaleString() : "n/a"}</small>
+        </div>`).join("");
   predictionHealthPanel.innerHTML = `
     <article class="editor-row stock-editor-row">
       <label>
@@ -529,6 +539,10 @@ function renderPredictionHealth(health, scanHealth = null) {
       <label>
         <span>Data Availability</span>
         <input readonly value="${escapeHtml(health.dataAvailability || "Unknown")}" />
+      </label>
+      <label>
+        <span>Market Data Quality Score</span>
+        <input readonly value="${Number(health.marketDataQualityScore ?? scanHealth?.marketDataQualityScore) || 0}/100 (${escapeHtml(health.marketDataQualityLabel || scanHealth?.marketDataQualityLabel || "Unknown")})" />
       </label>
       <label>
         <span>Data Freshness</span>
@@ -575,19 +589,30 @@ function renderPredictionHealth(health, scanHealth = null) {
         <input readonly value="${escapeHtml(Object.entries(checks).map(([name, passed]) => `${name}: ${passed ? "pass" : "fail"}`).join("; "))}" />
       </label>
       <details class="wide-field" open>
+        <summary>Provider Scorecard</summary>
+        <div class="metric-grid">
+          ${providerScorecard || `<div class="mini-stat"><span>Provider</span><strong>No provider data</strong><small>Run a scan to populate the scorecard.</small></div>`}
+        </div>
+      </details>
+      <details class="wide-field" open>
         <summary>Market Data Provider Health</summary>
         <textarea rows="10" readonly>${escapeHtml(providerRows.map((provider) => [
           `Provider name: ${provider.providerName}`,
           `Status: ${provider.status}`,
+          `Priority: ${provider.priority || "n/a"}`,
+          `Enabled: ${provider.enabled !== false}`,
           `Last successful request: ${provider.lastSuccessfulRequest || "n/a"}`,
           `Last failed request: ${provider.lastFailedRequest || "n/a"}`,
           `Symbols requested: ${Number(provider.symbolsRequested) || 0}`,
           `Symbols returned: ${Number(provider.symbolsReturned) || 0}`,
           `Coverage percentage: ${Number(provider.coveragePercent) || 0}%`,
+          `Success rate: ${Number(provider.successRatePercent) || 0}%`,
+          `Average latency: ${Number(provider.averageLatencyMs) || 0}ms`,
           `Median quote age: ${provider.medianQuoteAgeMs === null || provider.medianQuoteAgeMs === undefined ? "n/a" : `${Math.round(provider.medianQuoteAgeMs / 60000)} minutes`}`,
           `Error count: ${Number(provider.errorCount) || 0}`,
           `Timeout count: ${Number(provider.timeoutCount) || 0}`,
           `Rate-limit count: ${Number(provider.rateLimitCount) || 0}`,
+          `Fallback usage: ${Number(provider.fallbackUsage) || 0}`,
           `Latest error: ${provider.latestError || "none"}`,
           `Current fallback source: ${provider.currentFallbackSource || "none"}`,
         ].join("\n")).join("\n\n") || "No provider health data recorded yet.")}</textarea>
@@ -595,6 +620,21 @@ function renderPredictionHealth(health, scanHealth = null) {
           <button type="button" id="testMarketProviderConnection">Test Connection</button>
           <button type="button" id="retryFailedMarketSymbols">Retry Failed Symbols</button>
         </div>
+      </details>
+      <details class="wide-field">
+        <summary>Provider Request Log</summary>
+        <textarea rows="10" readonly>${escapeHtml(providerRequestLog.slice(0, 80).map((row) => [
+          `Request: ${row.request || row.ticker || "quote"}`,
+          `Provider: ${row.provider || "unknown"}`,
+          `Latency: ${Number(row.latencyMs) || 0}ms`,
+          `Success: ${Boolean(row.success)}`,
+          `Failure: ${row.failure || "none"}`,
+          `Retry: ${Boolean(row.retry)}`,
+          `Cache: ${Boolean(row.cache)}`,
+          `Fallback: ${Boolean(row.fallback)}`,
+          `Symbol count: ${Number(row.symbolCount) || 1}`,
+          `Completed: ${row.completedAt || "n/a"}`,
+        ].join(" | ")).join("\n") || "No provider request log recorded yet.")}</textarea>
       </details>
       <details class="wide-field">
         <summary>Market data coverage diagnostics</summary>

@@ -24,6 +24,36 @@ Freshness is based on the distribution of underlying market timestamps, not prov
 
 Each scan stores median quote age, 90th-percentile quote age, oldest quote age, newest quote age, percentage within live threshold, and percentage within recent threshold.
 
+## Market Data Quality Score
+
+The primary market-data quality indicator is a 0-100 score:
+
+- Quote coverage: 35%
+- Freshness: 25%
+- Provider health: 20%
+- Fallback usage: 10%
+- Missing critical fields: 10%
+
+Labels:
+
+- Excellent: 85-100
+- Good: 70-84
+- Fair: 50-69
+- Poor: below 50
+
+This score is separate from prediction-engine health. The prediction engine can be healthy while market data quality is fair or partial.
+
+## Provider Priority
+
+Quote provider priority is:
+
+1. Yahoo
+2. Alpha Vantage, only when `ALPHA_VANTAGE_API_KEY` is configured and Yahoo does not return usable data
+3. Cached snapshot
+4. Saved quote fallback
+
+Each provider reports Healthy, Delayed, Rate Limited, Failed, or Disabled.
+
 ## VIX Handling
 
 VIX is supplemental. If VIX fails, the app shows Volatility Index Unavailable and logs the provider error. Missing VIX does not make market data unavailable and does not stop stock prediction processing.

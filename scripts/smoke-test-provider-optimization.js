@@ -1,0 +1,44 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const root = path.resolve(__dirname, "..");
+const server = fs.readFileSync(path.join(root, "server.js"), "utf8");
+const admin = fs.readFileSync(path.join(root, "admin.js"), "utf8");
+const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
+const diagnostic = fs.readFileSync(path.join(root, "ALPHA_VANTAGE_DIAGNOSTIC.md"), "utf8");
+
+assert.match(server, /function marketDataAvailabilityFromCoverage/, "availability thresholds should be centralized");
+assert.match(server, /percent < 40[\s\S]*"Unavailable"/, "unavailable should be below 40% coverage");
+assert.match(server, /percent < 70[\s\S]*"Degraded"/, "degraded threshold should exist");
+assert.match(server, /percent < 90[\s\S]*"Partial"/, "partial threshold should classify 70-89.99%");
+assert.match(server, /percent < 95[\s\S]*"Good"/, "good threshold should classify 90-94.99%");
+assert.match(server, /return "Complete"/, "complete threshold should classify >=95%");
+assert.match(server, /providerPriority: \["Yahoo", "Alpha Vantage", "Cached snapshot", "Saved quote fallback"\]/, "provider priority should be explicit");
+assert.match(server, /provider: "Yahoo"[\s\S]*fetchYahooChartQuote/, "Yahoo should be attempted first");
+assert.match(server, /provider: "Alpha Vantage"[\s\S]*fetchAlphaVantageQuote/, "Alpha Vantage should be secondary");
+assert.match(server, /provider: "Cached snapshot"/, "cached snapshot provider should exist");
+assert.match(server, /provider: "Saved quote fallback"/, "saved quote fallback provider should exist");
+assert.match(server, /requestLog/, "provider request log should be tracked");
+assert.match(server, /marketDataQualityScore/, "market-data quality score should be produced");
+assert.match(server, /quoteCoverage: 35/, "quality score should include quote coverage weighting");
+assert.match(server, /freshness: 25/, "quality score should include freshness weighting");
+assert.match(server, /providerHealth: 20/, "quality score should include provider health weighting");
+assert.match(server, /fallbackUsage: 10/, "quality score should include fallback usage weighting");
+assert.match(server, /missingCriticalFields: 10/, "quality score should include missing critical fields weighting");
+assert.match(server, /stageTimingMode: "parallel"/, "scan health should label stage timing as parallel");
+assert.match(server, /totalWallClockTimeMs/, "scan health should expose wall-clock time");
+assert.match(server, /providerUsed/, "predictions should include provider used");
+assert.match(server, /fallbackUsed/, "predictions should include fallback used");
+assert.match(server, /freshness:/, "predictions should include freshness");
+assert.match(server, /coverage:/, "predictions should include coverage");
+assert.match(admin, /Provider Scorecard/, "admin should show provider scorecard");
+assert.match(admin, /Provider Request Log/, "admin should show provider request log");
+assert.match(app, /Total Wall Clock Time/, "dashboard should label wall-clock time");
+assert.match(app, /Parallel Stage Timing/, "dashboard should label parallel stage timing");
+assert.match(app, /This recommendation includes fallback daily-session data/, "Trade Brief should explain fallback data");
+assert.match(app, /This recommendation is based on live market data/, "Trade Brief should explain live data");
+assert.match(diagnostic, /Alpha Vantage is no longer treated as the primary quote source/, "diagnostic should describe Alpha Vantage role");
+assert.match(diagnostic, /Keep Alpha Vantage as an optional secondary provider/, "diagnostic should include recommendation");
+
+console.log("Provider optimization smoke test passed.");

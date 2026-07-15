@@ -14,7 +14,10 @@ assert.match(server, /rankingDuration/, "scan should time ranking");
 assert.match(server, /validationDuration/, "scan should time validation");
 assert.match(server, /saveDuration/, "scan should time saving");
 assert.match(server, /publishDuration/, "scan should time publishing");
-assert.match(server, /Stage durations exceed total scan duration/, "metadata consistency should catch duration mismatch");
+assert.match(server, /stageTimingMode: "parallel"/, "scan health should clarify that stages can overlap");
+assert.match(server, /totalWallClockTimeMs/, "scan health should expose total wall-clock time");
 assert.match(app, /durationBreakdown/, "UI should display duration breakdown");
+assert.match(app, /Total Wall Clock Time/, "UI should label total duration as wall-clock time");
+assert.match(app, /Parallel Stage Timing/, "UI should label parallel stage timing");
 
 console.log("Scan duration smoke test passed.");

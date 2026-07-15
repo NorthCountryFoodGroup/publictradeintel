@@ -1210,7 +1210,7 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
     const coverage = scan.marketDataCoverage || {};
     const timestampStats = scan.marketDataTimestampStats || {};
     const providerRows = Object.values(scan.providerHealth?.providers || {});
-    const mainProvider = providerRows.find((provider) => provider.status && provider.status !== "Not Configured") || providerRows[0] || {};
+    const mainProvider = providerRows.find((provider) => provider.status && provider.status !== "Disabled") || providerRows[0] || {};
     const fallbackCount = Number(coverage.symbolsUsingFallback) || 0;
     const availabilityLabel = predictionEngine.predictionEngineHealth?.dataAvailability || scan.dataAvailability || "Not run";
     const freshnessLabel = predictionEngine.predictionEngineHealth?.dataFreshness || scan.dataFreshness || "Not run";
@@ -1232,9 +1232,10 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
       metricCard("Broad Screen", `${screened} screened`, `Target: ${broadTarget}`, "predictions"),
       metricCard("Deep Analysis", `${deepSelected} analyzed`, `Target: ${deepTarget || "Not recorded"}`, "predictions"),
       metricCard("Predictions", `${predictionsGenerated} published`, "Published after validation", "predictions"),
-      metricCard("Duration", compactDuration(scan.totalDuration || scan.durationMs || scan.scanDurationSeconds), durationBreakdown || "Scan completion duration", "predictions"),
+      metricCard("Total Wall Clock Time", compactDuration(scan.totalWallClockTimeMs || scan.totalDuration || scan.durationMs || scan.scanDurationSeconds), durationBreakdown ? `Parallel Stage Timing: ${durationBreakdown}` : "Parallel stage timing unavailable", "predictions"),
       metricCard("Engine", predictionEngine.predictionEngineHealth?.predictionEngineStatus || predictionEngine.predictionEngineHealth?.status || "Not run", predictionEngine.predictionEngineHealth?.predictionEngineStatusReasons?.join("; ") || "Separate from market data freshness", "predictions"),
       metricCard("Market Data Availability", availabilityLabel, criticalReady, "predictions"),
+      metricCard("Market Data Quality", `${Number(scan.marketDataQualityScore ?? predictionEngine.predictionEngineHealth?.marketDataQualityScore) || 0}/100`, scan.marketDataQualityLabel || predictionEngine.predictionEngineHealth?.marketDataQualityLabel || "Quality score unavailable", "predictions"),
       metricCard("Market Data Freshness", freshnessLabel, freshnessReason, "predictions"),
       metricCard("Provider Status", mainProvider.status || "Unknown", mainProvider.providerName ? `${mainProvider.providerName}: ${Number(mainProvider.coveragePercent) || 0}% coverage` : "Provider diagnostics unavailable", "predictions"),
       metricCard("Fallback Usage", `${fallbackCount} symbols`, coverage.symbolsUsingCache ? `${coverage.symbolsUsingCache} cache-backed symbols` : "Latest provider data used where available", "predictions"),
@@ -2502,6 +2503,9 @@ function renderTradeBrief() {
     ? dollarsPrecise(Number(item.currentPrice) * (1 + Number(item.forecasts.thirtyDay.expectedUpside) / 100))
     : "";
   const relatedAlerts = alertHistory.filter((alert) => normalizeTicker(alert.ticker) === normalizeTicker(item.ticker)).slice(0, 5);
+  const marketDataSourceNote = item.fallbackUsed || item.fallbackDataUsed
+    ? "This recommendation includes fallback daily-session data."
+    : "This recommendation is based on live market data where the provider supplied a current quote.";
 
   output.tradeBriefPanel.innerHTML = `
     <article class="trade-brief-report">
@@ -2527,6 +2531,7 @@ function renderTradeBrief() {
         <div><span>Prediction Timeframe</span><strong>${escapeHtml(item.bestTimeframe || item.timeframe || predictionModelTitle(model))}</strong></div>
         <div><span>Market Trend</span><strong>${escapeHtml(technical.trendDirection || item.marketRegime?.primary || "Calculating")}</strong></div>
         <div><span>Company</span><strong>${escapeHtml(item.name || item.company || item.ticker)}</strong></div>
+        <div><span>Market Data</span><strong>${escapeHtml(item.marketDataQuality?.label || item.dataQualityStatus || "Calculating")}</strong><small>${escapeHtml(marketDataSourceNote)}</small></div>
       </div>
 
       <div class="brief-report-grid">
