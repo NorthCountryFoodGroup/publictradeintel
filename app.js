@@ -457,6 +457,24 @@ function metricCard(label, value, note = "", target = "") {
   `;
 }
 
+function completedScanHealth() {
+  return predictionEngine.scanHealth?.scanCompletedAt || predictionEngine.scanHealth?.scanStatus === "completed"
+    ? predictionEngine.scanHealth
+    : {};
+}
+
+function scanUniverseSourceLabel(scan) {
+  if (!scan?.scanCompletedAt && scan?.scanStatus !== "completed") return "No completed scan";
+  return scan.universeSourceStatus || scan.universeSource || "Unknown";
+}
+
+function scanUniverseSourceNote(scan) {
+  if (!scan?.scanCompletedAt && scan?.scanStatus !== "completed") return "Run a scan to lock the universe source.";
+  if (scan.summaryWarning) return scan.summaryWarning;
+  if (scan.coverageWarning) return scan.coverageWarning;
+  return `${Number(scan.symbolsAvailable || scan.totalSymbolsAvailable) || 0} symbols in completed scan; emergency fallback ${scan.emergencyPresetUsed || scan.emergencyFallbackActive ? "active" : "inactive"}`;
+}
+
 function averageUnifiedScore(rows) {
   const values = (rows || []).map((item) => Number(item.unifiedPredictionScore || item.aiOpportunityScore)).filter(Number.isFinite);
   return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
@@ -1172,7 +1190,7 @@ function renderDashboardBrief({ predictions, marketMood, signals, positiveSignal
 }
 
 function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0) {
-  const scan = predictionEngine.scanHealth || {};
+  const scan = completedScanHealth();
   if (output.scanProgressStage) output.scanProgressStage.textContent = stage;
   if (output.scanProgressBar) output.scanProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
   if (output.scanProgressMessage) {
@@ -1194,17 +1212,17 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
     }
   }
   if (output.scanProgressSummaryGrid) {
-    const session = scan.marketSession || predictionEngine.scanUniverse?.marketSession || {};
-    const marketStatus = scan.marketStatus || predictionEngine.scanUniverse?.marketStatus || session.status || "Unknown";
-    const scanMode = scan.scanMode || predictionEngine.scanUniverse?.scanMode || session.scanMode || "Standard analysis";
-    const universeSource = scan.universeSourceStatus || scan.universeSource || predictionEngine.scanUniverse?.universeSourceStatus || predictionEngine.scanUniverse?.universeSource || "Unknown";
-    const broadTarget = scan.broadScreenTarget || predictionEngine.scanUniverse?.broadScreenTarget || scan.targetSymbolCount || 2500;
-    const deepTarget = scan.deepAnalysisTarget || predictionEngine.scanUniverse?.deepAnalysisTarget || scan.activeDeepAnalysisTarget || 0;
-    const symbolsAvailable = scan.symbolsAvailable || scan.totalSymbolsAvailable || predictionEngine.scanUniverse?.symbolsAvailable || predictionEngine.scanUniverse?.totalSymbolsAvailable || 0;
-    const screened = scan.symbolsScreened || predictionEngine.scanUniverse?.symbolsScreened || 0;
-    const deepSelected = scan.deepCandidatesSelected || scan.deepAnalysisCandidatesSelected || predictionEngine.scanUniverse?.deepCandidatesSelected || predictionEngine.scanUniverse?.candidateCount || 0;
+    const session = scan.marketSession || {};
+    const marketStatus = scan.marketStatus || session.status || "Unknown";
+    const scanMode = scan.scanMode || session.scanMode || "Completed scan metadata unavailable";
+    const universeSource = scanUniverseSourceLabel(scan);
+    const broadTarget = scan.broadScreenTarget || scan.targetSymbolCount || 0;
+    const deepTarget = scan.deepAnalysisTarget || scan.activeDeepAnalysisTarget || 0;
+    const symbolsAvailable = scan.symbolsAvailable || scan.totalSymbolsAvailable || 0;
+    const screened = scan.symbolsScreened || 0;
+    const deepSelected = scan.deepCandidatesSelected || scan.deepAnalysisCandidatesSelected || 0;
     const predictionsGenerated = scan.predictionsGenerated || predictionEngine.predictions?.length || 0;
-    const coverageWarning = scan.summaryWarning || scan.coverageWarning || (scan.emergencyPresetUsed || scan.emergencyFallbackActive ? "Broad-market discovery is unavailable. Results currently use the emergency preset universe." : "");
+    const coverageWarning = scanUniverseSourceNote(scan);
     const providerFetchedAt = scan.providerFetchedAt || scan.scanCompletedAt || predictionEngine.updatedAt;
     const underlyingDataAt = scan.latestUnderlyingQuoteAt || scan.marketDataAsOfTimestamp || scan.dataAsOf;
     const coverage = scan.marketDataCoverage || {};
@@ -1212,9 +1230,9 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
     const providerRows = Object.values(scan.providerHealth?.providers || {});
     const mainProvider = providerRows.find((provider) => provider.status && provider.status !== "Disabled") || providerRows[0] || {};
     const fallbackCount = Number(coverage.symbolsUsingFallback) || 0;
-    const availabilityLabel = predictionEngine.predictionEngineHealth?.dataAvailability || scan.dataAvailability || "Not run";
-    const freshnessLabel = predictionEngine.predictionEngineHealth?.dataFreshness || scan.dataFreshness || "Not run";
-    const criticalReady = Number(coverage.symbolsRequested) ? `${Number(coverage.symbolsRequested) - Number(coverage.symbolsMissingCriticalFields || 0)} of ${Number(coverage.symbolsRequested)} analyzed symbols had required data` : predictionEngine.predictionEngineHealth?.dataQualityClassificationReason || "Coverage not recorded";
+    const availabilityLabel = scan.dataAvailability || "Not run";
+    const freshnessLabel = scan.dataFreshness || "Not run";
+    const criticalReady = Number(coverage.symbolsRequested) ? `${Number(coverage.symbolsRequested) - Number(coverage.symbolsMissingCriticalFields || 0)} of ${Number(coverage.symbolsRequested)} analyzed symbols had required data` : scan.dataQualityClassificationReason || "Coverage not recorded";
     const freshnessReason = timestampStats.percentageWithinLiveThreshold !== undefined
       ? `${Number(timestampStats.percentageWithinLiveThreshold) || 0}% within live threshold; ${Number(timestampStats.percentageWithinRecentThreshold) || 0}% within recent threshold`
       : "Freshness distribution unavailable";
@@ -1237,7 +1255,7 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
       metricCard("Market Data Availability", availabilityLabel, criticalReady, "predictions"),
       metricCard("Market Data Quality", `${Number(scan.marketDataQualityScore ?? predictionEngine.predictionEngineHealth?.marketDataQualityScore) || 0}/100`, scan.marketDataQualityLabel || predictionEngine.predictionEngineHealth?.marketDataQualityLabel || "Quality score unavailable", "predictions"),
       metricCard("Market Data Freshness", freshnessLabel, freshnessReason, "predictions"),
-      metricCard("Provider Status", mainProvider.status || "Unknown", mainProvider.providerName ? `${mainProvider.providerName}: ${Number(mainProvider.coveragePercent) || 0}% coverage` : "Provider diagnostics unavailable", "predictions"),
+      metricCard("Provider Status", mainProvider.status || "Unknown", mainProvider.providerName ? `${mainProvider.providerName}: Quote Coverage ${Number(mainProvider.quoteCoveragePercent ?? mainProvider.coveragePercent) || 0}%; contribution ${Number(mainProvider.contributionPercent) || 0}%. ${mainProvider.coverageExplanation || ""}` : "Provider diagnostics unavailable", "predictions"),
       metricCard("Fallback Usage", `${fallbackCount} symbols`, coverage.symbolsUsingCache ? `${coverage.symbolsUsingCache} cache-backed symbols` : "Latest provider data used where available", "predictions"),
       metricCard("Provider Fetch", providerFetchedAt ? exactEt(providerFetchedAt) : "Not recorded", "When the app requested provider data", "predictions"),
       metricCard("Underlying Data", underlyingDataAt ? exactEt(underlyingDataAt) : "Unavailable", "Representative underlying market timestamp", "predictions"),
@@ -1256,6 +1274,7 @@ function setScanUi(stage, percent, message) {
 
 function renderDashboard() {
   if (!output.marketOverviewGrid) return;
+  const scan = completedScanHealth();
   const health = predictionEngine.predictionEngineHealth || {};
   const totals = portfolioTotals();
   const predictions = predictionEngine.predictions || [];
@@ -1266,9 +1285,9 @@ function renderDashboard() {
   const mostImproved = strongestBy(predictions, (item) => item.scoreChange || item.rankMovement?.change || 0);
   const highestConfidence = strongestBy(predictions, (item) => item.confidenceScore || item.unifiedPredictionScore || 0);
   const engineStatus = health.predictionEngineStatus || health.status || (predictionEngine.updatedAt ? "Healthy" : "Not run");
-  const dataStatus = health.dataAvailability || health.dataQualityStatus || "Not run";
+  const dataStatus = scan.dataAvailability || health.dataAvailability || health.dataQualityStatus || "Not run";
   const predictionBias = predictionEngine.marketRegime?.primary || topToday?.marketRegime?.primary || "Neutral";
-  const broadMarketTrend = marketIndexData.broadMarketTrend || "Unavailable";
+  const broadMarketTrend = scan.marketStatus || scan.marketSession?.status || "Unavailable";
   const trades = settings.congressTrades || [];
   const buys = trades.filter((trade) => trade.transaction === "Buy");
   const sells = trades.filter((trade) => trade.transaction === "Sell");
@@ -1291,16 +1310,16 @@ function renderDashboard() {
   renderDashboardBrief({ predictions, marketMood: predictionBias, signals, positiveSignals, negativeSignals, health });
   renderScanProgressSummary(false, predictionEngine.updatedAt ? "Scan complete" : "Idle", predictionEngine.updatedAt ? 100 : 0);
   output.marketOverviewGrid.innerHTML = [
-    metricCard("Broad Market Trend", broadMarketTrend, marketIndexData.connectedCount ? `Based on ${marketIndexData.connectedCount} external market quote(s)` : "Broad-market sentiment unavailable due to missing external data", "market"),
+    metricCard("Market Session", broadMarketTrend, scan.scanMode || "Completed scan metadata unavailable", "market"),
     metricCard("Prediction Universe Bias", predictionBias, `${predictions.length} analyzed prediction candidate(s)`, "market"),
     metricCard("Prediction Universe Sentiment", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "No scan yet", "Internal estimate based on unified prediction scores only", "market"),
-    marketIndexCard("S&P 500", "sp500"),
-    marketIndexCard("Nasdaq", "nasdaq"),
-    marketIndexCard("Dow", "dow"),
-    marketIndexCard("Russell 2000", "russell2000"),
-    marketIndexCard("VIX", "vix"),
+    metricCard("S&P 500", "Not in completed scan metadata", "Live index widgets are separate diagnostics, not scan truth.", "market"),
+    metricCard("Nasdaq", "Not in completed scan metadata", "Live index widgets are separate diagnostics, not scan truth.", "market"),
+    metricCard("Dow", "Not in completed scan metadata", "Live index widgets are separate diagnostics, not scan truth.", "market"),
+    metricCard("Russell 2000", "Not in completed scan metadata", "Live index widgets are separate diagnostics, not scan truth.", "market"),
+    metricCard("VIX", "Supplemental only", "Missing VIX does not change completed scan availability.", "market"),
     metricCard("Highest-Scoring Group in Current Scan", sectorStrengthSummary(predictions), `Based on ${predictions.length} final prediction candidate(s)`, "market"),
-    metricCard("Symbol Universe Source", symbolUniverseStatus.activeSource || "Cached public listing snapshot", `${symbolUniverseStatus.eligibleSymbolCount || 0} eligible symbols; emergency fallback ${symbolUniverseStatus.emergencyFallbackActive ? "active" : "inactive"}`, "market"),
+    metricCard("Scan Universe Source", scanUniverseSourceLabel(scan), scanUniverseSourceNote(scan), "market"),
   ].join("");
 
   output.predictionEngineGrid.innerHTML = [
@@ -2962,6 +2981,7 @@ function renderSectorPicks(stats) {
 
 function renderMarketIntelligence() {
   if (!output.marketSummaryGrid) return;
+  const scan = completedScanHealth();
   const health = predictionEngine.predictionEngineHealth || {};
   const predictions = predictionEngine.predictions || [];
   const stats = sectorStats();
@@ -2977,20 +2997,21 @@ function renderMarketIntelligence() {
   const buys = trades.filter((trade) => trade.transaction === "Buy");
   const sells = trades.filter((trade) => trade.transaction === "Sell");
   const predictionBias = predictionEngine.marketRegime?.primary || strongestSector?.direction || "Neutral";
-  const broadMarketTrend = marketIndexData.broadMarketTrend || "Unavailable";
+  const broadMarketTrend = scan.marketStatus || scan.marketSession?.status || "Unavailable";
   if (output.marketIntelligenceStatus) output.marketIntelligenceStatus.textContent = broadMarketTrend;
 
   output.marketSummaryGrid.innerHTML = [
-    marketMetricCard("Broad Market Trend", broadMarketTrend, marketIndexData.connectedCount ? `External market data from ${marketIndexData.provider}` : "Broad-market sentiment unavailable due to missing external data", statusTone(broadMarketTrend)),
+    marketMetricCard("Market Session", broadMarketTrend, scan.scanMode || "Completed scan metadata unavailable", statusTone(broadMarketTrend)),
     marketMetricCard("Prediction Universe Bias", predictionBias, `${predictions.length} deeply analyzed candidate(s)`, statusTone(predictionBias)),
     marketMetricCard("Prediction Universe Sentiment", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "No scan yet", "Internal estimate based on unified prediction scores only"),
-    marketIndexCard("S&P 500", "sp500"),
-    marketIndexCard("Nasdaq", "nasdaq"),
-    marketIndexCard("Dow", "dow"),
-    marketIndexCard("Russell 2000", "russell2000"),
-    marketIndexCard("VIX", "vix"),
+    marketMetricCard("S&P 500", "Not in completed scan metadata", "External index quote is diagnostic only"),
+    marketMetricCard("Nasdaq", "Not in completed scan metadata", "External index quote is diagnostic only"),
+    marketMetricCard("Dow", "Not in completed scan metadata", "External index quote is diagnostic only"),
+    marketMetricCard("Russell 2000", "Not in completed scan metadata", "External index quote is diagnostic only"),
+    marketMetricCard("VIX", "Supplemental only", "Missing VIX does not change completed scan availability"),
     marketMetricCard("Prediction Engine Status", health.predictionEngineStatus || health.status || "Not run", `${Number(health.predictionsGenerated) || predictions.length} predictions generated`, statusTone(health.predictionEngineStatus || health.status)),
-    marketMetricCard("Market Data Quality", health.dataQualityStatus || "Not run", `${Number(health.incompleteMarketDataPercent) || 0}% incomplete`, statusTone(health.dataQualityStatus)),
+    marketMetricCard("Market Data Availability", scan.dataAvailability || health.dataAvailability || "Not run", scan.dataQualityClassificationReason || `${Number(health.incompleteMarketDataPercent) || 0}% incomplete`, statusTone(scan.dataAvailability || health.dataAvailability)),
+    marketMetricCard("Scan Universe Source", scanUniverseSourceLabel(scan), scanUniverseSourceNote(scan)),
   ].join("");
 
   output.marketBreadthGrid.innerHTML = [

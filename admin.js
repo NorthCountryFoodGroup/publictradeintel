@@ -517,11 +517,14 @@ function renderPredictionHealth(health, scanHealth = null) {
   const providerRequestLog = scanHealth?.providerHealth?.requestLog || [];
   const coverage = scanHealth?.marketDataCoverage || {};
   const timestampStats = scanHealth?.marketDataTimestampStats || {};
+  const consistency = scanHealth?.consistencyAudit || scanHealth?.metadataConsistency || {};
+  const failedConsistencyChecks = consistency.failures || (consistency.checks || []).filter((check) => !check.passed);
   const providerScorecard = providerRows.map((provider) => `
         <div class="mini-stat provider-status-${escapeHtml(String(provider.status || "unknown").toLowerCase().replace(/\s+/g, "-"))}">
           <span>${escapeHtml(provider.providerName || "Provider")}</span>
           <strong>${escapeHtml(provider.status || "Unknown")}</strong>
-          <small>Coverage ${Number(provider.coveragePercent) || 0}% | Success ${Number(provider.successRatePercent) || 0}% | Latency ${Number(provider.averageLatencyMs) || 0}ms</small>
+          <small>Quote Coverage ${Number(provider.quoteCoveragePercent ?? provider.coveragePercent) || 0}% | Contribution ${Number(provider.contributionPercent) || 0}% | Success ${Number(provider.successRatePercent) || 0}%</small>
+          <small>Latency ${Number(provider.averageLatencyMs) || 0}ms | ${escapeHtml(provider.coverageExplanation || "Provider coverage is scoped to attempted quote requests.")}</small>
           <small>Timeouts ${Number(provider.timeoutCount) || 0} | Rate limits ${Number(provider.rateLimitCount) || 0} | Fallback ${Number(provider.fallbackUsage) || 0}</small>
           <small>Last success ${provider.lastSuccessfulRequest ? new Date(provider.lastSuccessfulRequest).toLocaleString() : "n/a"}</small>
           <small>Last failure ${provider.lastFailedRequest ? new Date(provider.lastFailedRequest).toLocaleString() : "n/a"}</small>
@@ -589,6 +592,32 @@ function renderPredictionHealth(health, scanHealth = null) {
         <input readonly value="${escapeHtml(Object.entries(checks).map(([name, passed]) => `${name}: ${passed ? "pass" : "fail"}`).join("; "))}" />
       </label>
       <details class="wide-field" open>
+        <summary>Consistency Report</summary>
+        <div class="metric-grid">
+          <div class="mini-stat">
+            <span>Consistency Score</span>
+            <strong>${Number(consistency.consistencyScore) || 0}/100</strong>
+            <small>${escapeHtml(consistency.status || (consistency.passed ? "Healthy" : "Warning") || "Unknown")}</small>
+          </div>
+          <div class="mini-stat">
+            <span>Checks Passed</span>
+            <strong>${Number(consistency.checksPassed) || 0}</strong>
+            <small>Completed scan metadata only.</small>
+          </div>
+          <div class="mini-stat">
+            <span>Checks Failed</span>
+            <strong>${Number(consistency.checksFailed) || 0}</strong>
+            <small>${failedConsistencyChecks.length ? "Review failed checks below." : "No mismatches recorded."}</small>
+          </div>
+        </div>
+        <textarea rows="10" readonly>${escapeHtml(failedConsistencyChecks.map((check) => [
+          `Check: ${check.name}`,
+          `Expected: ${check.expected}`,
+          `Actual: ${check.actual}`,
+          `Source field: ${check.sourceField}`,
+        ].join("\n")).join("\n\n") || "No consistency failures recorded.")}</textarea>
+      </details>
+      <details class="wide-field" open>
         <summary>Provider Scorecard</summary>
         <div class="metric-grid">
           ${providerScorecard || `<div class="mini-stat"><span>Provider</span><strong>No provider data</strong><small>Run a scan to populate the scorecard.</small></div>`}
@@ -605,8 +634,10 @@ function renderPredictionHealth(health, scanHealth = null) {
           `Last failed request: ${provider.lastFailedRequest || "n/a"}`,
           `Symbols requested: ${Number(provider.symbolsRequested) || 0}`,
           `Symbols returned: ${Number(provider.symbolsReturned) || 0}`,
-          `Coverage percentage: ${Number(provider.coveragePercent) || 0}%`,
+          `Quote coverage percentage: ${Number(provider.quoteCoveragePercent ?? provider.coveragePercent) || 0}%`,
+          `Provider contribution percentage: ${Number(provider.contributionPercent) || 0}%`,
           `Success rate: ${Number(provider.successRatePercent) || 0}%`,
+          `Coverage explanation: ${provider.coverageExplanation || "Provider coverage is scoped to attempted quote requests."}`,
           `Average latency: ${Number(provider.averageLatencyMs) || 0}ms`,
           `Median quote age: ${provider.medianQuoteAgeMs === null || provider.medianQuoteAgeMs === undefined ? "n/a" : `${Math.round(provider.medianQuoteAgeMs / 60000)} minutes`}`,
           `Error count: ${Number(provider.errorCount) || 0}`,

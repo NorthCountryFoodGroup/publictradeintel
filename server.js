@@ -1299,7 +1299,16 @@ function broadUniverseStats(config, quotes = []) {
 }
 
 function validateScanMetadata(scanHealth) {
-  const errors = [];
+  const checks = [];
+  const addCheck = ({ name, passed, expected, actual, sourceField }) => {
+    checks.push({
+      name,
+      passed: Boolean(passed),
+      expected,
+      actual,
+      sourceField,
+    });
+  };
   const emergencyCount = Number(scanHealth.emergencyPresetCount) || universePresetTickers("combined").length;
   const symbolsAvailable = Number(scanHealth.symbolsAvailable || scanHealth.totalSymbolsAvailable || 0);
   const symbolsScreened = Number(scanHealth.symbolsScreened || 0);
@@ -1314,32 +1323,126 @@ function validateScanMetadata(scanHealth) {
   const totalDuration = Number(scanHealth.durationMs || scanHealth.totalDuration || 0);
   const majorStageTotal = Object.values(scanHealth.stageDurations || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
 
-  if (scanHealth.emergencyPresetUsed && symbolsAvailable !== emergencyCount) errors.push(`Emergency preset source reports ${symbolsAvailable} symbols, expected ${emergencyCount}.`);
-  if (symbolsAvailable > emergencyCount && scanHealth.emergencyPresetUsed) errors.push("Emergency preset flag is true even though symbols available exceeds the preset count.");
-  if (symbolsScreened > symbolsAvailable) errors.push("Screened count exceeds available symbol count.");
-  if (deepCount > symbolsScreened) errors.push("Deep-analysis count exceeds screened symbol count.");
-  if (predictionsGenerated > successfulDeep) errors.push("Generated predictions exceed successful deep-analysis count.");
-  if (Number.isFinite(scanCompleted) && Number.isFinite(lastClose) && lastClose > scanCompleted) errors.push("Last regular market close is after scan completion.");
-  if (Number.isFinite(scanCompleted) && Number.isFinite(nextOpen) && nextOpen < scanCompleted) errors.push("Next regular market open is before scan completion.");
-  if (Number.isFinite(providerFetched) && Number.isFinite(underlyingQuote) && underlyingQuote > providerFetched) errors.push("Underlying quote timestamp is after provider fetch timestamp.");
-  if (String(scanHealth.marketStatus || "").startsWith("Closed") && scanHealth.scanMode !== "Closed-Market Analysis") errors.push("Closed market status does not match closed-market scan mode.");
-  if (totalDuration && majorStageTotal > totalDuration * 1.25 + 500 && scanHealth.stageTimingMode !== "parallel") {
-    errors.push("Stage durations exceed total scan duration by more than expected overhead.");
-  }
+  addCheck({
+    name: "Universe Source Matches Symbol Counts",
+    passed: !(scanHealth.emergencyPresetUsed && symbolsAvailable !== emergencyCount) && !(symbolsAvailable > emergencyCount && scanHealth.emergencyPresetUsed),
+    expected: scanHealth.emergencyPresetUsed ? `Emergency preset count ${emergencyCount}` : "Completed scan source is not emergency preset",
+    actual: `${scanHealth.universeSourceStatus || scanHealth.universeSource || "Unknown"} with ${symbolsAvailable} symbols`,
+    sourceField: "scanHealth.universeSourceStatus, scanHealth.symbolsAvailable, scanHealth.emergencyPresetUsed",
+  });
+  addCheck({
+    name: "Screened Count Within Universe",
+    passed: symbolsScreened <= symbolsAvailable,
+    expected: `symbolsScreened <= ${symbolsAvailable}`,
+    actual: String(symbolsScreened),
+    sourceField: "scanHealth.symbolsScreened",
+  });
+  addCheck({
+    name: "Deep Analysis Within Screened Count",
+    passed: deepCount <= symbolsScreened,
+    expected: `deepAnalysisCandidates <= ${symbolsScreened}`,
+    actual: String(deepCount),
+    sourceField: "scanHealth.deepCandidatesSelected",
+  });
+  addCheck({
+    name: "Predictions Match Successful Analysis",
+    passed: predictionsGenerated <= successfulDeep,
+    expected: `predictionsGenerated <= ${successfulDeep}`,
+    actual: String(predictionsGenerated),
+    sourceField: "scanHealth.predictionsGenerated",
+  });
+  addCheck({
+    name: "Market Session Timestamps",
+    passed: !(Number.isFinite(scanCompleted) && Number.isFinite(lastClose) && lastClose > scanCompleted) && !(Number.isFinite(scanCompleted) && Number.isFinite(nextOpen) && nextOpen < scanCompleted),
+    expected: "Last close before scan completion; next open after scan completion",
+    actual: `completed=${scanHealth.scanCompletedAt || "n/a"}, lastClose=${scanHealth.lastRegularSessionClose || scanHealth.lastMarketClose || "n/a"}, nextOpen=${scanHealth.nextRegularSessionOpen || scanHealth.nextMarketOpen || "n/a"}`,
+    sourceField: "scanHealth.scanCompletedAt, scanHealth.lastRegularSessionClose, scanHealth.nextRegularSessionOpen",
+  });
+  addCheck({
+    name: "Freshness Timestamp Order",
+    passed: !(Number.isFinite(providerFetched) && Number.isFinite(underlyingQuote) && underlyingQuote > providerFetched),
+    expected: "Underlying quote timestamp is not after provider fetch timestamp",
+    actual: `providerFetchedAt=${scanHealth.providerFetchedAt || "n/a"}, latestUnderlyingQuoteAt=${scanHealth.latestUnderlyingQuoteAt || "n/a"}`,
+    sourceField: "scanHealth.providerFetchedAt, scanHealth.latestUnderlyingQuoteAt",
+  });
+  addCheck({
+    name: "Freshness Label Matches Timestamps",
+    passed: Boolean(scanHealth.dataFreshness) && Boolean(scanHealth.marketDataTimestampStats),
+    expected: "Freshness label and timestamp stats both present from completed scan",
+    actual: `dataFreshness=${scanHealth.dataFreshness || "missing"}, timestampStats=${scanHealth.marketDataTimestampStats ? "present" : "missing"}`,
+    sourceField: "scanHealth.dataFreshness, scanHealth.marketDataTimestampStats",
+  });
+  addCheck({
+    name: "Closed Market Mode",
+    passed: !(String(scanHealth.marketStatus || "").startsWith("Closed") && scanHealth.scanMode !== "Closed-Market Analysis"),
+    expected: "Closed market status uses Closed-Market Analysis",
+    actual: `${scanHealth.marketStatus || "Unknown"} / ${scanHealth.scanMode || "Unknown"}`,
+    sourceField: "scanHealth.marketStatus, scanHealth.scanMode",
+  });
+  addCheck({
+    name: "Wall Clock Timing",
+    passed: !(totalDuration && majorStageTotal > totalDuration * 1.25 + 500 && scanHealth.stageTimingMode !== "parallel"),
+    expected: "Parallel stage timing is labeled when stage totals exceed wall-clock time",
+    actual: `stageTimingMode=${scanHealth.stageTimingMode || "missing"}, totalDuration=${totalDuration}, stageTotal=${majorStageTotal}`,
+    sourceField: "scanHealth.stageTimingMode, scanHealth.totalDuration, scanHealth.stageDurations",
+  });
   if (scanHealth.marketDataCoverage?.criticalFieldCoveragePercent !== undefined) {
     const coverage = Number(scanHealth.marketDataCoverage.criticalFieldCoveragePercent);
     const availability = scanHealth.dataAvailability;
     const expectedAvailability = marketDataAvailabilityFromCoverage(coverage);
-    if (availability !== expectedAvailability) errors.push(`Availability status ${availability} conflicts with ${coverage}% critical-field coverage; expected ${expectedAvailability}.`);
-    if (coverage < 40 && availability !== "Unavailable") errors.push("Availability status should be unavailable below 40% critical-field coverage.");
+    addCheck({
+      name: "Availability Label Matches Thresholds",
+      passed: availability === expectedAvailability,
+      expected: expectedAvailability,
+      actual: availability || "missing",
+      sourceField: "scanHealth.marketDataCoverage.criticalFieldCoveragePercent",
+    });
+  } else {
+    addCheck({
+      name: "Availability Label Matches Thresholds",
+      passed: false,
+      expected: "Critical-field coverage percent exists",
+      actual: "missing",
+      sourceField: "scanHealth.marketDataCoverage.criticalFieldCoveragePercent",
+    });
   }
-  if (scanHealth.marketDataTimestampStats?.representativeUnderlyingTimestamp && scanHealth.latestUnderlyingQuoteAt !== scanHealth.marketDataTimestampStats.representativeUnderlyingTimestamp) {
-    errors.push("Displayed underlying data timestamp does not match representative freshness timestamp.");
-  }
+  addCheck({
+    name: "Displayed Underlying Timestamp",
+    passed: !(scanHealth.marketDataTimestampStats?.representativeUnderlyingTimestamp && scanHealth.latestUnderlyingQuoteAt !== scanHealth.marketDataTimestampStats.representativeUnderlyingTimestamp),
+    expected: scanHealth.marketDataTimestampStats?.representativeUnderlyingTimestamp || "No representative timestamp",
+    actual: scanHealth.latestUnderlyingQuoteAt || "missing",
+    sourceField: "scanHealth.latestUnderlyingQuoteAt",
+  });
+  const providers = Object.values(scanHealth.providerHealth?.providers || {});
+  const providerReturnedTotal = providers.reduce((sum, provider) => sum + (Number(provider.symbolsReturned) || 0), 0);
+  addCheck({
+    name: "Provider Coverage Matches Diagnostics",
+    passed: !providers.length || providerReturnedTotal >= Number(scanHealth.marketDataCoverage?.symbolsReturned || 0),
+    expected: `provider returned total >= ${Number(scanHealth.marketDataCoverage?.symbolsReturned || 0)}`,
+    actual: String(providerReturnedTotal),
+    sourceField: "scanHealth.providerHealth.providers",
+  });
+  const logFallbackCount = (scanHealth.providerHealth?.requestLog || []).filter((row) => row.success && row.fallback).length;
+  const fallbackUsage = Number(scanHealth.marketDataCoverage?.symbolsUsingFallback) || 0;
+  addCheck({
+    name: "Fallback Usage Matches Provider Logs",
+    passed: logFallbackCount === fallbackUsage || logFallbackCount >= fallbackUsage,
+    expected: `${fallbackUsage} fallback symbol(s) represented in provider logs`,
+    actual: `${logFallbackCount} successful fallback log row(s)`,
+    sourceField: "scanHealth.providerHealth.requestLog",
+  });
+
+  const failedChecks = checks.filter((check) => !check.passed);
 
   return {
-    passed: !errors.length,
-    errors,
+    passed: !failedChecks.length,
+    status: failedChecks.length ? "Warning" : "Healthy",
+    consistencyScore: checks.length ? Math.round(((checks.length - failedChecks.length) / checks.length) * 100) : 100,
+    checksPassed: checks.length - failedChecks.length,
+    checksFailed: failedChecks.length,
+    checks,
+    failures: failedChecks,
+    errors: failedChecks.map((check) => `${check.name}: expected ${check.expected}; actual ${check.actual}; source ${check.sourceField}`),
     checkedAt: isoNow(),
   };
 }
@@ -1557,7 +1660,9 @@ function updateProviderDiagnostics(diagnostics, quotes = [], errors = [], reques
   }
   for (const provider of Object.values(providers)) {
     provider.coveragePercent = percentOf(provider.symbolsReturned, provider.symbolsRequested);
+    provider.quoteCoveragePercent = provider.coveragePercent;
     provider.successRatePercent = percentOf(provider.symbolsReturned, provider.symbolsRequested);
+    provider.contributionPercent = percentOf(provider.symbolsReturned, quotes.filter((quote) => Number(quote.marketPrice) > 0).length);
     provider.averageLatencyMs = provider._latencyCount ? Math.round(provider._latencyTotal / provider._latencyCount) : 0;
     provider.medianQuoteAgeMs = quoteAges.length ? percentile(quoteAges, 50) : null;
     provider.status =
@@ -1570,6 +1675,10 @@ function updateProviderDiagnostics(diagnostics, quotes = [], errors = [], reques
               : provider.medianQuoteAgeMs !== null && provider.medianQuoteAgeMs > 15 * 60 * 1000
                 ? "Delayed"
                 : "Healthy";
+    provider.coverageExplanation =
+      provider.symbolsRequested && provider.coveragePercent < 40
+        ? `${provider.providerName} quote coverage is critically low for its attempted symbols. This does not represent total market-data availability; review provider contribution and fallback usage.`
+        : `${provider.providerName} quote coverage reflects only symbols this provider attempted. Overall availability is reported separately by completed scan critical-field coverage.`;
     delete provider._latencyTotal;
     delete provider._latencyCount;
   }
@@ -4625,10 +4734,25 @@ async function refreshPredictions(options = {}) {
   };
   const validationStartedAt = Date.now();
   scanHealth.metadataConsistency = validateScanMetadata(scanHealth);
+  scanHealth.consistencyAudit = scanHealth.metadataConsistency;
+  scanHealth.consistencyScore = scanHealth.metadataConsistency.consistencyScore;
+  scanHealth.consistencyStatus = scanHealth.metadataConsistency.status;
+  scanHealth.consistencyChecksPassed = scanHealth.metadataConsistency.checksPassed;
+  scanHealth.consistencyChecksFailed = scanHealth.metadataConsistency.checksFailed;
+  predictionEngineHealth.consistencyScore = scanHealth.metadataConsistency.consistencyScore;
+  predictionEngineHealth.consistencyStatus = scanHealth.metadataConsistency.status;
+  predictionEngineHealth.consistencyChecksPassed = scanHealth.metadataConsistency.checksPassed;
+  predictionEngineHealth.consistencyChecksFailed = scanHealth.metadataConsistency.checksFailed;
   stageDurations.validationDuration = elapsedMs(validationStartedAt);
   if (!scanHealth.metadataConsistency.passed) {
     warnings.push(`Scan metadata consistency warning: ${scanHealth.metadataConsistency.errors.join(" ")}`);
     scanHealth.summaryWarning = "Scan metadata consistency warning. Raw diagnostic details are available in Admin.";
+    predictionEngineHealth.status = predictionEngineHealth.status === "Failed" ? "Failed" : "Warning";
+    predictionEngineHealth.predictionEngineStatus = predictionEngineHealth.status;
+    predictionEngineHealth.predictionEngineStatusReasons = [
+      ...(predictionEngineHealth.predictionEngineStatusReasons || []),
+      "Consistency audit warning. Review Admin Consistency Report.",
+    ];
   }
   const predictionHistory = appendPredictionHistory(historicalPredictionRows({ predictions, sections, scanId, scanHealth, updatedAt }));
   const outcomeSettlement = settlePredictionOutcomes(config);

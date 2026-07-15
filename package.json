@@ -38,6 +38,7 @@
     "smoke:scan-duration": "node scripts/smoke-test-scan-duration.js",
     "smoke:prediction-data-usability": "node scripts/smoke-test-prediction-data-usability.js",
     "smoke:provider-optimization": "node scripts/smoke-test-provider-optimization.js",
+    "smoke:consistency-audit": "node scripts/smoke-test-consistency-audit.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }
