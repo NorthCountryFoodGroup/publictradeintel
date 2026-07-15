@@ -26,3 +26,7 @@ For each scan, `scanHealth.providerHealth.stages` records provider name, operati
 ## Current Root Cause Pattern
 
 When production shows a provider fetch time during market hours but an old underlying timestamp, the likely cause is provider quote refresh returning little or no usable current data, causing predictions to use saved or fallback market fields. The app now reports this as coverage/freshness distribution instead of collapsing it into a single misleading status.
+
+## Version 2.1.2 Quote Coverage Note
+
+Quote coverage diagnostics now distinguish Yahoo attempted symbols from total deep-analysis symbols. This prevents a provider-specific number such as 29 of 300 from being read as overall prediction coverage when cached fresh data, broad-screen data, or saved fallback data also contributed to the completed scan.

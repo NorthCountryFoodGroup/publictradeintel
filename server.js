@@ -1561,6 +1561,18 @@ function providerDiagnostic(providerName, fallbackSource = "") {
   };
 }
 
+function providerStatusFromAttemptRate(provider) {
+  if (provider.providerName === "Alpha Vantage" && !MARKET_API_KEY) return "Disabled";
+  if (provider.enabled === false) return "Disabled";
+  if (!Number(provider.symbolsRequested)) return "Not Needed";
+  if (provider.rateLimitCount) return "Rate Limited";
+  const successRate = Number(provider.successRatePercent) || 0;
+  if (successRate >= 90 && Number(provider.averageLatencyMs || 0) <= 10000) return "Healthy";
+  if (successRate >= 70) return "Partial";
+  if (successRate >= 40) return "Degraded";
+  return "Failed";
+}
+
 function classifyProviderError(message = "") {
   const text = String(message || "");
   return {
@@ -1665,16 +1677,8 @@ function updateProviderDiagnostics(diagnostics, quotes = [], errors = [], reques
     provider.contributionPercent = percentOf(provider.symbolsReturned, quotes.filter((quote) => Number(quote.marketPrice) > 0).length);
     provider.averageLatencyMs = provider._latencyCount ? Math.round(provider._latencyTotal / provider._latencyCount) : 0;
     provider.medianQuoteAgeMs = quoteAges.length ? percentile(quoteAges, 50) : null;
-    provider.status =
-      provider.providerName === "Alpha Vantage" && !MARKET_API_KEY
-        ? "Disabled"
-        : provider.rateLimitCount
-          ? "Rate Limited"
-          : provider.errorCount && !provider.symbolsReturned && provider.symbolsRequested
-              ? "Failed"
-              : provider.medianQuoteAgeMs !== null && provider.medianQuoteAgeMs > 15 * 60 * 1000
-                ? "Delayed"
-                : "Healthy";
+    provider.cacheReuse = provider.providerName === "Cached snapshot" ? provider.symbolsReturned : 0;
+    provider.status = providerStatusFromAttemptRate(provider);
     provider.coverageExplanation =
       provider.symbolsRequested && provider.coveragePercent < 40
         ? `${provider.providerName} quote coverage is critically low for its attempted symbols. This does not represent total market-data availability; review provider contribution and fallback usage.`
@@ -1687,6 +1691,37 @@ function updateProviderDiagnostics(diagnostics, quotes = [], errors = [], reques
     .sort((a, b) => Date.parse(b.completedAt || b.startedAt || "") - Date.parse(a.completedAt || a.startedAt || ""))
     .slice(0, 500);
   return diagnostics;
+}
+
+function quoteCoverageDiagnostic(providerDiagnostics, predictions = []) {
+  const providers = Object.values(providerDiagnostics?.providers || {});
+  const totalDeepAnalysisSymbols = predictions.length;
+  const yahoo = providers.find((provider) => provider.providerName === "Yahoo") || providerDiagnostic("Yahoo");
+  const cache = providers.find((provider) => provider.providerName === "Cached snapshot") || providerDiagnostic("Cached snapshot");
+  const saved = providers.find((provider) => provider.providerName === "Saved quote fallback") || providerDiagnostic("Saved quote fallback");
+  const otherProviders = providers.filter((provider) => !["Yahoo", "Cached snapshot", "Saved quote fallback"].includes(provider.providerName));
+  const symbolsServedFromAnotherProvider = otherProviders.reduce((sum, provider) => sum + (Number(provider.symbolsReturned) || 0), 0);
+  const symbolsWithFallbackGeneratedValues = predictions.filter((item) => item.fallbackDataUsed || item.fallbackUsed).length;
+  const symbolsWithNoFreshProviderQuote = predictions.filter((item) => !Number(item.currentPrice) || item.marketQuoteError || ["failed", "stale"].includes(item.dataQualityStatus)).length;
+  const symbolsServedFromPreviouslyRefreshedBroadScreenData = predictions.filter((item) => item.marketCacheUsed && !item.fallbackDataUsed).length;
+  return {
+    totalDeepAnalysisSymbols,
+    yahooAttemptedSymbols: Number(yahoo.symbolsRequested) || 0,
+    yahooNotAttemptedSymbols: Math.max(0, totalDeepAnalysisSymbols - (Number(yahoo.symbolsRequested) || 0)),
+    yahooSuccessfulSymbols: Number(yahoo.symbolsReturned) || 0,
+    yahooAttemptSuccessRate: Number(yahoo.successRatePercent) || 0,
+    yahooContributionPercent: Number(yahoo.contributionPercent) || 0,
+    symbolsServedFromCache: Number(cache.symbolsReturned) || 0,
+    symbolsServedFromSavedQuoteFallback: Number(saved.symbolsReturned) || 0,
+    symbolsServedFromPreviouslyRefreshedBroadScreenData,
+    symbolsServedFromAnotherProvider,
+    symbolsWithFallbackGeneratedValues,
+    symbolsWithNoFreshProviderQuote,
+    reasonYahooSubset:
+      Number(yahoo.symbolsRequested || 0) < totalDeepAnalysisSymbols
+        ? "Yahoo was attempted only where a quote lookup was needed; cache, saved data, or higher-priority completed-scan data may already have supplied usable fields for other symbols."
+        : "Yahoo was attempted for every deep-analysis symbol in this scan.",
+  };
 }
 
 function latestTradingDayCloseIso(value) {
@@ -2163,14 +2198,17 @@ function congressFeedPublicStatus(config = sanitizeConfig(readJson(CONFIG_FILE, 
   const latestDisclosureDate = savedTrades.map((trade) => trade.disclosureDate || trade.reportedDate).filter(Boolean).sort().reverse()[0] || null;
   const dataAgeDays = latestDisclosureDate ? Math.max(0, Math.floor(ageMs(latestDisclosureDate) / 86400000)) : null;
   let label = "Unavailable";
-  if (status.error) label = "Failed";
+  if (status.error && savedTrades.length) label = "Saved Data Only";
+  else if (status.error) label = "Failed";
   else if (CONGRESS_TRADES_FEED_URL && status.updatedAt) label = dataAgeDays !== null && dataAgeDays > 45 ? "Stale" : "Live";
   else if (savedTrades.length) label = dataAgeDays !== null && dataAgeDays > 120 ? "Stale" : "Saved Data Only";
   return {
     status: label,
     userMessage:
       label === "Saved Data Only"
-        ? "Live congressional feed is not connected. Predictions are using saved congressional disclosures."
+        ? status.error
+          ? "Latest live refresh failed. Predictions continue using saved congressional disclosures."
+          : "Live congressional feed is not connected. Predictions are using saved congressional disclosures."
         : label === "Live"
           ? "Live congressional disclosure feed is connected."
           : label === "Stale"
@@ -2181,10 +2219,13 @@ function congressFeedPublicStatus(config = sanitizeConfig(readJson(CONFIG_FILE, 
     provider: CONGRESS_TRADES_FEED_URL ? "Configured feed" : "Saved disclosures",
     source: status.source || CONGRESS_TRADES_FEED_URL || "saved config",
     lastRefresh: status.updatedAt || null,
+    lastRefreshAttempt: status.lastAttemptAt || status.updatedAt || null,
+    lastSuccessfulRefresh: status.lastSuccessfulRefresh || (!status.error ? status.updatedAt : null),
     latestDisclosureDate,
     recordsAvailable: savedTrades.length,
     liveFeedUrlConfigured: Boolean(CONGRESS_TRADES_FEED_URL),
     savedFallbackAvailable: savedTrades.length > 0,
+    savedFallbackActive: savedTrades.length > 0 && label !== "Live",
     dataAgeDays,
     freshnessStatus: dataAgeDays === null ? "unavailable" : dataAgeDays <= 45 ? "fresh" : dataAgeDays <= 120 ? "stale" : "very stale",
     technicalSetupInstructions: "Set CONGRESS_TRADES_FEED_URL to a JSON or CSV congressional trading feed. Optional: set CONGRESS_TRADES_API_KEY.",
@@ -4611,6 +4652,7 @@ async function refreshPredictions(options = {}) {
     marketSession: broadStats.marketSession,
     requestedCount: Number(options.marketRequestsUsed) || scanUniverse.length,
   });
+  const quoteDiagnostic = quoteCoverageDiagnostic(options.providerDiagnostics, predictions);
   const predictionEngineHealth = buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt, marketDataAnalysis });
   stageDurations.rankingDuration = elapsedMs(rankingStartedAt);
   const durationMs = Date.parse(updatedAt) - Date.parse(scanStartedAt);
@@ -4687,6 +4729,7 @@ async function refreshPredictions(options = {}) {
     freshnessDistribution: marketDataAnalysis.freshnessDistribution,
     marketDataTimestampStats: marketDataAnalysis.timestampStats,
     providerHealth: options.providerDiagnostics || null,
+    quoteCoverageDiagnostic: quoteDiagnostic,
     dataQualityCounts: {
       good: predictionEngineHealth.goodRecords,
       partial: predictionEngineHealth.partialRecords,

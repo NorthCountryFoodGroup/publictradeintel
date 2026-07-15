@@ -57,6 +57,12 @@ const output = {
   runPredictionScan: document.querySelector("#runPredictionScan"),
   predictionScanMessage: document.querySelector("#predictionScanMessage"),
   predictionSearch: document.querySelector("#predictionSearch"),
+  opportunityInvestorView: document.querySelector("#opportunityInvestorView"),
+  opportunityTimeframe: document.querySelector("#opportunityTimeframe"),
+  opportunityPriceBand: document.querySelector("#opportunityPriceBand"),
+  opportunityRankingView: document.querySelector("#opportunityRankingView"),
+  investmentAmountPreview: document.querySelector("#investmentAmountPreview"),
+  investmentAmountCustom: document.querySelector("#investmentAmountCustom"),
   globalSearch: document.querySelector("#globalSearch"),
   filterTimeframe: document.querySelector("#filterTimeframe"),
   filterRecommendation: document.querySelector("#filterRecommendation"),
@@ -1183,9 +1189,10 @@ function renderDashboardBrief({ predictions, marketMood, signals, positiveSignal
     negativeSignals.length ? `${negativeSignals.length} negative policy/news signal(s)` : "",
     health.dataQualityStatus && !["good", "Good"].includes(health.dataQualityStatus) ? `market data quality is ${health.dataQualityStatus}` : "",
   ].filter(Boolean);
+  const biasLabel = /bull market/i.test(String(marketMood || "")) ? "Bullish" : marketMood;
   if (output.aiDashboardBriefStatus) output.aiDashboardBriefStatus.textContent = predictions.length ? "Generated from latest scan" : "Waiting for scan";
   output.aiDashboardBrief.textContent = predictions.length
-    ? `Market read: ${marketMood}. Sector leadership currently points to ${sector}. The scan found ${highConfidence} high-confidence opportunity candidate(s) across ${predictions.length} analyzed securities. Positive policy/news signals: ${positiveSignals.length}; negative signals: ${negativeSignals.length}; total active signals: ${signals.length}. Main warning: ${risks[0] || "no major data-quality warning in the saved scan"}. Review Today's Opportunities first, then open the Trade Brief before acting. This is research guidance, not a guaranteed investment outcome.`
+    ? `Prediction Universe Bias: ${biasLabel}. Broad Market Trend: ${marketIndexData.broadMarketTrend || "Unavailable"}. Sector leadership currently points to ${sector}. The scan found ${highConfidence} high-confidence opportunity candidate(s) across ${predictions.length} analyzed securities. Positive policy/news signals: ${positiveSignals.length}; negative signals: ${negativeSignals.length}; total active signals: ${signals.length}. Main warning: ${risks[0] || "no major data-quality warning in the saved scan"}. Review Today's Opportunities first, then open the Trade Brief before acting. This is research guidance, not a guaranteed investment outcome.`
     : "Run a prediction scan to generate a concise market brief from available market, sector, policy, news, congressional, and data-quality signals.";
 }
 
@@ -1229,6 +1236,7 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
     const timestampStats = scan.marketDataTimestampStats || {};
     const providerRows = Object.values(scan.providerHealth?.providers || {});
     const mainProvider = providerRows.find((provider) => provider.status && provider.status !== "Disabled") || providerRows[0] || {};
+    const quoteDiagnostic = scan.quoteCoverageDiagnostic || {};
     const fallbackCount = Number(coverage.symbolsUsingFallback) || 0;
     const availabilityLabel = scan.dataAvailability || "Not run";
     const freshnessLabel = scan.dataFreshness || "Not run";
@@ -1255,7 +1263,8 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
       metricCard("Market Data Availability", availabilityLabel, criticalReady, "predictions"),
       metricCard("Market Data Quality", `${Number(scan.marketDataQualityScore ?? predictionEngine.predictionEngineHealth?.marketDataQualityScore) || 0}/100`, scan.marketDataQualityLabel || predictionEngine.predictionEngineHealth?.marketDataQualityLabel || "Quality score unavailable", "predictions"),
       metricCard("Market Data Freshness", freshnessLabel, freshnessReason, "predictions"),
-      metricCard("Provider Status", mainProvider.status || "Unknown", mainProvider.providerName ? `${mainProvider.providerName}: Quote Coverage ${Number(mainProvider.quoteCoveragePercent ?? mainProvider.coveragePercent) || 0}%; contribution ${Number(mainProvider.contributionPercent) || 0}%. ${mainProvider.coverageExplanation || ""}` : "Provider diagnostics unavailable", "predictions"),
+      metricCard("Primary Market Data Provider", mainProvider.providerName === "Yahoo" ? "Yahoo Finance" : mainProvider.providerName || "Unknown", mainProvider.providerName ? `Quote Coverage attempt success: ${Number(mainProvider.successRatePercent) || 0}%. Prediction contribution: ${Number(mainProvider.contributionPercent) || 0}%.` : "Provider summary unavailable", "predictions"),
+      metricCard("Cached Fresh Data Reused", `${Number(quoteDiagnostic.symbolsServedFromCache) || 0} symbols`, `Fallback data: ${Number(quoteDiagnostic.symbolsWithFallbackGeneratedValues) || 0} symbols`, "predictions"),
       metricCard("Fallback Usage", `${fallbackCount} symbols`, coverage.symbolsUsingCache ? `${coverage.symbolsUsingCache} cache-backed symbols` : "Latest provider data used where available", "predictions"),
       metricCard("Provider Fetch", providerFetchedAt ? exactEt(providerFetchedAt) : "Not recorded", "When the app requested provider data", "predictions"),
       metricCard("Underlying Data", underlyingDataAt ? exactEt(underlyingDataAt) : "Unavailable", "Representative underlying market timestamp", "predictions"),
@@ -1286,6 +1295,14 @@ function renderDashboard() {
   const highestConfidence = strongestBy(predictions, (item) => item.confidenceScore || item.unifiedPredictionScore || 0);
   const engineStatus = health.predictionEngineStatus || health.status || (predictionEngine.updatedAt ? "Healthy" : "Not run");
   const dataStatus = scan.dataAvailability || health.dataAvailability || health.dataQualityStatus || "Not run";
+  const marketDataNote = scan.dataQualityClassificationReason || health.dataQualityStatusReason || "Completed scan availability and freshness are tracked separately from provider diagnostics.";
+  const congressNote = [
+    congressFeedStatus.userMessage || "Live congressional disclosures are not connected. Predictions are using saved disclosure records.",
+    congressFeedStatus.latestSavedDisclosureAt ? `Latest saved disclosure: ${exactEt(congressFeedStatus.latestSavedDisclosureAt)}.` : "",
+    congressFeedStatus.lastRefreshAttempt ? `Last attempt: ${exactEt(congressFeedStatus.lastRefreshAttempt)}.` : "",
+    congressFeedStatus.lastSuccessfulRefresh ? `Last successful refresh: ${exactEt(congressFeedStatus.lastSuccessfulRefresh)}.` : "",
+    congressFeedStatus.savedFallbackActive ? "Saved disclosure fallback active." : "",
+  ].filter(Boolean).join(" ");
   const predictionBias = predictionEngine.marketRegime?.primary || topToday?.marketRegime?.primary || "Neutral";
   const broadMarketTrend = scan.marketStatus || scan.marketSession?.status || "Unavailable";
   const trades = settings.congressTrades || [];
@@ -1313,19 +1330,19 @@ function renderDashboard() {
     metricCard("Market Session", broadMarketTrend, scan.scanMode || "Completed scan metadata unavailable", "market"),
     metricCard("Prediction Universe Bias", predictionBias, `${predictions.length} analyzed prediction candidate(s)`, "market"),
     metricCard("Prediction Universe Sentiment", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "No scan yet", "Internal estimate based on unified prediction scores only", "market"),
-    metricCard("S&P 500", "Not in completed scan metadata", "Live index widgets are separate diagnostics, not scan truth.", "market"),
-    metricCard("Nasdaq", "Not in completed scan metadata", "Live index widgets are separate diagnostics, not scan truth.", "market"),
-    metricCard("Dow", "Not in completed scan metadata", "Live index widgets are separate diagnostics, not scan truth.", "market"),
-    metricCard("Russell 2000", "Not in completed scan metadata", "Live index widgets are separate diagnostics, not scan truth.", "market"),
-    metricCard("VIX", "Supplemental only", "Missing VIX does not change completed scan availability.", "market"),
+    metricCard("S&P 500 Proxy - SPY", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
+    metricCard("Nasdaq Proxy - QQQ", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
+    metricCard("Dow Proxy - DIA", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
+    metricCard("Russell 2000 Proxy - IWM", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
+    metricCard("VIX", "Supplemental only", "Displayed separately from the completed prediction scan.", "market"),
     metricCard("Highest-Scoring Group in Current Scan", sectorStrengthSummary(predictions), `Based on ${predictions.length} final prediction candidate(s)`, "market"),
     metricCard("Scan Universe Source", scanUniverseSourceLabel(scan), scanUniverseSourceNote(scan), "market"),
   ].join("");
 
   output.predictionEngineGrid.innerHTML = [
     metricCard("Prediction Engine Status", engineStatus, `${Number(health.predictionsGenerated) || predictions.length} predictions generated`, "predictions"),
-    metricCard("Market Data Status", dataStatus, `${Number(health.marketQuotesSucceeded) || 0}/${Number(health.marketQuotesRequested) || 0} quotes succeeded; freshness ${health.dataFreshness || "unknown"}`, "predictions"),
-    metricCard("Congress Feed", congressFeedStatus.status || "Saved Data Only", congressFeedStatus.userMessage || "Live congressional disclosures are not connected. Predictions are using saved disclosure records.", "congress"),
+    metricCard("Market Data Status", dataStatus, `${marketDataNote} Freshness: ${health.dataFreshness || scan.dataFreshness || "unknown"}.`, "predictions"),
+    metricCard("Congress Feed", congressFeedStatus.status || "Saved Data Only", congressNote, "congress"),
     metricCard("Policy Feed Status", policySignals.errors?.length ? "Warning" : "Active", `${signals.length} policy/news signals`, "policy"),
     metricCard("Last Scan", predictionEngine.updatedAt ? relativeTime(predictionEngine.scanHealth?.lastSuccessfulScanTimestamp || predictionEngine.updatedAt) : "Not scanned", predictionEngine.updatedAt ? `Completed ${exactEt(predictionEngine.scanHealth?.scanCompletedTimestamp || predictionEngine.updatedAt)}` : "Run scan for latest read", "predictions"),
     metricCard("Candidates Scanned", String(Number(health.tickersScanned) || predictions.length || 0), `${predictionEngine.scanUniverse?.mode || "watchlist"} universe`, "predictions"),
@@ -1935,6 +1952,149 @@ function normalizedTimeframeForPrediction(item, model) {
   return item.timeframe || item.bestTimeframe || model?.name || "Selected timeframe";
 }
 
+function priceBandForPrice(priceValue) {
+  const price = Number(priceValue);
+  if (!Number.isFinite(price) || price <= 0) return { key: "unknown", label: "Price unavailable" };
+  if (price <= 5) return { key: "under5", label: "$5 and under" };
+  if (price <= 10) return { key: "5to10", label: "$5.01-$10" };
+  if (price <= 50) return { key: "10to50", label: "$10.01-$50" };
+  if (price <= 100) return { key: "50to100", label: "$50.01-$100" };
+  return { key: "over100", label: "$100.01 and up" };
+}
+
+function confidenceRank(value) {
+  return { low: 1, medium: 2, high: 3, "very high": 4 }[String(value || "").toLowerCase()] || 0;
+}
+
+function isExchangeListed(item) {
+  const text = `${item.exchange || ""} ${item.assetGroup || ""} ${item.type || ""} ${item.ticker || ""}`.toLowerCase();
+  return !/(otc|pink|grey|unsupported)/i.test(text);
+}
+
+function riskCategory(item) {
+  const risk = Number(item.riskScore ?? item.estimatedVolatility ?? 50);
+  if (risk >= 85) return "Extreme";
+  if (risk >= 65) return "High";
+  if (risk >= 40) return "Moderate";
+  return "Lower";
+}
+
+function opportunityTimeframeSectionKey(timeframe) {
+  if (timeframe === "7-Day") return "top25SevenDay";
+  if (timeframe === "1-Month") return "top25OneMonth";
+  if (timeframe === "1-Year") return "top25OneYear";
+  return "top25OneDay";
+}
+
+function opportunitySelectedAmount() {
+  const selected = output.investmentAmountPreview?.value || "100";
+  if (selected === "custom") return Math.max(0, Number(output.investmentAmountCustom?.value) || 0);
+  return Number(selected) || 100;
+}
+
+function investmentAccessPreview(item) {
+  const amount = opportunitySelectedAmount();
+  const price = currentPriceForPrediction(item);
+  if (!amount || !price) return { amount, wholeShares: 0, fractionalRequired: true, oneSharePercent: 0 };
+  const wholeShares = Math.floor(amount / price);
+  return {
+    amount,
+    wholeShares,
+    fractionalRequired: wholeShares < 1 || amount % price !== 0,
+    oneSharePercent: Math.round((price / amount) * 1000) / 10,
+  };
+}
+
+function beginnerQualification(item) {
+  const price = currentPriceForPrediction(item);
+  const technical = item.technicalAnalysis?.oneDay || {};
+  const risk = riskCategory(item);
+  const conflicts = item.conflictingSignals || [];
+  const reasons = [];
+  if (!isExchangeListed(item)) return { qualifies: false, reasons: [], reason: "OTC or unsupported security." };
+  if (!price || !item.latestUnderlyingQuoteAt) return { qualifies: false, reasons: [], reason: "Missing usable price or quote timestamp." };
+  if (["failed", "unavailable", "stale"].includes(String(item.dataQualityStatus || "").toLowerCase())) return { qualifies: false, reasons: [], reason: "Data quality is not usable for beginner view." };
+  if (confidenceRank(item.confidenceTier) < 2) return { qualifies: false, reasons: [], reason: "Confidence below medium." };
+  if (String(item.unifiedDirection || "").toLowerCase() === "mixed") return { qualifies: false, reasons: [], reason: "Mixed direction." };
+  if (risk === "Extreme") return { qualifies: false, reasons: [], reason: "Extreme risk." };
+  if (conflicts.length > 2) return { qualifies: false, reasons: [], reason: "Too many conflicting signals." };
+  if (Number(item.marketVolume) > 0) reasons.push("Strong liquidity");
+  if (technical.trendDirection || item.unifiedDirection) reasons.push("Clear trend");
+  if (["good", "partial"].includes(String(item.dataQualityStatus || "").toLowerCase())) reasons.push("Good data quality");
+  if (["Lower", "Moderate"].includes(risk)) reasons.push("Moderate risk");
+  return { qualifies: true, reasons: reasons.length ? reasons : ["Meets beginner quality filters"] };
+}
+
+function pennySpeculativeQualification(item) {
+  const price = currentPriceForPrediction(item);
+  if (!(price > 0 && price <= 5)) return { qualifies: false, reason: "Above $5.00." };
+  if (!isExchangeListed(item)) return { qualifies: false, reason: "OTC excluded." };
+  if (["failed", "unavailable", "stale"].includes(String(item.dataQualityStatus || "").toLowerCase())) return { qualifies: false, reason: "Quote/data quality unavailable." };
+  if (String(item.unifiedDirection || "").toLowerCase() === "mixed") return { qualifies: false, reason: "Mixed direction." };
+  if (!(Number(item.marketVolume) > 0)) return { qualifies: false, reason: "Volume unavailable." };
+  return { qualifies: true, reasons: ["Exchange listed", "Usable price data", "High Risk badge required"] };
+}
+
+function enrichOpportunityRows() {
+  const timeframe = output.opportunityTimeframe?.value || "1-Day";
+  const sectionKey = opportunityTimeframeSectionKey(timeframe);
+  const baseRows = (predictionEngine.sections?.[sectionKey] || predictionEngine.predictions || []).map((item, index) => ({ ...item, timeframeRank: Number(item.rank) || index + 1 }));
+  const allByScore = [...baseRows].sort((a, b) => scoreValue(b.unifiedPredictionScore || b.aiOpportunityScore) - scoreValue(a.unifiedPredictionScore || a.aiOpportunityScore));
+  const rankByTicker = new Map(allByScore.map((item, index) => [item.ticker, index + 1]));
+  const byBand = new Map();
+  for (const item of allByScore) {
+    const band = priceBandForPrice(currentPriceForPrediction(item));
+    if (!byBand.has(band.key)) byBand.set(band.key, []);
+    byBand.get(band.key).push(item);
+  }
+  const bandRankByTicker = new Map();
+  for (const [bandKey, rows] of byBand.entries()) {
+    rows.forEach((item, index) => bandRankByTicker.set(`${bandKey}:${item.ticker}`, index + 1));
+  }
+  return allByScore.map((item) => {
+    const price = currentPriceForPrediction(item);
+    const priceBand = priceBandForPrice(price);
+    const beginner = beginnerQualification(item);
+    const penny = pennySpeculativeQualification(item);
+    return {
+      ...item,
+      selectedTimeframe: timeframe,
+      overallRank: rankByTicker.get(item.ticker),
+      priceBand,
+      priceBandRank: bandRankByTicker.get(`${priceBand.key}:${item.ticker}`),
+      beginnerQualification: beginner,
+      pennySpeculativeQualification: penny,
+      investorViewRank: null,
+      newToTopList: !item.previousRank && item.rankMovement?.status === "new addition",
+      scoreChange: Number(item.scoreChange || item.rankMovement?.rankChange || 0),
+    };
+  });
+}
+
+function opportunityRowsForHub() {
+  const investorView = output.opportunityInvestorView?.value || "all";
+  const priceBand = output.opportunityPriceBand?.value || "all";
+  const rankingView = output.opportunityRankingView?.value || "overall";
+  let rows = enrichOpportunityRows().filter((item) => {
+    if (priceBand !== "all" && item.priceBand.key !== priceBand) return false;
+    if (investorView === "beginner" && !item.beginnerQualification.qualifies) return false;
+    if (investorView === "penny" && !item.pennySpeculativeQualification.qualifies) return false;
+    return !["failed", "unavailable"].includes(String(item.dataQualityStatus || "").toLowerCase());
+  });
+  if (rankingView === "confidence") rows.sort((a, b) => confidenceRank(b.confidenceTier) - confidenceRank(a.confidenceTier) || scoreValue(b.unifiedPredictionScore) - scoreValue(a.unifiedPredictionScore));
+  else if (rankingView === "risk") rows.sort((a, b) => Number(a.riskScore || 100) - Number(b.riskScore || 100));
+  else if (rankingView === "momentum") rows.sort((a, b) => scoreValue(b.oneDayScore || b.dailyScore) - scoreValue(a.oneDayScore || a.dailyScore));
+  else if (rankingView === "improved") rows.sort((a, b) => Number(b.scoreChange || 0) - Number(a.scoreChange || 0));
+  else if (rankingView === "new") rows = rows.filter((item) => item.newToTopList);
+  else rows.sort((a, b) => scoreValue(b.unifiedPredictionScore || b.aiOpportunityScore) - scoreValue(a.unifiedPredictionScore || a.aiOpportunityScore));
+  rows = rows.slice(0, 25).map((item, index) => ({ ...item, investorViewRank: investorView === "all" ? null : index + 1 }));
+  return rows;
+}
+
+function rankMetadataForTicker(ticker) {
+  return opportunityRowsForHub().find((item) => item.ticker === ticker) || enrichOpportunityRows().find((item) => item.ticker === ticker) || null;
+}
+
 function renderCompactPredictionCard(item) {
   const model = predictionModelForView(item);
   const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
@@ -1948,6 +2108,12 @@ function renderCompactPredictionCard(item) {
   const trend = technical.trendDirection || item.unifiedDirection || "neutral";
   const price = currentPriceForPrediction(item);
   const timeframe = normalizedTimeframeForPrediction(item, model);
+  const preview = investmentAccessPreview(item);
+  const risk = riskCategory(item);
+  const beginnerReasons = item.beginnerQualification?.qualifies ? item.beginnerQualification.reasons : [];
+  const pennyWarning = item.pennySpeculativeQualification?.qualifies
+    ? `<p class="prediction-ai-summary warning-copy">Penny and speculative stocks can be highly volatile, illiquid, and subject to rapid losses. This section is for high-risk research only.</p>`
+    : "";
   return `
     <article class="prediction-screener-card">
       <header class="prediction-card-header">
@@ -1965,15 +2131,29 @@ function renderCompactPredictionCard(item) {
       <div class="prediction-badge-row">
         <span class="pti-badge ${badgeClassForRecommendation(recommendation)}">${escapeHtml(recommendation)}</span>
         <span class="pti-badge ${badgeClassForConfidence(confidence)}">${escapeHtml(confidence)}</span>
+        <span class="pti-badge ${risk === "Extreme" || risk === "High" ? "market-stale" : "market-good"}">${escapeHtml(risk)} Risk</span>
         <span class="pti-badge ${dataQualityBadgeClass(dataQuality)}">${escapeHtml(dataQuality)}</span>
       </div>
       <div class="prediction-metadata-grid">
         <div><span>Timeframe</span><strong>${escapeHtml(timeframe)}</strong></div>
+        <div><span>Price Band</span><strong>${escapeHtml(item.priceBand?.label || priceBandForPrice(price).label)}</strong></div>
         <div><span>Pattern</span><strong>${escapeHtml(pattern)}</strong></div>
         <div><span>Trend</span><strong>${escapeHtml(trend)}</strong></div>
         <div><span>Technical</span><strong>${scoreValue(technicalScore)}/100</strong></div>
+        <div><span>Overall Rank</span><strong>${item.overallRank ? `#${item.overallRank}` : "n/a"}</strong></div>
+        <div><span>Category Rank</span><strong>${item.investorViewRank ? `#${item.investorViewRank}` : item.priceBandRank ? `#${item.priceBandRank} in ${item.priceBand?.label}` : "n/a"}</strong></div>
+        <div><span>Freshness</span><strong>${escapeHtml(item.freshnessStatus || item.freshness || "unknown")}</strong></div>
       </div>
       <p class="prediction-ai-summary">${escapeHtml(oneLineAiSummary(item, model))}</p>
+      ${beginnerReasons.length ? `<p class="prediction-ai-summary">Why it qualifies: ${escapeHtml(beginnerReasons.join(", "))}.</p>` : ""}
+      ${pennyWarning}
+      <div class="prediction-metadata-grid">
+        <div><span>Investment Access Preview</span><strong>${moneyOrCalculating(preview.amount)}</strong></div>
+        <div><span>Whole shares</span><strong>${preview.wholeShares}</strong></div>
+        <div><span>Fractional shares</span><strong>${preview.fractionalRequired ? "May be required" : "Not required"}</strong></div>
+        <div><span>One share uses</span><strong>${preview.oneSharePercent}%</strong></div>
+      </div>
+      <p class="prediction-ai-summary">This is a convenience calculation, not a portfolio recommendation.</p>
       <footer class="prediction-actions">
         <button type="button" class="pti-button" data-view-brief="${escapeHtml(item.ticker)}">View Trade Brief</button>
         <button type="button" class="pti-button ghost" data-add-watchlist="${escapeHtml(item.ticker)}">Add to Watchlist</button>
@@ -2045,11 +2225,14 @@ function renderCompactPredictionTable(rows) {
 function renderScreenerPredictions() {
   if (!output.predictionGrid || !output.predictionSummary) return;
   const predictions = predictionEngine.predictions || [];
-  const active = predictionEngine.sections?.[predictionView] || predictions.slice(0, 25);
+  const active = opportunityRowsForHub();
   const health = predictionEngine.predictionEngineHealth || {};
   const top25Counts = health.top25Counts || {};
   const qualityCounts = health.dataQualityStatusCounts || {};
   const scanUniverse = predictionEngine.scanUniverse || {};
+  const investorViewLabel = output.opportunityInvestorView?.selectedOptions?.[0]?.textContent || "All Opportunities";
+  const priceBandLabel = output.opportunityPriceBand?.selectedOptions?.[0]?.textContent || "All Prices";
+  const rankingLabel = output.opportunityRankingView?.selectedOptions?.[0]?.textContent || "Overall Top 25";
   const oneDayAvg = predictions.length
     ? Math.round(predictions.reduce((sum, item) => sum + scoreValue(item.oneDayScore || item.dailyScore), 0) / predictions.length)
     : 0;
@@ -2077,6 +2260,10 @@ function renderScreenerPredictions() {
     <div><span>Prediction engine</span><strong>${escapeHtml(health.predictionEngineStatus || health.status || "Not run")}</strong></div>
     <div><span>Data quality</span><strong>${escapeHtml(health.dataQualityStatus || "Not run")}</strong></div>
     <div><span>Scan universe</span><strong>${escapeHtml(scanUniverse.mode || "watchlist")} (${Number(scanUniverse.candidateCount) || predictions.length})</strong></div>
+    <div><span>Investor view</span><strong>${escapeHtml(investorViewLabel)}</strong></div>
+    <div><span>Price band</span><strong>${escapeHtml(priceBandLabel)}</strong></div>
+    <div><span>Ranking view</span><strong>${escapeHtml(rankingLabel)}</strong></div>
+    <div><span>Qualified results</span><strong>${active.length}</strong></div>
     <div><span>Top 25 counts</span><strong>${Number(top25Counts.top25OneDay) || 0}/${Number(top25Counts.top25SevenDay) || 0}/${Number(top25Counts.top25OneMonth) || 0}/${Number(top25Counts.top25OneYear) || 0}</strong></div>
     <div><span>Quality counts</span><strong>G ${Number(qualityCounts.good) || 0} / P ${Number(qualityCounts.partial) || 0} / S ${Number(qualityCounts.stale) || 0} / F ${Number(qualityCounts.failed) || 0}</strong></div>
   `;
@@ -2106,7 +2293,7 @@ function renderScreenerPredictions() {
       <article class="stock-card">
         <span>No matches</span>
         <strong>Adjust the screener filters</strong>
-        <p>No prediction in this list matches the current filter combination.</p>
+        <p>${active.length ? `${active.length} qualified result(s) exist before the secondary search/filter panel. ` : ""}No prediction in this list matches the current filter combination.</p>
       </article>
     `;
     return;
@@ -2525,6 +2712,12 @@ function renderTradeBrief() {
   const marketDataSourceNote = item.fallbackUsed || item.fallbackDataUsed
     ? "This recommendation includes fallback daily-session data."
     : "This recommendation is based on live market data where the provider supplied a current quote.";
+  const rankMeta = rankMetadataForTicker(item.ticker);
+  const rankMetrics = [
+    rankMeta?.overallRank ? `<div><span>Overall Rank</span><strong>#${rankMeta.overallRank}</strong></div>` : "",
+    rankMeta?.priceBandRank ? `<div><span>Price-Band Rank</span><strong>#${rankMeta.priceBandRank}</strong><small>${escapeHtml(rankMeta.priceBand?.label || "Current band")}</small></div>` : "",
+    rankMeta?.beginnerQualification?.qualifies ? `<div><span>Beginner Picks Rank</span><strong>${rankMeta.investorViewRank ? `#${rankMeta.investorViewRank}` : "Qualified"}</strong><small>${escapeHtml((rankMeta.beginnerQualification.reasons || []).slice(0, 2).join(", ") || "Meets beginner filters")}</small></div>` : "",
+  ].filter(Boolean).join("");
 
   output.tradeBriefPanel.innerHTML = `
     <article class="trade-brief-report">
@@ -2551,6 +2744,7 @@ function renderTradeBrief() {
         <div><span>Market Trend</span><strong>${escapeHtml(technical.trendDirection || item.marketRegime?.primary || "Calculating")}</strong></div>
         <div><span>Company</span><strong>${escapeHtml(item.name || item.company || item.ticker)}</strong></div>
         <div><span>Market Data</span><strong>${escapeHtml(item.marketDataQuality?.label || item.dataQualityStatus || "Calculating")}</strong><small>${escapeHtml(marketDataSourceNote)}</small></div>
+        ${rankMetrics}
       </div>
 
       <div class="brief-report-grid">
@@ -3004,11 +3198,11 @@ function renderMarketIntelligence() {
     marketMetricCard("Market Session", broadMarketTrend, scan.scanMode || "Completed scan metadata unavailable", statusTone(broadMarketTrend)),
     marketMetricCard("Prediction Universe Bias", predictionBias, `${predictions.length} deeply analyzed candidate(s)`, statusTone(predictionBias)),
     marketMetricCard("Prediction Universe Sentiment", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "No scan yet", "Internal estimate based on unified prediction scores only"),
-    marketMetricCard("S&P 500", "Not in completed scan metadata", "External index quote is diagnostic only"),
-    marketMetricCard("Nasdaq", "Not in completed scan metadata", "External index quote is diagnostic only"),
-    marketMetricCard("Dow", "Not in completed scan metadata", "External index quote is diagnostic only"),
-    marketMetricCard("Russell 2000", "Not in completed scan metadata", "External index quote is diagnostic only"),
-    marketMetricCard("VIX", "Supplemental only", "Missing VIX does not change completed scan availability"),
+    marketMetricCard("S&P 500 Proxy - SPY", "Live quote unavailable", "Displayed separately from the completed prediction scan"),
+    marketMetricCard("Nasdaq Proxy - QQQ", "Live quote unavailable", "Displayed separately from the completed prediction scan"),
+    marketMetricCard("Dow Proxy - DIA", "Live quote unavailable", "Displayed separately from the completed prediction scan"),
+    marketMetricCard("Russell 2000 Proxy - IWM", "Live quote unavailable", "Displayed separately from the completed prediction scan"),
+    marketMetricCard("VIX", "Supplemental only", "Displayed separately from the completed prediction scan"),
     marketMetricCard("Prediction Engine Status", health.predictionEngineStatus || health.status || "Not run", `${Number(health.predictionsGenerated) || predictions.length} predictions generated`, statusTone(health.predictionEngineStatus || health.status)),
     marketMetricCard("Market Data Availability", scan.dataAvailability || health.dataAvailability || "Not run", scan.dataQualityClassificationReason || `${Number(health.incompleteMarketDataPercent) || 0}% incomplete`, statusTone(scan.dataAvailability || health.dataAvailability)),
     marketMetricCard("Scan Universe Source", scanUniverseSourceLabel(scan), scanUniverseSourceNote(scan)),
@@ -4148,6 +4342,13 @@ output.watchlistAlertsList?.addEventListener("click", (event) => {
 document.querySelectorAll("[data-prediction-view]").forEach((button) => {
   button.addEventListener("click", () => {
     predictionView = button.dataset.predictionView;
+    const tabTimeframe = {
+      top25OneDay: "1-Day",
+      top25SevenDay: "7-Day",
+      top25OneMonth: "1-Month",
+      top25OneYear: "1-Year",
+    }[predictionView];
+    if (tabTimeframe && output.opportunityTimeframe) output.opportunityTimeframe.value = tabTimeframe;
     document.querySelectorAll("[data-prediction-view]").forEach((tab) => tab.classList.toggle("is-active", tab === button));
     renderPredictions();
   });
@@ -4170,6 +4371,12 @@ output.performanceSearch?.addEventListener("input", () => renderPredictionAudit(
   output.filterPolicy,
   output.filterTrend,
   output.filterDataQuality,
+  output.opportunityInvestorView,
+  output.opportunityTimeframe,
+  output.opportunityPriceBand,
+  output.opportunityRankingView,
+  output.investmentAmountPreview,
+  output.investmentAmountCustom,
 ]
   .filter(Boolean)
   .forEach((control) => {

@@ -52,7 +52,11 @@ Quote provider priority is:
 3. Cached snapshot
 4. Saved quote fallback
 
-Each provider reports Healthy, Delayed, Rate Limited, Failed, or Disabled.
+Each provider reports Healthy, Partial, Degraded, Failed, Not Needed, Rate Limited, or Disabled.
+
+Provider status is based on the provider's own attempted success rate and role in the completed scan. A provider can have low quote contribution and still be correctly labeled Not Needed if the scan reused cached fresh data or another provider supplied the final prediction data.
+
+Provider-specific quote coverage must not be displayed as total market-data availability.
 
 ## VIX Handling
 

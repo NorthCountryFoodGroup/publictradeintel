@@ -39,6 +39,13 @@
     "smoke:prediction-data-usability": "node scripts/smoke-test-prediction-data-usability.js",
     "smoke:provider-optimization": "node scripts/smoke-test-provider-optimization.js",
     "smoke:consistency-audit": "node scripts/smoke-test-consistency-audit.js",
+    "smoke:final-availability": "node scripts/smoke-test-final-availability-consistency.js",
+    "smoke:quote-coverage": "node scripts/smoke-test-quote-coverage-diagnostic.js",
+    "smoke:opportunities-hub": "node scripts/smoke-test-opportunities-hub.js",
+    "smoke:beginner-picks": "node scripts/smoke-test-beginner-picks.js",
+    "smoke:penny-speculative": "node scripts/smoke-test-penny-speculative.js",
+    "smoke:price-bands": "node scripts/smoke-test-price-band-rankings.js",
+    "smoke:investment-access": "node scripts/smoke-test-investment-access-preview.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }

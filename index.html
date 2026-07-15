@@ -358,6 +358,71 @@
         </div>
 
         <div class="member-summary" id="predictionSummary"></div>
+        <section class="dashboard-card opportunities-hub">
+          <div class="card-heading">
+            <span>Opportunities Hub <em class="beta-pill">Beta</em></span>
+            <strong>Rank existing predictions without rerunning the scan</strong>
+          </div>
+          <p class="muted-copy">Beginner and price-band views currently qualify and rerank existing predictions. Dedicated specialized scoring models may be added after forward-performance data is available.</p>
+          <p class="muted-copy">Beginner Picks prioritize clarity, liquidity, data quality, and controlled risk. They are not guarantees and may include stocks available through fractional shares.</p>
+          <div class="prediction-filter-grid">
+            <label>
+              <span>Investor View</span>
+              <select id="opportunityInvestorView">
+                <option value="all">All Opportunities</option>
+                <option value="beginner">Beginner Picks</option>
+                <option value="penny">Penny &amp; Speculative</option>
+              </select>
+            </label>
+            <label>
+              <span>Timeframe</span>
+              <select id="opportunityTimeframe">
+                <option value="1-Day">1 Day</option>
+                <option value="7-Day">7 Days</option>
+                <option value="1-Month">1 Month</option>
+                <option value="1-Year">1 Year</option>
+              </select>
+            </label>
+            <label>
+              <span>Price Band</span>
+              <select id="opportunityPriceBand">
+                <option value="all">All Prices</option>
+                <option value="under5">$5 and Under</option>
+                <option value="5to10">$5.01-$10</option>
+                <option value="10to50">$10.01-$50</option>
+                <option value="50to100">$50.01-$100</option>
+                <option value="over100">$100.01 and Up</option>
+              </select>
+            </label>
+            <label>
+              <span>Ranking View</span>
+              <select id="opportunityRankingView">
+                <option value="overall">Overall Top 25</option>
+                <option value="confidence">Highest Confidence</option>
+                <option value="risk">Lowest Risk</option>
+                <option value="momentum">Highest Momentum</option>
+                <option value="improved">Most Improved</option>
+                <option value="new">New Entrants</option>
+              </select>
+            </label>
+            <label>
+              <span>Investment Amount</span>
+              <select id="investmentAmountPreview">
+                <option value="25">$25</option>
+                <option value="50">$50</option>
+                <option value="100" selected>$100</option>
+                <option value="250">$250</option>
+                <option value="500">$500</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <label>
+              <span>Custom amount</span>
+              <input type="number" min="1" id="investmentAmountCustom" placeholder="Optional" />
+            </label>
+          </div>
+          <p class="muted-copy">Investment Access Preview is a convenience calculation, not a portfolio recommendation.</p>
+        </section>
         <div class="prediction-toolbar">
           <button type="button" id="runPredictionScan">Run prediction scan</button>
           <div class="view-toggle" role="group" aria-label="Prediction view">

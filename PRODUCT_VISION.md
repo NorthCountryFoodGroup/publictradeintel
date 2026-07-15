@@ -15,6 +15,12 @@ Public Trade Intel is being built as a next-generation stock intelligence and pr
 
 The product goal is to make sophisticated stock prediction intelligence simple, readable, and actionable.
 
+## Version 2.1.2 Product Direction
+
+Reliability language matters as much as model output. The app should explain what data was available, what came from cache or fallback, and what remains uncertain without making the user decode provider logs.
+
+The Opportunities Hub is the first user-facing research hub built on top of completed predictions. It adds practical filters for timeframe, investor experience, price band, and access preview while preserving the existing prediction model.
+
 ## Product Principles
 
 - Separate short-term trades from long-term opportunities.

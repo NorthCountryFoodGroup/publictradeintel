@@ -1,5 +1,16 @@
 # Public Trade Intel Changelog
 
+## Version 2.1.2 Final Reliability and Opportunities Hub
+
+- Locked market-data availability display to the shared backend thresholds.
+- Added quote coverage diagnostics so provider-specific quote success is not confused with overall prediction data availability.
+- Added clearer Yahoo/cache/fallback wording on the user dashboard while keeping full diagnostics in Admin.
+- Added Saved Data Only congressional feed wording when live refresh fails but saved disclosures exist.
+- Reworded market summary language to separate prediction universe bias from broad-market claims.
+- Added the beta Opportunities Hub with investor view, timeframe, price-band, ranking, and investment-access preview controls.
+- Added Beginner Picks, Penny Speculative, and price-band ranking documentation.
+- Added smoke tests for final availability consistency, quote diagnostics, Opportunities Hub controls, beginner filtering, penny speculative filtering, price bands, and investment access preview.
+
 ## Fix Production Symbol Coverage and External Data Connections
 
 - Added packaged cached public symbol snapshot so production does not shrink to the 117-symbol preset universe after Render deploy/restart.

@@ -19,6 +19,21 @@
 - Batch quote requests
 - Retry missing quotes
 - Separate engine health from market data quality
+- Keep availability labels centralized through backend thresholds
+- Explain provider-specific quote coverage separately from overall scan availability
+- Keep normal dashboard summaries readable while Admin retains full diagnostics
+
+## Version 2.1.2 - Final Reliability And Opportunities Hub
+
+- Final reliability wording cleanup
+- Quote coverage diagnostics
+- Saved-data-only Congress feed status
+- Prediction Universe Bias wording
+- Opportunities Hub beta
+- Beginner Picks beta filter
+- Penny Speculative beta filter
+- Price-band rankings
+- Investment access preview
 
 ## Version 2.1.5 - Prediction Responsiveness And Broad Discovery
 

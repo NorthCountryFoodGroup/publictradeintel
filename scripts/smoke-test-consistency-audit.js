@@ -23,7 +23,8 @@ assert.match(app, /Scan Universe Source/, "dashboard should render completed sca
 assert.doesNotMatch(app, /metricCard\("Symbol Universe Source"[\s\S]*symbolUniverseStatus/, "dashboard should not render startup symbol-universe flags as scan truth");
 assert.match(app, /Quote Coverage/, "provider card should label provider-specific quote coverage");
 assert.match(app, /contribution/, "provider card should show provider contribution");
-assert.match(app, /Not in completed scan metadata/, "market overview should not silently use non-scan globals");
+assert.match(app, /S&P 500 Proxy - SPY/, "market overview should label supplemental proxy data");
+assert.match(app, /Displayed separately from the completed prediction scan/, "market overview should not silently use non-scan globals");
 
 assert.match(admin, /Consistency Report/, "admin should show consistency report");
 assert.match(admin, /Consistency Score/, "admin should show consistency score");

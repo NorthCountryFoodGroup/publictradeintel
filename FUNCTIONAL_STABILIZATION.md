@@ -61,3 +61,7 @@ Feature development is frozen for this sprint. This pass focused on repairing vi
 # July 2026 Update
 
 Functional stabilization now includes market-data coverage thresholds, provider diagnostics, and scan-duration consistency checks. Runtime-generated prediction history remains excluded from commits.
+
+# Version 2.1.2 Update
+
+The Opportunities Hub is a presentation and filtering layer only. It does not change prediction scoring, provider calls, ranking models, or the broad/deep scan pipeline.
