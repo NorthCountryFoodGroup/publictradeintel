@@ -32,6 +32,11 @@
     "smoke:scan-metadata-consistency": "node scripts/smoke-test-scan-metadata-consistency.js",
     "smoke:weekend-data-quality": "node scripts/smoke-test-weekend-data-quality.js",
     "smoke:scan-summary-display": "node scripts/smoke-test-scan-summary-display.js",
+    "smoke:market-data-coverage": "node scripts/smoke-test-market-data-coverage.js",
+    "smoke:market-data-freshness": "node scripts/smoke-test-market-data-freshness.js",
+    "smoke:provider-health": "node scripts/smoke-test-provider-health.js",
+    "smoke:scan-duration": "node scripts/smoke-test-scan-duration.js",
+    "smoke:prediction-data-usability": "node scripts/smoke-test-prediction-data-usability.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }

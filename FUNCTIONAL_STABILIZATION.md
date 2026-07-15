@@ -58,3 +58,6 @@ Feature development is frozen for this sprint. This pass focused on repairing vi
 - core workflows smoke test: pass
 - visible controls smoke test: pass
 - admin workflow smoke test: pass
+# July 2026 Update
+
+Functional stabilization now includes market-data coverage thresholds, provider diagnostics, and scan-duration consistency checks. Runtime-generated prediction history remains excluded from commits.

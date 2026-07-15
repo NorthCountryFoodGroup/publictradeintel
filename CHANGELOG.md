@@ -138,3 +138,9 @@
 - Added custom ticker textarea.
 - Added active universe and candidate count display.
 - Added save settings action.
+# July 2026
+
+- Added market-data coverage and freshness distributions for completed scans.
+- Added provider-health diagnostics and scan-stage duration reporting.
+- Separated Engine Health from Market Data Availability and Market Data Freshness.
+- Added per-prediction data-usability flags for fallback, stale, missing critical fields, and confidence downgrade reasons.

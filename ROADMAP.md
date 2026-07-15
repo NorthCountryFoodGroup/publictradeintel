@@ -78,3 +78,6 @@
 - Backtesting
 - AI trade journal
 - Personalized recommendation engine
+# July 2026 Update
+
+Version 2.x data reliability now includes provider coverage metrics, provider health diagnostics, freshness distribution reporting, and full scan-duration methodology.

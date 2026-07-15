@@ -126,8 +126,23 @@ function ageMs(timestamp) {
   return Number.isFinite(time) ? Date.now() - time : Infinity;
 }
 
+function elapsedMs(startedAt) {
+  return Math.max(0, Date.now() - Number(startedAt || Date.now()));
+}
+
 function isoNow() {
   return new Date().toISOString();
+}
+
+function percentOf(count, total) {
+  return total ? Number(((Number(count || 0) / total) * 100).toFixed(1)) : 0;
+}
+
+function percentile(values, percentileRank) {
+  const sorted = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((percentileRank / 100) * sorted.length) - 1));
+  return sorted[index];
 }
 
 function tradingDaysFrom(startTimestamp, tradingDays) {
@@ -1296,6 +1311,8 @@ function validateScanMetadata(scanHealth) {
   const nextOpen = Date.parse(scanHealth.nextRegularSessionOpen || scanHealth.nextMarketOpen || "");
   const providerFetched = Date.parse(scanHealth.providerFetchedAt || "");
   const underlyingQuote = Date.parse(scanHealth.latestUnderlyingQuoteAt || "");
+  const totalDuration = Number(scanHealth.durationMs || scanHealth.totalDuration || 0);
+  const majorStageTotal = Object.values(scanHealth.stageDurations || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
 
   if (scanHealth.emergencyPresetUsed && symbolsAvailable !== emergencyCount) errors.push(`Emergency preset source reports ${symbolsAvailable} symbols, expected ${emergencyCount}.`);
   if (symbolsAvailable > emergencyCount && scanHealth.emergencyPresetUsed) errors.push("Emergency preset flag is true even though symbols available exceeds the preset count.");
@@ -1306,6 +1323,16 @@ function validateScanMetadata(scanHealth) {
   if (Number.isFinite(scanCompleted) && Number.isFinite(nextOpen) && nextOpen < scanCompleted) errors.push("Next regular market open is before scan completion.");
   if (Number.isFinite(providerFetched) && Number.isFinite(underlyingQuote) && underlyingQuote > providerFetched) errors.push("Underlying quote timestamp is after provider fetch timestamp.");
   if (String(scanHealth.marketStatus || "").startsWith("Closed") && scanHealth.scanMode !== "Closed-Market Analysis") errors.push("Closed market status does not match closed-market scan mode.");
+  if (totalDuration && majorStageTotal > totalDuration * 1.25 + 500) errors.push("Stage durations exceed total scan duration by more than expected overhead.");
+  if (scanHealth.marketDataCoverage?.criticalFieldCoveragePercent !== undefined) {
+    const coverage = Number(scanHealth.marketDataCoverage.criticalFieldCoveragePercent);
+    const availability = scanHealth.dataAvailability;
+    if (coverage >= 90 && availability === "Unavailable") errors.push("Availability status conflicts with critical-field coverage percentage.");
+    if (coverage < 40 && availability !== "Unavailable") errors.push("Availability status should be unavailable below 40% critical-field coverage.");
+  }
+  if (scanHealth.marketDataTimestampStats?.representativeUnderlyingTimestamp && scanHealth.latestUnderlyingQuoteAt !== scanHealth.marketDataTimestampStats.representativeUnderlyingTimestamp) {
+    errors.push("Displayed underlying data timestamp does not match representative freshness timestamp.");
+  }
 
   return {
     passed: !errors.length,
@@ -1364,6 +1391,141 @@ function findCachedQuote(ticker) {
         marketProvider: String(match.marketProvider || "Saved market data"),
       }
     : null;
+}
+
+function emptyProviderDiagnostics() {
+  return {
+    providers: {},
+    stages: [],
+    latestError: null,
+    requestedSymbols: [],
+    returnedSymbols: [],
+    missingSymbols: [],
+    rateLimitedRequests: 0,
+    timeoutCount: 0,
+    parseFailures: 0,
+    fallbackUsage: 0,
+    cacheUsage: 0,
+    startedAt: null,
+    completedAt: null,
+    latencyMs: 0,
+  };
+}
+
+function providerDiagnostic(providerName, fallbackSource = "") {
+  return {
+    providerName,
+    status: providerName === "Alpha Vantage" && !MARKET_API_KEY ? "Not Configured" : "Healthy",
+    lastSuccessfulRequest: null,
+    lastFailedRequest: null,
+    symbolsRequested: 0,
+    symbolsReturned: 0,
+    coveragePercent: 0,
+    medianQuoteAgeMs: null,
+    errorCount: 0,
+    timeoutCount: 0,
+    rateLimitCount: 0,
+    parseFailureCount: 0,
+    latestError: "",
+    currentFallbackSource: fallbackSource,
+  };
+}
+
+function classifyProviderError(message = "") {
+  const text = String(message || "");
+  return {
+    rateLimited: /rate|frequency|limit|premium endpoint|thank you for using alpha vantage/i.test(text),
+    timeout: /timeout|timed out|aborted/i.test(text),
+    parseFailure: /json|parse|unexpected token/i.test(text),
+    permanentUnsupported: /invalid api call|not found|unsupported|No fallback quote returned/i.test(text),
+  };
+}
+
+function quoteStageDiagnostic({ name, providerName, operation, startedAt, completedAt, requestedSymbols, results, errors, fallbackUsage = 0, cacheUsage = 0 }) {
+  const returned = (results || []).filter((quote) => Number(quote.marketPrice) > 0);
+  const requested = [...new Set((requestedSymbols || []).map(quoteTickerSymbol).filter(Boolean))];
+  const returnedSymbols = new Set(returned.map((quote) => quote.ticker));
+  const missing = requested.filter((ticker) => !returnedSymbols.has(ticker));
+  const underlyingTimes = returned.map((quote) => Date.parse(quote.latestUnderlyingQuoteAt || quote.marketUpdatedAt || "")).filter(Number.isFinite);
+  const flags = (errors || []).map((item) => classifyProviderError(item.error || item.message || ""));
+  return {
+    name,
+    providerName,
+    operation,
+    symbolsRequested: requested.length,
+    symbolsReturned: returned.length,
+    symbolsMissing: missing.length,
+    missingSymbols: missing.slice(0, 200),
+    httpOrProviderStatus: errors?.length ? "Partial" : "Healthy",
+    requestStart: startedAt,
+    requestCompletion: completedAt,
+    latencyMs: Math.max(0, Date.parse(completedAt || "") - Date.parse(startedAt || "")),
+    retryCount: Math.max(0, ...((results || []).map((quote) => Number(quote.marketQuoteRetryCount) || 0)), 0),
+    rateLimitResponses: flags.filter((flag) => flag.rateLimited).length,
+    timeoutCount: flags.filter((flag) => flag.timeout).length,
+    parseFailures: flags.filter((flag) => flag.parseFailure).length,
+    fallbackUsage,
+    cacheUsage,
+    oldestUnderlyingTimestamp: underlyingTimes.length ? new Date(Math.min(...underlyingTimes)).toISOString() : null,
+    newestUnderlyingTimestamp: underlyingTimes.length ? new Date(Math.max(...underlyingTimes)).toISOString() : null,
+  };
+}
+
+function updateProviderDiagnostics(diagnostics, quotes = [], errors = [], requestedTickers = []) {
+  const providers = diagnostics.providers || {};
+  for (const providerName of ["Alpha Vantage", "Yahoo chart fallback", "Saved market data cache"]) {
+    providers[providerName] ||= providerDiagnostic(providerName, providerName === "Alpha Vantage" ? "Yahoo chart fallback" : providerName === "Yahoo chart fallback" ? "Saved market data cache" : "");
+  }
+  for (const ticker of requestedTickers) {
+    providers["Yahoo chart fallback"].symbolsRequested += 1;
+    if (MARKET_API_KEY) providers["Alpha Vantage"].symbolsRequested += 1;
+  }
+  const quoteAges = [];
+  for (const quote of quotes) {
+    const providerName = /Saved/i.test(quote.marketProvider || "") ? "Saved market data cache" : /Yahoo/i.test(quote.marketProvider || "") ? "Yahoo chart fallback" : "Alpha Vantage";
+    const provider = providers[providerName] || providerDiagnostic(providerName);
+    provider.symbolsReturned += Number(quote.marketPrice) > 0 ? 1 : 0;
+    if (Number(quote.marketPrice) > 0) provider.lastSuccessfulRequest = quote.providerFetchedAt || quote.marketUpdatedAt || isoNow();
+    if (/fallback/i.test(quote.marketProvider || "")) diagnostics.fallbackUsage += 1;
+    if (/Saved/i.test(quote.marketProvider || "")) diagnostics.cacheUsage += 1;
+    const age = ageMs(quote.latestUnderlyingQuoteAt || quote.marketUpdatedAt);
+    if (Number.isFinite(age)) quoteAges.push(age);
+    providers[providerName] = provider;
+  }
+  for (const error of errors) {
+    const flags = classifyProviderError(error.error || "");
+    diagnostics.rateLimitedRequests += flags.rateLimited ? 1 : 0;
+    diagnostics.timeoutCount += flags.timeout ? 1 : 0;
+    diagnostics.parseFailures += flags.parseFailure ? 1 : 0;
+    diagnostics.latestError = error.error || diagnostics.latestError;
+    const providerName = flags.rateLimited && MARKET_API_KEY ? "Alpha Vantage" : "Yahoo chart fallback";
+    const provider = providers[providerName] || providerDiagnostic(providerName);
+    provider.errorCount += 1;
+    provider.timeoutCount += flags.timeout ? 1 : 0;
+    provider.rateLimitCount += flags.rateLimited ? 1 : 0;
+    provider.parseFailureCount += flags.parseFailure ? 1 : 0;
+    provider.lastFailedRequest = isoNow();
+    provider.latestError = error.error || provider.latestError;
+    providers[providerName] = provider;
+  }
+  for (const provider of Object.values(providers)) {
+    provider.coveragePercent = percentOf(provider.symbolsReturned, provider.symbolsRequested);
+    provider.medianQuoteAgeMs = quoteAges.length ? percentile(quoteAges, 50) : null;
+    provider.status =
+      provider.providerName === "Alpha Vantage" && !MARKET_API_KEY
+        ? "Not Configured"
+        : provider.rateLimitCount
+          ? "Rate Limited"
+          : provider.errorCount && provider.symbolsReturned
+            ? "Partial"
+            : provider.errorCount && !provider.symbolsReturned
+              ? "Failed"
+              : provider.medianQuoteAgeMs !== null && provider.medianQuoteAgeMs > 15 * 60 * 1000
+                ? "Delayed"
+                : "Healthy";
+  }
+  diagnostics.providers = providers;
+  return diagnostics;
 }
 
 function latestTradingDayCloseIso(value) {
@@ -1485,6 +1647,17 @@ async function fetchMarketQuoteWithRetry(ticker, retryCount = 1) {
     }
   }
   const symbol = quoteTickerSymbol(ticker);
+  const cached = findCachedQuote(symbol);
+  if (cached?.marketPrice && cached.marketUpdatedAt && ageMs(cached.marketUpdatedAt) <= 30 * 60 * 1000) {
+    return {
+      ...cached,
+      marketQuoteRequested: true,
+      marketQuoteRetryCount: retryCount,
+      marketCacheUsed: true,
+      fallbackDataUsed: true,
+      marketProvider: "Saved market data cache",
+    };
+  }
   return {
     ticker: symbol,
     marketQuoteRequested: true,
@@ -1588,10 +1761,12 @@ async function marketIndexDiagnostics() {
 async function refreshMarketData(config) {
   const quotes = [];
   const errors = [];
+  const diagnostics = emptyProviderDiagnostics();
   const discovery = sanitizeDiscoverySettings(config.discoverySettings);
   const requestedTickers = scanUniverseTickers(config);
   const tickers = [...new Set(requestedTickers)].filter(Boolean);
   const startedAt = Date.now();
+  diagnostics.startedAt = new Date(startedAt).toISOString();
 
   for (let index = 0; index < tickers.length; index += (discovery.batchSize || MARKET_QUOTE_BATCH_SIZE)) {
     if (Date.now() - startedAt > discovery.maxScanDurationMs) {
@@ -1607,6 +1782,24 @@ async function refreshMarketData(config) {
       }
     }
   }
+  diagnostics.completedAt = isoNow();
+  diagnostics.latencyMs = elapsedMs(startedAt);
+  diagnostics.requestedSymbols = tickers;
+  diagnostics.returnedSymbols = quotes.filter((quote) => Number(quote.marketPrice) > 0).map((quote) => quote.ticker);
+  diagnostics.missingSymbols = tickers.filter((ticker) => !diagnostics.returnedSymbols.includes(ticker)).slice(0, 500);
+  updateProviderDiagnostics(diagnostics, quotes, errors, tickers);
+  diagnostics.stages.push(quoteStageDiagnostic({
+    name: "Deep-analysis quote refresh",
+    providerName: MARKET_API_KEY ? "Alpha Vantage + Yahoo chart fallback" : "Yahoo chart fallback",
+    operation: "Quote refresh for active scan universe",
+    startedAt: diagnostics.startedAt,
+    completedAt: diagnostics.completedAt,
+    requestedSymbols: tickers,
+    results: quotes,
+    errors,
+    fallbackUsage: diagnostics.fallbackUsage,
+    cacheUsage: diagnostics.cacheUsage,
+  }));
 
   const byTicker = new Map(quotes.map((quote) => [quote.ticker, quote]));
   const requested = new Set(tickers);
@@ -1627,6 +1820,7 @@ async function refreshMarketData(config) {
     quotes,
     errors,
     requestedTickers: tickers,
+    diagnostics,
     providerLimits: {
       broadScreenTarget: discovery.broadScreenTarget,
       providerRequestBudget: discovery.providerRequestBudget,
@@ -3081,6 +3275,22 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
   const latestUnderlyingQuoteAt = stock.latestUnderlyingQuoteAt || quoteTimestamp;
   const quoteAgeHours = quoteTimestamp ? (Date.now() - Date.parse(quoteTimestamp)) / 3600000 : null;
   const freshnessStatus = !quoteTimestamp ? "unavailable" : quoteAgeHours <= 1 ? "live" : quoteAgeHours <= 24 ? "recent" : quoteAgeHours <= 72 ? "delayed" : "stale";
+  const missingCriticalFields = [
+    price ? "" : "current/reference price",
+    quoteTimestamp ? "" : "quote timestamp",
+    Number(stock.marketVolume) ? "" : "usable volume",
+    Number.isFinite(Number(technicalAnalysis.oneDay?.technicalSignalScore)) ? "" : "technical calculations",
+  ].filter(Boolean);
+  const missingOptionalFields = [
+    stock.marketCap ? "" : "market cap",
+    policy.count ? "" : "fresh ticker-specific policy/news signal",
+  ].filter(Boolean);
+  const fallbackDataUsed = Boolean(stock.fallbackDataUsed || /fallback/i.test(stock.marketProvider || ""));
+  const staleDataUsed = ["stale", "unavailable"].includes(freshnessStatus);
+  const criticalDataComplete = !missingCriticalFields.length;
+  const dataUsabilityStatus = criticalDataComplete ? (staleDataUsed || fallbackDataUsed ? "usable-with-downgrade" : "usable") : "insufficient";
+  const dataQualityPenalty = Math.round((100 - dataQuality.score) * 0.04);
+  const freshnessPenalty = freshnessStatus === "stale" ? 8 : freshnessStatus === "delayed" ? 4 : freshnessStatus === "unavailable" ? 10 : 0;
   const signalContribution = {
     currentPriceMomentum: Math.round(momentum * 0.12),
     intradayMomentum: Math.round(intradayTrend * 0.08),
@@ -3100,21 +3310,42 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     dataQualityPenalty: -Math.round((100 - dataQuality.score) * 0.04),
     staleDataPenalty: freshnessStatus === "stale" ? -8 : freshnessStatus === "delayed" ? -4 : freshnessStatus === "unavailable" ? -10 : 0,
   };
+  const shortTermCriticalMissing = bestTimeframe === "1-Day" && !criticalDataComplete;
+  const confidenceTier = shortTermCriticalMissing && ["high", "very high"].includes(unifiedPrediction.confidenceTier)
+    ? "medium"
+    : unifiedPrediction.confidenceTier;
+  const dataDowngradeNotes = [
+    shortTermCriticalMissing ? "1-day confidence was capped because critical quote/intraday data is incomplete." : "",
+    fallbackDataUsed ? "Fallback market data was used; review provider diagnostics before treating this as a live signal." : "",
+    staleDataUsed ? "Stale or unavailable market timestamps reduced confidence." : "",
+  ].filter(Boolean);
 
   return {
     ticker,
     name: stock.name,
     assetGroup: assetGroup(stock),
     currentPrice: price,
+    marketVolume: Number(stock.marketVolume) || null,
+    marketCap: Number(stock.marketCap) || null,
     marketChangePercent: stock.marketChangePercent || "",
     marketProvider: stock.marketProvider || "",
     marketProviderSymbol: stock.marketProviderSymbol || ticker,
     marketQuoteRequested: stock.marketQuoteRequested !== false,
     marketQuoteRetryCount: Number(stock.marketQuoteRetryCount) || 0,
     marketQuoteError: stock.marketQuoteError || "",
+    marketCacheUsed: Boolean(stock.marketCacheUsed),
+    fallbackDataUsed,
+    staleDataUsed,
+    criticalDataComplete,
+    missingCriticalFields,
+    missingOptionalFields,
+    dataUsabilityStatus,
+    dataQualityPenalty,
+    freshnessPenalty,
     quoteTimestamp,
     providerFetchedAt,
     latestUnderlyingQuoteAt,
+    latestDailyBarAt: latestUnderlyingQuoteAt,
     intradayDataTimestamp: quoteTimestamp,
     volumeTimestamp: quoteTimestamp,
     newsTimestamp: policy.strongest?.updatedAt || policySignals?.updatedAt || null,
@@ -3135,10 +3366,10 @@ function buildPrediction(stock, config, policySignals, previousByTicker) {
     chartPatternSignal,
     unifiedPredictionScore: unifiedPrediction.unifiedPredictionScore,
     unifiedDirection: unifiedPrediction.unifiedDirection,
-    confidenceTier: unifiedPrediction.confidenceTier,
+    confidenceTier,
     strongestSignals: unifiedPrediction.strongestSignals,
     conflictingSignals: unifiedPrediction.conflictingSignals,
-    finalReasonSummary: unifiedPrediction.finalReasonSummary,
+    finalReasonSummary: dataDowngradeNotes.length ? `${unifiedPrediction.finalReasonSummary} ${dataDowngradeNotes.join(" ")}` : unifiedPrediction.finalReasonSummary,
     dataQualityStatus: dataQuality.dataQualityStatus,
     dataQualityNotes: dataQuality.dataQualityNotes,
     aiOpportunityScore: score,
@@ -3538,7 +3769,7 @@ function duplicateTickers(rows) {
   return [...duplicates];
 }
 
-function buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt }) {
+function buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt, marketDataAnalysis = null }) {
   const top25 = {
     top25OneDay: sections.top25OneDay || [],
     top25SevenDay: sections.top25SevenDay || [],
@@ -3595,13 +3826,15 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
       : dominantFreshness === "stale"
       ? "Stale"
       : "Unavailable";
-  const dataQualityStatus = dataAvailability;
+  const finalDataAvailability = marketDataAnalysis?.dataAvailability || dataAvailability;
+  const finalDataFreshness = marketDataAnalysis?.dataFreshness || dataFreshness;
+  const dataQualityStatus = finalDataAvailability;
   const dataQualityClassificationReason =
-    dataAvailability === "Unavailable"
+    marketDataAnalysis?.classificationReason || (finalDataAvailability === "Unavailable"
       ? "Required market data was unavailable for a critical percentage of analyzed candidates."
-      : dataFreshness === "Delayed" || dataFreshness === "Stale"
+      : finalDataFreshness === "Delayed" || finalDataFreshness === "Stale"
       ? "The scan completed with usable latest-session data, but market timestamps are not live."
-      : "The scan completed with usable current provider data.";
+      : "The scan completed with usable current provider data.");
   const highest = [...predictions].sort((a, b) => Number(b.unifiedPredictionScore || 0) - Number(a.unifiedPredictionScore || 0))[0] || null;
   const lowest = [...predictions].sort((a, b) => Number(a.unifiedPredictionScore || 0) - Number(b.unifiedPredictionScore || 0))[0] || null;
   const checkFailures = Object.entries(rankingChecks).filter(([, passed]) => !passed).map(([name]) => name);
@@ -3622,8 +3855,8 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
     predictionEngineStatus: status,
     predictionEngineStatusReasons: engineFailureReasons,
     dataQualityStatus,
-    dataAvailability,
-    dataFreshness,
+    dataAvailability: finalDataAvailability,
+    dataFreshness: finalDataFreshness,
     dataQualityClassificationReason,
     dataQualityThresholds: {
       completeProviderFailurePercent: 0,
@@ -3665,6 +3898,126 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
     rankingSanityFailures: checkFailures,
     duplicateTickersByTimeframe: Object.fromEntries(Object.entries(top25).map(([key, rows]) => [key, duplicateTickers(rows)])),
     warnings,
+  };
+}
+
+function criticalDataFields(prediction) {
+  const missing = [];
+  const optional = [];
+  if (!(Number(prediction.currentPrice) > 0)) missing.push("current/reference price");
+  if (!prediction.latestUnderlyingQuoteAt && !prediction.quoteTimestamp) missing.push("quote timestamp");
+  if (!(Number(prediction.marketVolume) > 0)) missing.push("usable volume");
+  const technicalScore = Number(prediction.technicalAnalysis?.oneDay?.technicalSignalScore);
+  if (!Number.isFinite(technicalScore)) missing.push("technical calculations");
+  if (!prediction.intradayDataTimestamp && !prediction.latestDailyBarAt && !prediction.latestUnderlyingQuoteAt) optional.push("intraday or latest completed-session bars");
+  if (!prediction.marketCap) optional.push("market cap");
+  return { missingCriticalFields: missing, missingOptionalFields: optional };
+}
+
+function freshnessBucket(ageMsValue, sessionStatus = "") {
+  if (!Number.isFinite(ageMsValue)) return "unavailable";
+  const open = sessionStatus === "Open";
+  if (open && ageMsValue <= 15 * 60 * 1000) return "live";
+  if (open && ageMsValue <= 60 * 60 * 1000) return "recent";
+  if (ageMsValue <= 72 * 60 * 60 * 1000) return "delayed";
+  return "stale";
+}
+
+function buildMarketDataCoverage({ predictions, providerDiagnostics, marketSession, requestedCount }) {
+  const rows = predictions || [];
+  const total = rows.length;
+  const sessionStatus = marketSession?.status || "";
+  const criticalDetails = rows.map(criticalDataFields);
+  const criticalComplete = criticalDetails.filter((item) => !item.missingCriticalFields.length).length;
+  const quoteTimes = rows
+    .map((item) => Date.parse(item.latestUnderlyingQuoteAt || item.quoteTimestamp || ""))
+    .filter(Number.isFinite);
+  const quoteAges = quoteTimes.map((time) => Date.now() - time).filter(Number.isFinite);
+  const freshnessDistribution = {
+    liveCount: quoteAges.filter((age) => freshnessBucket(age, sessionStatus) === "live").length,
+    recentCount: quoteAges.filter((age) => freshnessBucket(age, sessionStatus) === "recent").length,
+    delayedCount: quoteAges.filter((age) => freshnessBucket(age, sessionStatus) === "delayed").length,
+    staleCount: quoteAges.filter((age) => freshnessBucket(age, sessionStatus) === "stale").length,
+    unavailableCount: Math.max(0, total - quoteAges.length),
+  };
+  const withCriticalPercent = percentOf(criticalComplete, total);
+  const dataAvailability =
+    total === 0 || withCriticalPercent < 40
+      ? "Unavailable"
+      : withCriticalPercent < 70
+        ? "Degraded"
+        : withCriticalPercent < 90
+          ? "Partial"
+          : withCriticalPercent < 95
+            ? "Good"
+            : "Complete";
+  const medianQuoteAgeMs = percentile(quoteAges, 50);
+  const p90QuoteAgeMs = percentile(quoteAges, 90);
+  const livePercent = percentOf(freshnessDistribution.liveCount, total);
+  const recentPercent = percentOf(freshnessDistribution.liveCount + freshnessDistribution.recentCount, total);
+  const delayedPercent = percentOf(freshnessDistribution.liveCount + freshnessDistribution.recentCount + freshnessDistribution.delayedCount, total);
+  const dataFreshness =
+    !quoteAges.length
+      ? "Unavailable"
+      : sessionStatus === "Open" && livePercent >= 50
+        ? "Live"
+        : sessionStatus === "Open" && recentPercent >= 50
+          ? "Recent"
+          : delayedPercent >= 50
+            ? "Delayed"
+            : "Stale";
+  const symbolsUsingFallback = rows.filter((item) => item.fallbackDataUsed || /fallback/i.test(item.marketProvider || "")).length;
+  const symbolsUsingCache = rows.filter((item) => item.marketCacheUsed || /Saved market data/i.test(item.marketProvider || "")).length;
+  const marketDataCoverage = {
+    symbolsRequested: Number(requestedCount) || total,
+    symbolsReturned: rows.filter((item) => Number(item.currentPrice) > 0).length,
+    symbolsWithCurrentPrice: rows.filter((item) => Number(item.currentPrice) > 0).length,
+    symbolsWithDailyChange: rows.filter((item) => item.marketChangePercent).length,
+    symbolsWithVolume: rows.filter((item) => Number(item.marketVolume) > 0).length,
+    symbolsWithIntradayBars: rows.filter((item) => item.intradayDataTimestamp).length,
+    symbolsWithDailyBars: rows.filter((item) => item.latestDailyBarAt || item.latestUnderlyingQuoteAt).length,
+    symbolsWithMarketCap: rows.filter((item) => Number(item.marketCap) > 0).length,
+    symbolsUsingFallback,
+    symbolsUsingCache,
+    symbolsMissingCriticalFields: criticalDetails.filter((item) => item.missingCriticalFields.length).length,
+    symbolsMissingOptionalFields: criticalDetails.filter((item) => item.missingOptionalFields.length).length,
+    providerFailures: Number(providerDiagnostics?.stages?.[0]?.symbolsMissing) || rows.filter((item) => item.marketQuoteError).length,
+    timeouts: Number(providerDiagnostics?.timeoutCount) || 0,
+    rateLimitedRequests: Number(providerDiagnostics?.rateLimitedRequests) || 0,
+    parseFailures: Number(providerDiagnostics?.parseFailures) || 0,
+    criticalFieldCoveragePercent: withCriticalPercent,
+  };
+  for (const [key, value] of Object.entries({ ...marketDataCoverage, ...freshnessDistribution })) {
+    if (typeof value === "number") marketDataCoverage[`${key}Percent`] = percentOf(value, total || marketDataCoverage.symbolsRequested);
+  }
+  return {
+    marketDataCoverage,
+    freshnessDistribution: {
+      ...freshnessDistribution,
+      livePercent,
+      recentPercent,
+      delayedPercent,
+      stalePercent: percentOf(freshnessDistribution.staleCount, total),
+      unavailablePercent: percentOf(freshnessDistribution.unavailableCount, total),
+    },
+    timestampStats: {
+      medianQuoteAgeMs,
+      p90QuoteAgeMs,
+      oldestQuoteAgeMs: quoteAges.length ? Math.max(...quoteAges) : null,
+      newestQuoteAgeMs: quoteAges.length ? Math.min(...quoteAges) : null,
+      medianIntradayBarAgeMs: medianQuoteAgeMs,
+      percentageWithinLiveThreshold: livePercent,
+      percentageWithinRecentThreshold: recentPercent,
+      oldestUnderlyingTimestamp: quoteTimes.length ? new Date(Math.min(...quoteTimes)).toISOString() : null,
+      newestUnderlyingTimestamp: quoteTimes.length ? new Date(Math.max(...quoteTimes)).toISOString() : null,
+      representativeUnderlyingTimestamp: medianQuoteAgeMs !== null ? new Date(Date.now() - medianQuoteAgeMs).toISOString() : null,
+    },
+    dataAvailability,
+    dataFreshness,
+    criticalDetails,
+    classificationReason:
+      `${criticalComplete} of ${total} analyzed symbols had critical market data (${withCriticalPercent}%). ` +
+      `${dataFreshness} freshness from median quote age ${medianQuoteAgeMs === null ? "unavailable" : Math.round(medianQuoteAgeMs / 60000) + " minutes"}.`,
   };
 }
 
@@ -3877,20 +4230,36 @@ async function refreshPredictions(options = {}) {
   const policySignals = options.policySignals || readJson(POLICY_FILE, { updatedAt: null, signals: [], errors: [] });
   const warnings = Array.isArray(options.warnings) ? [...options.warnings] : [];
   const scanStartedAt = options.scanStartedAt || new Date().toISOString();
+  const stageStartedAt = Number(options.stageStartedAt) || Date.parse(scanStartedAt) || Date.now();
+  const stageDurations = { ...(options.stageDurations || {}) };
+  const broadScreenStartedAt = Date.now();
   const discoveryPipeline = buildDiscoveryPipeline(config, options.quotes || []);
   const scanUniverse = discoveryPipeline.deepAnalysisCandidates;
   const broadStats = broadUniverseStats(config, options.quotes || []);
+  stageDurations.universeLoadDuration = Number(stageDurations.universeLoadDuration) || Math.max(0, broadScreenStartedAt - stageStartedAt);
+  stageDurations.broadScreenDuration = elapsedMs(broadScreenStartedAt);
+  const deepStartedAt = Date.now();
   const previous = readJson(PREDICTIONS_FILE, { predictions: [] });
   const previousByTicker = new Map((previous.predictions || []).map((item) => [item.ticker, item]));
   const predictions = scanUniverse
     .map((stock) => buildPrediction(stock, config, policySignals, previousByTicker))
     .sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
+  stageDurations.deepAnalysisDuration = elapsedMs(deepStartedAt);
+  const rankingStartedAt = Date.now();
   const updatedAt = new Date().toISOString();
   const sections = predictionSections(predictions, previous.sections || {});
-  const predictionEngineHealth = buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt });
+  const marketDataAnalysis = buildMarketDataCoverage({
+    predictions,
+    providerDiagnostics: options.providerDiagnostics,
+    marketSession: broadStats.marketSession,
+    requestedCount: Number(options.marketRequestsUsed) || scanUniverse.length,
+  });
+  const predictionEngineHealth = buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt, marketDataAnalysis });
+  stageDurations.rankingDuration = elapsedMs(rankingStartedAt);
   const durationMs = Date.parse(updatedAt) - Date.parse(scanStartedAt);
   const scanId = `scan-${Date.parse(updatedAt) || Date.now()}`;
   const latestUnderlyingQuoteAt = predictions.map((item) => item.latestUnderlyingQuoteAt || item.quoteTimestamp).filter(Boolean).sort().reverse()[0] || broadStats.marketSession?.lastRegularSessionClose || null;
+  const representativeUnderlyingQuoteAt = marketDataAnalysis.timestampStats.representativeUnderlyingTimestamp || latestUnderlyingQuoteAt;
   const providerFetchedAt = predictions.map((item) => item.providerFetchedAt || item.scanTimestamp).filter(Boolean).sort().reverse()[0] || updatedAt;
   const latestDailyBarAt = latestUnderlyingQuoteAt;
   const latestIntradayBarAt = predictions.map((item) => item.intradayDataTimestamp).filter(Boolean).sort().reverse()[0] || null;
@@ -3900,13 +4269,13 @@ async function refreshPredictions(options = {}) {
     scanStartedAt,
     scanCompletedAt: updatedAt,
     providerFetchedAt,
-    latestUnderlyingQuoteAt,
+    latestUnderlyingQuoteAt: representativeUnderlyingQuoteAt,
     latestDailyBarAt,
     latestIntradayBarAt,
     lastSuccessfulScanTimestamp: updatedAt,
     lastScanAttemptTimestamp: scanStartedAt,
     scanCompletedTimestamp: updatedAt,
-    marketDataAsOfTimestamp,
+    marketDataAsOfTimestamp: representativeUnderlyingQuoteAt,
     scanDurationSeconds: Number.isFinite(durationMs) ? Math.round(durationMs / 1000) : 0,
     scanStatus: "completed",
     durationMs: Number.isFinite(durationMs) ? durationMs : 0,
@@ -3932,8 +4301,8 @@ async function refreshPredictions(options = {}) {
     nextMarketOpen: broadStats.marketSession?.nextRegularSessionOpen || broadStats.marketSession?.nextMarketOpen || null,
     lastRegularSessionClose: broadStats.marketSession?.lastRegularSessionClose || broadStats.marketSession?.lastMarketClose || null,
     nextRegularSessionOpen: broadStats.marketSession?.nextRegularSessionOpen || broadStats.marketSession?.nextMarketOpen || null,
-    marketDataAgeMs: latestUnderlyingQuoteAt ? ageMs(latestUnderlyingQuoteAt) : null,
-    underlyingMarketDataAgeMs: latestUnderlyingQuoteAt ? ageMs(latestUnderlyingQuoteAt) : null,
+    marketDataAgeMs: representativeUnderlyingQuoteAt ? ageMs(representativeUnderlyingQuoteAt) : null,
+    underlyingMarketDataAgeMs: representativeUnderlyingQuoteAt ? ageMs(representativeUnderlyingQuoteAt) : null,
     universeSource: broadStats.activeUniverseSource || "Unknown",
     universeSourceStatus: broadStats.universeSourceStatus || broadStats.activeUniverseSource || "Unknown",
     universeRawCount: broadStats.universeRawCount,
@@ -3953,6 +4322,10 @@ async function refreshPredictions(options = {}) {
     dataAvailability: predictionEngineHealth.dataAvailability,
     dataFreshness: predictionEngineHealth.dataFreshness,
     dataQualityStatus: predictionEngineHealth.dataQualityStatus,
+    marketDataCoverage: marketDataAnalysis.marketDataCoverage,
+    freshnessDistribution: marketDataAnalysis.freshnessDistribution,
+    marketDataTimestampStats: marketDataAnalysis.timestampStats,
+    providerHealth: options.providerDiagnostics || null,
     dataQualityCounts: {
       good: predictionEngineHealth.goodRecords,
       partial: predictionEngineHealth.partialRecords,
@@ -3965,7 +4338,7 @@ async function refreshPredictions(options = {}) {
     dataQualityClassificationReason: predictionEngineHealth.dataQualityClassificationReason,
     failedAndSkippedSymbols: predictionEngineHealth.failedTickers || [],
     lastSuccessfulScan: updatedAt,
-    dataAsOf: marketDataAsOfTimestamp,
+    dataAsOf: representativeUnderlyingQuoteAt,
     providerCapacity: {
       providerName: MARKET_API_KEY ? "Alpha Vantage + Yahoo fallback" : "Yahoo fallback / cached data",
       estimatedRequestLimit: MARKET_API_KEY ? "Depends on Alpha Vantage plan" : "No authenticated provider limit configured",
@@ -3977,6 +4350,8 @@ async function refreshPredictions(options = {}) {
       estimatedRemainingCapacity: "Unknown without provider usage endpoint",
       rateLimitWarnings: warnings.filter((warning) => /rate|limit|api key|provider/i.test(warning)),
     },
+    stageDurations,
+    totalDuration: Number.isFinite(durationMs) ? durationMs : 0,
     broadScreen: broadStats,
     symbolUniverseMetadata: broadStats.symbolUniverseMetadata,
     sectorAllocation: sectorAllocationSummary(scanUniverse),
@@ -3991,7 +4366,9 @@ async function refreshPredictions(options = {}) {
       { name: "Saving predictions", completed: true, completedCount: 1, totalCount: 1 },
     ],
   };
+  const validationStartedAt = Date.now();
   scanHealth.metadataConsistency = validateScanMetadata(scanHealth);
+  stageDurations.validationDuration = elapsedMs(validationStartedAt);
   if (!scanHealth.metadataConsistency.passed) {
     warnings.push(`Scan metadata consistency warning: ${scanHealth.metadataConsistency.errors.join(" ")}`);
     scanHealth.summaryWarning = "Scan metadata consistency warning. Raw diagnostic details are available in Admin.";
@@ -4062,8 +4439,12 @@ async function refreshPredictions(options = {}) {
       "Market regime and data quality influence how much confidence the app gives each opportunity.",
     ],
   };
+  const saveStartedAt = Date.now();
   try {
     writeJson(PREDICTIONS_FILE, result);
+    stageDurations.saveDuration = elapsedMs(saveStartedAt);
+    stageDurations.publishDuration = Math.max(0, Number(stageDurations.saveDuration) || 0);
+    result.scanHealth.stageDurations = stageDurations;
   } catch (error) {
     const wrapped = new Error(`Database write failed: ${error.message}`);
     wrapped.code = "DATABASE_WRITE_FAILED";
@@ -4081,14 +4462,19 @@ async function runPredictionScan() {
 }
 
 async function runPredictionScanInternal() {
-  const scanStartedAt = new Date().toISOString();
+  const lifecycleStartedAt = Date.now();
+  const scanStartedAt = new Date(lifecycleStartedAt).toISOString();
+  const stageDurations = {};
   const warnings = [];
   let config = sanitizeConfig(readJson(CONFIG_FILE, {}));
+  const universeLoadStartedAt = Date.now();
   const tickers = uniqueTickers(config);
+  stageDurations.universeLoadDuration = elapsedMs(universeLoadStartedAt);
   const developmentMode = process.env.NODE_ENV !== "production";
   let refreshedQuotes = [];
   let marketRequestsUsed = 0;
   let providerLimits = null;
+  let providerDiagnostics = null;
 
   if (!tickers.length) {
     if (!developmentMode) {
@@ -4105,11 +4491,14 @@ async function runPredictionScanInternal() {
   }
 
   try {
+    const quoteRefreshStartedAt = Date.now();
     const market = await refreshMarketData(config);
+    stageDurations.quoteRefreshDuration = elapsedMs(quoteRefreshStartedAt);
     config = market.config;
     refreshedQuotes = market.quotes || [];
     marketRequestsUsed = (market.requestedTickers || []).length;
     providerLimits = market.providerLimits || null;
+    providerDiagnostics = market.diagnostics || null;
     if (market.errors.length) {
       warnings.push(`Market data unavailable for ${market.errors.length} ticker(s). Scores used saved or sample market values where needed.`);
     }
@@ -4121,6 +4510,7 @@ async function runPredictionScanInternal() {
       throw wrapped;
     }
   } catch (error) {
+    stageDurations.quoteRefreshDuration = Number(stageDurations.quoteRefreshDuration) || elapsedMs(lifecycleStartedAt);
     warnings.push(`Market data refresh failed: ${publicErrorMessage(error, "Market data unavailable.")}`);
     if (developmentMode) config = samplePredictionConfig();
   }
@@ -4144,7 +4534,7 @@ async function runPredictionScanInternal() {
   }
 
   try {
-    const result = await refreshPredictions({ config, policySignals, warnings, quotes: refreshedQuotes, scanStartedAt, marketRequestsUsed, providerLimits });
+    const result = await refreshPredictions({ config, policySignals, warnings, quotes: refreshedQuotes, scanStartedAt, marketRequestsUsed, providerLimits, providerDiagnostics, stageDurations, stageStartedAt: lifecycleStartedAt });
     if (!Array.isArray(result.predictions) || !result.predictions.length) {
       if (!developmentMode) {
         const error = new Error("Prediction scan failed");
@@ -4152,13 +4542,13 @@ async function runPredictionScanInternal() {
         throw error;
       }
       warnings.push("Prediction scan produced no rows. Development sample predictions were used.");
-      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes, scanStartedAt, marketRequestsUsed, providerLimits });
+      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes, scanStartedAt, marketRequestsUsed, providerLimits, providerDiagnostics, stageDurations, stageStartedAt: lifecycleStartedAt });
     }
     return result;
   } catch (error) {
     if (developmentMode && error.code !== "DATABASE_WRITE_FAILED") {
       warnings.push(`Prediction scan failed: ${error.message}. Development sample predictions were used.`);
-      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes, scanStartedAt, marketRequestsUsed, providerLimits });
+      return refreshPredictions({ config: samplePredictionConfig(), policySignals, warnings, quotes: refreshedQuotes, scanStartedAt, marketRequestsUsed, providerLimits, providerDiagnostics, stageDurations, stageStartedAt: lifecycleStartedAt });
     }
     throw error;
   }

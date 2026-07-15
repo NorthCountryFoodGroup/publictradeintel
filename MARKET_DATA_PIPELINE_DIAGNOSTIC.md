@@ -1,0 +1,24 @@
+# Market Data Pipeline Diagnostic
+
+Public Trade Intel now records market-data diagnostics for each completed prediction scan.
+
+## Pipeline Stages
+
+- Broad-screen quote request: the active scan universe is selected before quote refresh.
+- Deep-analysis quote request: the same active scan candidates are refreshed through the provider-safe quote pipeline.
+- Intraday bars: recorded when provider timestamps are intraday-capable; otherwise marked unavailable without failing the scan.
+- Daily bars: represented by `latestUnderlyingQuoteAt` and `latestDailyBarAt`.
+- Volume: tracked through `marketVolume`.
+- Market cap: optional; missing market cap does not fail market-data availability.
+- Index/proxy requests: tracked separately in market-index diagnostics.
+- Provider fallback request: Alpha Vantage is attempted when configured, Yahoo chart fallback is used when primary quotes fail or no key exists.
+- Cached-data retrieval: fresh saved quotes may be reused and marked as cache/fallback usage.
+- Final normalized object: each prediction stores provider, price, volume, fetch time, underlying timestamp, fallback/cache flags, and missing-field lists.
+
+## Recorded Fields
+
+For each scan, `scanHealth.providerHealth.stages` records provider name, operation, symbols requested, returned, missing, latency, retry count, rate-limit responses, timeout count, parse failures, fallback usage, cache usage, and oldest/newest underlying timestamps.
+
+## Current Root Cause Pattern
+
+When production shows a provider fetch time during market hours but an old underlying timestamp, the likely cause is provider quote refresh returning little or no usable current data, causing predictions to use saved or fallback market fields. The app now reports this as coverage/freshness distribution instead of collapsing it into a single misleading status.

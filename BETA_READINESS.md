@@ -48,3 +48,6 @@ Public Trade Intel is ready for private beta use after the Version 2.0 Functiona
 - Confirm symbol-universe coverage, Congress feed status, scan freshness, and performance sample-size language are visible.
 - Confirm Broad Market Trend, Prediction Universe Bias, and Prediction Universe Sentiment are separately labeled.
 - Confirm no browser console errors on the primary workflows.
+# July 2026 Update
+
+Beta readiness requires the app to show market-data availability with counts and percentages, freshness based on timestamp distribution, and a provider-health diagnostic in Admin.

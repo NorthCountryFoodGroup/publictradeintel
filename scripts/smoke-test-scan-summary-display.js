@@ -11,8 +11,9 @@ assert.match(app, /Broad Screen/, "scan summary should show a single broad scree
 assert.match(app, /Deep Analysis/, "scan summary should show a single deep analysis card");
 assert.match(app, /Provider Fetch/, "scan summary should distinguish provider fetch time");
 assert.match(app, /Underlying market data as of/, "scan summary should distinguish underlying market data time");
-assert.match(app, /Last Regular Close/, "scan summary should use regular session close wording");
-assert.match(app, /Next Regular Open/, "scan summary should use regular session open wording");
+assert.match(app, /Underlying Data/, "scan summary should show representative underlying data");
+assert.match(app, /Oldest Market Data/, "scan summary should show oldest market data");
+assert.match(app, /Newest Market Data/, "scan summary should show newest market data");
 assert.doesNotMatch(app, /Broad Screen Target/, "scan summary should not show duplicate broad target card");
 assert.doesNotMatch(app, /Symbols Screened/, "scan summary should not show duplicate symbols screened card");
 assert.match(admin, /Latest scan metadata diagnostic/, "admin should expose latest scan diagnostics");

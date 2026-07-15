@@ -513,6 +513,9 @@ function renderPredictionHealth(health, scanHealth = null) {
   const quality = health.dataQualityStatusCounts || {};
   const averages = health.averageUnifiedPredictionScoreByTimeframe || {};
   const checks = health.rankingSanityChecks || {};
+  const providerRows = Object.values(scanHealth?.providerHealth?.providers || {});
+  const coverage = scanHealth?.marketDataCoverage || {};
+  const timestampStats = scanHealth?.marketDataTimestampStats || {};
   predictionHealthPanel.innerHTML = `
     <article class="editor-row stock-editor-row">
       <label>
@@ -571,6 +574,47 @@ function renderPredictionHealth(health, scanHealth = null) {
         <span>Ranking sanity checks</span>
         <input readonly value="${escapeHtml(Object.entries(checks).map(([name, passed]) => `${name}: ${passed ? "pass" : "fail"}`).join("; "))}" />
       </label>
+      <details class="wide-field" open>
+        <summary>Market Data Provider Health</summary>
+        <textarea rows="10" readonly>${escapeHtml(providerRows.map((provider) => [
+          `Provider name: ${provider.providerName}`,
+          `Status: ${provider.status}`,
+          `Last successful request: ${provider.lastSuccessfulRequest || "n/a"}`,
+          `Last failed request: ${provider.lastFailedRequest || "n/a"}`,
+          `Symbols requested: ${Number(provider.symbolsRequested) || 0}`,
+          `Symbols returned: ${Number(provider.symbolsReturned) || 0}`,
+          `Coverage percentage: ${Number(provider.coveragePercent) || 0}%`,
+          `Median quote age: ${provider.medianQuoteAgeMs === null || provider.medianQuoteAgeMs === undefined ? "n/a" : `${Math.round(provider.medianQuoteAgeMs / 60000)} minutes`}`,
+          `Error count: ${Number(provider.errorCount) || 0}`,
+          `Timeout count: ${Number(provider.timeoutCount) || 0}`,
+          `Rate-limit count: ${Number(provider.rateLimitCount) || 0}`,
+          `Latest error: ${provider.latestError || "none"}`,
+          `Current fallback source: ${provider.currentFallbackSource || "none"}`,
+        ].join("\n")).join("\n\n") || "No provider health data recorded yet.")}</textarea>
+        <div class="button-row">
+          <button type="button" id="testMarketProviderConnection">Test Connection</button>
+          <button type="button" id="retryFailedMarketSymbols">Retry Failed Symbols</button>
+        </div>
+      </details>
+      <details class="wide-field">
+        <summary>Market data coverage diagnostics</summary>
+        <textarea rows="8" readonly>${escapeHtml(JSON.stringify({
+          coverage,
+          timestampStats,
+          stages: scanHealth?.providerHealth?.stages || [],
+          supplementalDiagnostics: {
+            broadScreenQuotes: "Covered by quote-refresh stage for active scan universe.",
+            deepAnalysisQuotes: "Covered by quote-refresh stage for selected candidates.",
+            intradayBars: "Derived when provider returns intraday timestamps; otherwise latest completed-session data is labeled.",
+            dailyBars: "Tracked through latestUnderlyingQuoteAt/latestDailyBarAt.",
+            indexProxyQuotes: "Tracked separately in Market Data diagnostics.",
+            vix: "Supplemental only; missing VIX does not fail stock-level market data.",
+            news: "Tracked through policy/news signal refresh.",
+            congress: "Tracked through Congress feed status.",
+            policy: "Tracked through policy feed status.",
+          },
+        }, null, 2))}</textarea>
+      </details>
       <details class="wide-field">
         <summary>Latest scan metadata diagnostic</summary>
         <textarea rows="14" readonly>${escapeHtml(JSON.stringify({
@@ -616,6 +660,12 @@ function renderPredictionHealth(health, scanHealth = null) {
       </details>
     </article>
   `;
+  document.querySelector("#testMarketProviderConnection")?.addEventListener("click", () => {
+    document.querySelector("#refreshMarket")?.click();
+  });
+  document.querySelector("#retryFailedMarketSymbols")?.addEventListener("click", () => {
+    document.querySelector("#refreshPredictions")?.click();
+  });
 }
 
 function setAdminSection(sectionName) {

@@ -97,3 +97,6 @@ Dashboard and Market Intelligence now separate:
 - Prediction Universe Sentiment: internal unified-score estimate
 
 ETF proxies are labeled as proxies. Internal sentiment is not called Fear / Greed.
+# July 2026 Update
+
+Prediction scans now store provider coverage, freshness distributions, fallback/cache counts, and stage durations. A completed scan can remain Engine Healthy while market data is Partial, Degraded, Delayed, or Stale.

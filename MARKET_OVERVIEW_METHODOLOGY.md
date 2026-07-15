@@ -42,3 +42,6 @@ Sector/group strength is scoped as:
 `Highest-Scoring Group in Current Scan`
 
 It reports sample count and average score from deeply analyzed securities. It is not presented as definitive whole-market sector leadership.
+# July 2026 Update
+
+Market overview health now separates prediction-engine status, market-data availability, and market-data freshness. Missing VIX is supplemental and no longer marks stock-level market data unavailable.

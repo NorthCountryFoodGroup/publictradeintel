@@ -1207,19 +1207,41 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
     const coverageWarning = scan.summaryWarning || scan.coverageWarning || (scan.emergencyPresetUsed || scan.emergencyFallbackActive ? "Broad-market discovery is unavailable. Results currently use the emergency preset universe." : "");
     const providerFetchedAt = scan.providerFetchedAt || scan.scanCompletedAt || predictionEngine.updatedAt;
     const underlyingDataAt = scan.latestUnderlyingQuoteAt || scan.marketDataAsOfTimestamp || scan.dataAsOf;
+    const coverage = scan.marketDataCoverage || {};
+    const timestampStats = scan.marketDataTimestampStats || {};
+    const providerRows = Object.values(scan.providerHealth?.providers || {});
+    const mainProvider = providerRows.find((provider) => provider.status && provider.status !== "Not Configured") || providerRows[0] || {};
+    const fallbackCount = Number(coverage.symbolsUsingFallback) || 0;
+    const availabilityLabel = predictionEngine.predictionEngineHealth?.dataAvailability || scan.dataAvailability || "Not run";
+    const freshnessLabel = predictionEngine.predictionEngineHealth?.dataFreshness || scan.dataFreshness || "Not run";
+    const criticalReady = Number(coverage.symbolsRequested) ? `${Number(coverage.symbolsRequested) - Number(coverage.symbolsMissingCriticalFields || 0)} of ${Number(coverage.symbolsRequested)} analyzed symbols had required data` : predictionEngine.predictionEngineHealth?.dataQualityClassificationReason || "Coverage not recorded";
+    const freshnessReason = timestampStats.percentageWithinLiveThreshold !== undefined
+      ? `${Number(timestampStats.percentageWithinLiveThreshold) || 0}% within live threshold; ${Number(timestampStats.percentageWithinRecentThreshold) || 0}% within recent threshold`
+      : "Freshness distribution unavailable";
+    const stage = scan.stageDurations || {};
+    const durationBreakdown = [
+      stage.broadScreenDuration ? `Broad ${compactDuration(stage.broadScreenDuration)}` : "",
+      stage.quoteRefreshDuration ? `Data ${compactDuration(stage.quoteRefreshDuration)}` : "",
+      stage.deepAnalysisDuration ? `Deep ${compactDuration(stage.deepAnalysisDuration)}` : "",
+      stage.rankingDuration ? `Rank ${compactDuration(stage.rankingDuration)}` : "",
+      stage.saveDuration ? `Save ${compactDuration(stage.saveDuration)}` : "",
+    ].filter(Boolean).join("; ");
     output.scanProgressSummaryGrid.innerHTML = [
       metricCard("Market Status", marketStatus, scanMode, "predictions"),
       metricCard("Universe Source", universeSource, coverageWarning || `${symbolsAvailable} eligible symbols`, "predictions"),
       metricCard("Broad Screen", `${screened} screened`, `Target: ${broadTarget}`, "predictions"),
       metricCard("Deep Analysis", `${deepSelected} analyzed`, `Target: ${deepTarget || "Not recorded"}`, "predictions"),
       metricCard("Predictions", `${predictionsGenerated} published`, "Published after validation", "predictions"),
-      metricCard("Duration", compactDuration(scan.durationMs || scan.scanDurationSeconds), "Scan completion duration", "predictions"),
+      metricCard("Duration", compactDuration(scan.totalDuration || scan.durationMs || scan.scanDurationSeconds), durationBreakdown || "Scan completion duration", "predictions"),
       metricCard("Engine", predictionEngine.predictionEngineHealth?.predictionEngineStatus || predictionEngine.predictionEngineHealth?.status || "Not run", predictionEngine.predictionEngineHealth?.predictionEngineStatusReasons?.join("; ") || "Separate from market data freshness", "predictions"),
-      metricCard("Data Availability", predictionEngine.predictionEngineHealth?.dataAvailability || predictionEngine.predictionEngineHealth?.dataQualityStatus || "Not run", predictionEngine.predictionEngineHealth?.dataQualityClassificationReason || "Availability is separate from engine health", "predictions"),
-      metricCard("Data Freshness", predictionEngine.predictionEngineHealth?.dataFreshness || "Not run", underlyingDataAt ? `Underlying data: ${exactEt(underlyingDataAt)}` : "Underlying data unavailable", "predictions"),
+      metricCard("Market Data Availability", availabilityLabel, criticalReady, "predictions"),
+      metricCard("Market Data Freshness", freshnessLabel, freshnessReason, "predictions"),
+      metricCard("Provider Status", mainProvider.status || "Unknown", mainProvider.providerName ? `${mainProvider.providerName}: ${Number(mainProvider.coveragePercent) || 0}% coverage` : "Provider diagnostics unavailable", "predictions"),
+      metricCard("Fallback Usage", `${fallbackCount} symbols`, coverage.symbolsUsingCache ? `${coverage.symbolsUsingCache} cache-backed symbols` : "Latest provider data used where available", "predictions"),
       metricCard("Provider Fetch", providerFetchedAt ? exactEt(providerFetchedAt) : "Not recorded", "When the app requested provider data", "predictions"),
-      metricCard("Last Regular Close", scan.lastRegularSessionClose || scan.lastMarketClose || session.lastRegularSessionClose || session.lastMarketClose ? exactEt(scan.lastRegularSessionClose || scan.lastMarketClose || session.lastRegularSessionClose || session.lastMarketClose) : "Not recorded", "Regular U.S. equity session", "predictions"),
-      metricCard("Next Regular Open", scan.nextRegularSessionOpen || scan.nextMarketOpen || session.nextRegularSessionOpen || session.nextMarketOpen ? exactEt(scan.nextRegularSessionOpen || scan.nextMarketOpen || session.nextRegularSessionOpen || session.nextMarketOpen) : "Not recorded", "Regular U.S. equity session", "predictions"),
+      metricCard("Underlying Data", underlyingDataAt ? exactEt(underlyingDataAt) : "Unavailable", "Representative underlying market timestamp", "predictions"),
+      metricCard("Oldest Market Data", timestampStats.oldestUnderlyingTimestamp ? exactEt(timestampStats.oldestUnderlyingTimestamp) : "Unavailable", "Oldest usable quote timestamp", "predictions"),
+      metricCard("Newest Market Data", timestampStats.newestUnderlyingTimestamp ? exactEt(timestampStats.newestUnderlyingTimestamp) : "Unavailable", "Newest usable quote timestamp", "predictions"),
     ].join("");
   }
 }
