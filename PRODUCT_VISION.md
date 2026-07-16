@@ -21,6 +21,10 @@ Reliability language matters as much as model output. The app should explain wha
 
 The Opportunities Hub is the first user-facing research hub built on top of completed predictions. It adds practical filters for timeframe, investor experience, price band, and access preview while preserving the existing prediction model.
 
+## Version 2.2 Research Experience
+
+Public Trade Intel should not simply show scores. It should explain why a stock is worth considering, why the user might wait, what would invalidate the setup, and how reliable the data is. Trade Brief 2.0 is the first institutional-style research layer toward that goal.
+
 ## Product Principles
 
 - Separate short-term trades from long-term opportunities.

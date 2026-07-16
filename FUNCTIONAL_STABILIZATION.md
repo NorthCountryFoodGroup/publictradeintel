@@ -65,3 +65,7 @@ Functional stabilization now includes market-data coverage thresholds, provider 
 # Version 2.1.2 Update
 
 The Opportunities Hub is a presentation and filtering layer only. It does not change prediction scoring, provider calls, ranking models, or the broad/deep scan pipeline.
+
+# Version 2.2 Update
+
+Trade Brief 2.0, market-regime diagnostics, sector context, confidence trend, and dashboard disclosure are presentation-layer upgrades. Prediction scoring and provider integrations remain unchanged.

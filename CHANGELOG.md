@@ -1,5 +1,14 @@
 # Public Trade Intel Changelog
 
+## Version 2.2 Sprint 1 - Institutional Research Experience
+
+- Added Trade Brief 2.0 as an institutional-style research report.
+- Added Bull Case, Reasons to Wait, outlook invalidation, honest Trade Plan availability, Signal Agreement, ranking explanation, score limiters, market-regime diagnostic, sector context, confidence trend, data reliability, and Trade Brief consistency audit.
+- Added compact opportunity-card reasons and caution labels.
+- Rewrote AI Market Brief language as natural prose.
+- Reorganized the dashboard with progressive disclosure and remembered collapsed state.
+- Added methodology documentation and smoke tests for the new research experience.
+
 ## Version 2.1.2 Final Reliability and Opportunities Hub
 
 - Locked market-data availability display to the shared backend thresholds.

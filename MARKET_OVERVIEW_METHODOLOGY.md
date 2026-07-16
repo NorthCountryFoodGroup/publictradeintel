@@ -1,5 +1,9 @@
 # Market Overview Methodology
 
+## Version 2.2 Update
+
+The AI Market Brief uses natural prose and separates Broad Market Trend from Prediction Universe Bias. It must not call the market a bull market unless broad-market regime evidence supports that wording.
+
 The app separates external market data from prediction-universe data.
 
 ## Broad Market Trend

@@ -35,6 +35,20 @@
 - Price-band rankings
 - Investment access preview
 
+## Version 2.2 - Institutional Research Experience
+
+- Trade Brief 2.0
+- Bull Case and Reasons to Wait
+- Outlook invalidation behavior
+- Honest Trade Plan availability
+- Signal Agreement
+- Ranking explanation and score limiters
+- Market Regime Diagnostic
+- Sector Context
+- Confidence Trend from stored scans
+- Data Reliability summary
+- Dashboard progressive disclosure
+
 ## Version 2.1.5 - Prediction Responsiveness And Broad Discovery
 
 - Dashboard AI Market Brief

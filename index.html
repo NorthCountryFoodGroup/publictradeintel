@@ -131,31 +131,40 @@
             </div>
           </section>
 
-          <section class="dashboard-card executive-section scan-progress-card" id="scanProgressCard">
-            <div class="card-heading">
-              <span>Prediction Scan Progress</span>
-              <strong id="scanProgressStage">Idle</strong>
-            </div>
-            <div class="scan-progress-track"><span id="scanProgressBar"></span></div>
-            <p id="scanProgressMessage">Last successful scan details will appear here.</p>
-            <div class="executive-card-grid compact-executive-grid" id="scanProgressSummaryGrid"></div>
-          </section>
+          <details class="dashboard-disclosure" data-dashboard-disclosure="scan-details">
+            <summary>Prediction Scan Details <strong id="scanProgressStage">Idle</strong></summary>
+            <section class="dashboard-card executive-section scan-progress-card" id="scanProgressCard">
+              <div class="card-heading">
+                <span>Prediction Scan Progress</span>
+                <strong>Details</strong>
+              </div>
+              <div class="scan-progress-track"><span id="scanProgressBar"></span></div>
+              <p id="scanProgressMessage">Last successful scan details will appear here.</p>
+              <div class="executive-card-grid compact-executive-grid" id="scanProgressSummaryGrid"></div>
+            </section>
+          </details>
 
-          <section class="dashboard-card executive-section">
-            <div class="card-heading">
-              <span>Market Overview</span>
-              <strong id="marketOverviewTone">Scanning</strong>
-            </div>
-            <div class="executive-card-grid" id="marketOverviewGrid"></div>
-          </section>
+          <details class="dashboard-disclosure" data-dashboard-disclosure="market-overview">
+            <summary>Market Overview <strong id="marketOverviewTone">Scanning</strong></summary>
+            <section class="dashboard-card executive-section">
+              <div class="card-heading">
+                <span>Market Overview</span>
+                <strong>Context</strong>
+              </div>
+              <div class="executive-card-grid" id="marketOverviewGrid"></div>
+            </section>
+          </details>
 
-          <section class="dashboard-card executive-section">
-            <div class="card-heading">
-              <span>AI Prediction Engine</span>
-              <strong id="dashboardScanTime">Not scanned yet</strong>
-            </div>
-            <div class="executive-card-grid" id="predictionEngineGrid"></div>
-          </section>
+          <details class="dashboard-disclosure" data-dashboard-disclosure="engine-details">
+            <summary>AI Prediction Engine Details <strong id="dashboardScanTime">Not scanned yet</strong></summary>
+            <section class="dashboard-card executive-section">
+              <div class="card-heading">
+                <span>AI Prediction Engine</span>
+                <strong>Health</strong>
+              </div>
+              <div class="executive-card-grid" id="predictionEngineGrid"></div>
+            </section>
+          </details>
 
           <section class="dashboard-card executive-section">
             <div class="card-heading">
@@ -165,41 +174,47 @@
             <div class="opportunity-grid" id="todayOpportunitiesGrid"></div>
           </section>
 
-          <div class="executive-two-column">
-            <section class="dashboard-card executive-section">
-              <div class="card-heading">
-                <span>Watchlist Summary</span>
-                <strong id="dashboardAlertCount">0</strong>
-              </div>
-              <div class="executive-card-grid compact-executive-grid" id="watchlistSummaryGrid"></div>
-            </section>
+          <details class="dashboard-disclosure" data-dashboard-disclosure="watchlist-congress">
+            <summary>Watchlist Summary and Congress Activity <strong id="dashboardAlertCount">0</strong></summary>
+            <div class="executive-two-column">
+              <section class="dashboard-card executive-section">
+                <div class="card-heading">
+                  <span>Watchlist Summary</span>
+                  <strong>Monitor</strong>
+                </div>
+                <div class="executive-card-grid compact-executive-grid" id="watchlistSummaryGrid"></div>
+              </section>
 
-            <section class="dashboard-card executive-section">
-              <div class="card-heading">
-                <span>Congress Activity</span>
-                <strong id="congressActivityCount">0</strong>
-              </div>
-              <div class="executive-card-grid compact-executive-grid" id="congressActivityGrid"></div>
-            </section>
-          </div>
+              <section class="dashboard-card executive-section">
+                <div class="card-heading">
+                  <span>Congress Activity</span>
+                  <strong id="congressActivityCount">0</strong>
+                </div>
+                <div class="executive-card-grid compact-executive-grid" id="congressActivityGrid"></div>
+              </section>
+            </div>
+          </details>
 
-          <div class="executive-two-column">
-            <section class="dashboard-card executive-section">
-              <div class="card-heading">
-                <span>Policy Activity</span>
-                <strong id="policyActivityCount">0</strong>
-              </div>
-              <div class="executive-card-grid compact-executive-grid" id="policyActivityGrid"></div>
-            </section>
+          <details class="dashboard-disclosure" data-dashboard-disclosure="policy-performance">
+            <summary>Policy Activity and Prediction Performance <strong id="policyActivityCount">0</strong></summary>
+            <div class="executive-two-column">
+              <section class="dashboard-card executive-section">
+                <div class="card-heading">
+                  <span>Policy Activity</span>
+                  <strong>Signals</strong>
+                </div>
+                <div class="executive-card-grid compact-executive-grid" id="policyActivityGrid"></div>
+              </section>
 
-            <section class="dashboard-card executive-section">
-              <div class="card-heading">
-                <span>Prediction Performance</span>
-                <strong>Tracking</strong>
-              </div>
-              <div class="executive-card-grid compact-executive-grid" id="predictionPerformanceGrid"></div>
-            </section>
-          </div>
+              <section class="dashboard-card executive-section">
+                <div class="card-heading">
+                  <span>Prediction Performance</span>
+                  <strong>Tracking</strong>
+                </div>
+                <div class="executive-card-grid compact-executive-grid" id="predictionPerformanceGrid"></div>
+              </section>
+            </div>
+          </details>
         </div>
       </section>
 

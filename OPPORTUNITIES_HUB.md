@@ -18,3 +18,6 @@ The hub helps users filter the existing prediction set by investor profile, time
 
 The investment access preview is a convenience calculation. It is not a portfolio recommendation and does not replace position sizing or risk management.
 
+## Version 2.2 Update
+
+Opportunity cards now show a compact `Why selected` line and one supported `Watch` caution where available. Full reasoning belongs in Trade Brief 2.0.

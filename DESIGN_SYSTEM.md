@@ -1,5 +1,13 @@
 # Public Trade Intel Design System
 
+## Research Report Components
+
+- Evidence cards show title, explanation, signal strength, and source category.
+- Signal agreement grids use Positive, Neutral, Negative, and Unavailable states.
+- Unavailable is informational and should not be styled as a failure.
+- Trade Brief values that are not generated from validated fields should show `Not reliably calculated`.
+- Dashboard details should use collapsible disclosure sections when a page grows beyond two desktop screen heights.
+
 Public Trade Intel uses a dashboard-first design system for stock intelligence, prediction reports, admin controls, and future subscriber workflows. The system favors fast decision-making, progressive disclosure, and professional research readability.
 
 ## Core UX Principles
@@ -224,4 +232,3 @@ If a page becomes longer than approximately two screen heights on desktop, redes
 - Drill-down pages
 
 Do not keep adding content to long pages.
-

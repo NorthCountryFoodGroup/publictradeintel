@@ -57,3 +57,7 @@ Beta readiness requires the app to show market-data availability with counts and
 # Version 2.1.2 Update
 
 The normal user dashboard now summarizes provider coverage without exposing confusing raw diagnostics. Admin remains the place for full provider breakdowns, request logs, and quote coverage investigation.
+
+# Version 2.2 Update
+
+Private beta now includes Trade Brief 2.0 and dashboard progressive disclosure. The report is still research support, not personalized financial advice, and depends on the quality of completed scan data.

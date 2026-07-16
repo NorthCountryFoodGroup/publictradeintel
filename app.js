@@ -1191,8 +1191,11 @@ function renderDashboardBrief({ predictions, marketMood, signals, positiveSignal
   ].filter(Boolean);
   const biasLabel = /bull market/i.test(String(marketMood || "")) ? "Bullish" : marketMood;
   if (output.aiDashboardBriefStatus) output.aiDashboardBriefStatus.textContent = predictions.length ? "Generated from latest scan" : "Waiting for scan";
+  const broadTrend = marketIndexData.broadMarketTrend || "Unavailable";
+  const dataLimit = warningCount ? `Market-data quality has ${warningCount} limitation flag(s), so short-term rankings should be interpreted cautiously.` : "Market-data quality has no major warning in the saved scan.";
+  const warning = risks[0] || "watch whether the next scan confirms the same leadership and data quality.";
   output.aiDashboardBrief.textContent = predictions.length
-    ? `Prediction Universe Bias: ${biasLabel}. Broad Market Trend: ${marketIndexData.broadMarketTrend || "Unavailable"}. Sector leadership currently points to ${sector}. The scan found ${highConfidence} high-confidence opportunity candidate(s) across ${predictions.length} analyzed securities. Positive policy/news signals: ${positiveSignals.length}; negative signals: ${negativeSignals.length}; total active signals: ${signals.length}. Main warning: ${risks[0] || "no major data-quality warning in the saved scan"}. Review Today's Opportunities first, then open the Trade Brief before acting. This is research guidance, not a guaranteed investment outcome.`
+    ? `Broad Market Trend is currently ${broadTrend}, while the analyzed Prediction Universe Bias reads ${biasLabel}. ${sector} in the latest scan, with ${highConfidence} high-confidence candidate(s) among ${predictions.length} analyzed securities. ${dataLimit} The most important warning is to ${warning}. Review the highest-confidence opportunities and open each Trade Brief before taking action.`
     : "Run a prediction scan to generate a concise market brief from available market, sector, policy, news, congressional, and data-quality signals.";
 }
 
@@ -2095,6 +2098,17 @@ function rankMetadataForTicker(ticker) {
   return opportunityRowsForHub().find((item) => item.ticker === ticker) || enrichOpportunityRows().find((item) => item.ticker === ticker) || null;
 }
 
+function opportunityCardReasons(item) {
+  const model = predictionModelForView(item);
+  const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+  const setup = item.setupSignals || model?.setupSignals || {};
+  const chartPattern = item.chartPatternSignal || {};
+  return {
+    selected: briefBullCaseFactors(item, technical, setup, chartPattern).slice(0, 2).map((factor) => factor.title),
+    caution: briefBearCaseFactors(item, technical, setup, chartPattern)[0]?.title || "",
+  };
+}
+
 function renderCompactPredictionCard(item) {
   const model = predictionModelForView(item);
   const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
@@ -2114,6 +2128,7 @@ function renderCompactPredictionCard(item) {
   const pennyWarning = item.pennySpeculativeQualification?.qualifies
     ? `<p class="prediction-ai-summary warning-copy">Penny and speculative stocks can be highly volatile, illiquid, and subject to rapid losses. This section is for high-risk research only.</p>`
     : "";
+  const cardReasons = opportunityCardReasons(item);
   return `
     <article class="prediction-screener-card">
       <header class="prediction-card-header">
@@ -2145,6 +2160,7 @@ function renderCompactPredictionCard(item) {
         <div><span>Freshness</span><strong>${escapeHtml(item.freshnessStatus || item.freshness || "unknown")}</strong></div>
       </div>
       <p class="prediction-ai-summary">${escapeHtml(oneLineAiSummary(item, model))}</p>
+      <p class="prediction-ai-summary compact-reason-line"><strong>Why selected:</strong> ${escapeHtml(cardReasons.selected.join(", ") || "Supported by the completed prediction record.")}${cardReasons.caution ? ` <strong>Watch:</strong> ${escapeHtml(cardReasons.caution)}` : ""}</p>
       ${beginnerReasons.length ? `<p class="prediction-ai-summary">Why it qualifies: ${escapeHtml(beginnerReasons.join(", "))}.</p>` : ""}
       ${pennyWarning}
       <div class="prediction-metadata-grid">
@@ -2612,6 +2628,16 @@ function moneyOrCalculating(value) {
   return Number.isFinite(number) && number > 0 ? dollarsPrecise(number) : "Calculating";
 }
 
+function moneyOrUnavailable(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? dollarsPrecise(number) : "Not reliably calculated";
+}
+
+function valueOrUnavailable(value) {
+  if (value === null || value === undefined || value === "" || value === "Needs market data" || value === "Calculating") return "Not reliably calculated";
+  return String(value);
+}
+
 function badgeTone(value) {
   const normalized = String(value || "").toLowerCase();
   if (normalized.includes("positive") || normalized.includes("bull") || normalized.includes("buy") || normalized.includes("good")) return "positive";
@@ -2619,57 +2645,299 @@ function badgeTone(value) {
   return "neutral";
 }
 
+function evidenceItem(title, explanation, strength = "Medium", source = "Model") {
+  return { title, explanation, strength, source };
+}
+
+function addUniqueEvidence(list, item) {
+  if (item?.title && !list.some((existing) => existing.title === item.title)) list.push(item);
+}
+
+function briefBullCaseFactors(item, technical = {}, setup = {}, chartPattern = {}) {
+  const factors = [];
+  const alignment = item.multiTimeframeAlignment || {};
+  const squeeze = item.shortSqueezeSignal || {};
+  if (alignment.alignmentDirection === "bullish") addUniqueEvidence(factors, evidenceItem("Bullish Multi-Timeframe Alignment", alignment.reasonSummary || "Bullish signals agree across available intraday timeframes.", `${Number(alignment.alignmentScore) || 0}/100`, "Multi-timeframe"));
+  if (Number(technical.priceVs9Ema) > 0) addUniqueEvidence(factors, evidenceItem("Price Above 9 EMA", "The latest price is above the short-term 9 EMA field in this prediction.", `${Math.round(Number(technical.priceVs9Ema))}%`, "Technical"));
+  if (Number(technical.ema9Vs20Ema) > 0) addUniqueEvidence(factors, evidenceItem("9 EMA Above 20 EMA", "Short-term trend is above the intermediate trend in the available technical snapshot.", `${Math.round(Number(technical.ema9Vs20Ema))}%`, "Technical"));
+  if (Number(technical.priceVsVwap) > 0) addUniqueEvidence(factors, evidenceItem("Price Above VWAP", "Price is above VWAP in the available technical layer.", `${Math.round(Number(technical.priceVsVwap))}%`, "Technical"));
+  if (setup.emaBounce?.detected && setup.confirmationStatus === "confirmed") addUniqueEvidence(factors, evidenceItem("Confirmed EMA Bounce", setup.reasonSummary || "The setup layer marked an EMA bounce as confirmed.", `${Number(setup.setupScore) || 0}/100`, "Setup"));
+  if (setup.breakAndRetest?.detected && setup.confirmationStatus === "confirmed") addUniqueEvidence(factors, evidenceItem("Confirmed Break And Retest", setup.reasonSummary || "The setup layer marked a break and retest as confirmed.", `${Number(setup.setupScore) || 0}/100`, "Setup"));
+  if (chartPattern.patternDirection === "bullish" && chartPattern.primaryPattern && chartPattern.primaryPattern !== "none") addUniqueEvidence(factors, evidenceItem("Bullish Chart Pattern", `${chartPattern.primaryPattern} is the primary detected pattern.`, `${Number(chartPattern.patternScore) || 0}/100`, "Chart pattern"));
+  if (Number(squeeze.relativeVolume) >= 1.5) addUniqueEvidence(factors, evidenceItem("Strong Relative Volume", "Relative volume is elevated in the short-squeeze signal layer.", `${Number(squeeze.relativeVolume).toFixed(2)}x`, "Volume"));
+  if (Number(item.scoreChange || item.rankMovement?.change || 0) > 0) addUniqueEvidence(factors, evidenceItem("Improving Rank", item.rankMovement?.explanation || "The score or rank improved versus the prior scan.", `${Number(item.scoreChange || item.rankMovement?.change || 0).toFixed(1)}`, "Ranking"));
+  if (Number(technical.technicalSignalScore) >= 70) addUniqueEvidence(factors, evidenceItem("High Technical Score", "The technical-analysis layer is above the high-score threshold.", `${Number(technical.technicalSignalScore)}/100`, "Technical"));
+  if (Number(item.riskRewardRatio) >= 1.5) addUniqueEvidence(factors, evidenceItem("Favorable Risk/Reward", "The stored risk/reward ratio is above 1.5.", Number(item.riskRewardRatio).toFixed(2), "Trade plan"));
+  if (Number(item.congressionalSignal?.buys) > Number(item.congressionalSignal?.sells || 0)) addUniqueEvidence(factors, evidenceItem("Congressional Activity", "Congressional activity is present as a secondary catalyst, not the primary model driver.", `${Number(item.congressionalSignal.buys) || 0} buys`, "Congress"));
+  if (["good", "complete"].includes(String(item.dataQualityStatus || item.marketDataQuality?.label || "").toLowerCase())) addUniqueEvidence(factors, evidenceItem("Strong Data Quality", "The prediction record reports good or complete data quality.", item.dataQualityStatus || item.marketDataQuality?.label, "Data quality"));
+  (item.strongestSignals || []).slice(0, 3).forEach((signal) => addUniqueEvidence(factors, evidenceItem(signal, "This was listed in the prediction record's strongest signals.", "Supported", "Model")));
+  return factors.slice(0, 5);
+}
+
+function briefBearCaseFactors(item, technical = {}, setup = {}, chartPattern = {}) {
+  const concerns = [];
+  const price = Number(item.currentPrice);
+  const resistance = Number(technical.nearestResistance);
+  const relVolume = Number(item.shortSqueezeSignal?.relativeVolume);
+  if (resistance > 0 && price > 0 && resistance - price < price * 0.015) addUniqueEvidence(concerns, evidenceItem("Near Resistance", "Price is close to the nearest resistance level in the technical snapshot.", moneyOrUnavailable(resistance), "Technical"));
+  if (relVolume > 0 && relVolume < 0.8) addUniqueEvidence(concerns, evidenceItem("Weak Relative Volume", "Relative volume is below the normal baseline in the available volume layer.", `${relVolume.toFixed(2)}x`, "Volume"));
+  if (item.multiTimeframeAlignment?.alignmentDirection === "mixed") addUniqueEvidence(concerns, evidenceItem("Mixed Timeframe Alignment", item.multiTimeframeAlignment.reasonSummary || "Intraday timeframes do not agree.", `${Number(item.multiTimeframeAlignment.alignmentScore) || 0}/100`, "Multi-timeframe"));
+  if (["stale", "failed", "unavailable"].includes(String(item.dataQualityStatus || "").toLowerCase())) addUniqueEvidence(concerns, evidenceItem("Market Data Reliability", "Market-data status is limiting confidence for this prediction.", item.dataQualityStatus, "Data quality"));
+  if (Array.isArray(item.missingCriticalFields) && item.missingCriticalFields.length) addUniqueEvidence(concerns, evidenceItem("Missing Critical Data", `${item.missingCriticalFields.length} critical field(s) are missing.`, item.missingCriticalFields.slice(0, 2).join(", "), "Data quality"));
+  if (["failed", "forming"].includes(String(setup.confirmationStatus || "").toLowerCase())) addUniqueEvidence(concerns, evidenceItem(`${setup.confirmationStatus} Setup`, setup.reasonSummary || "The setup is not fully confirmed.", `${Number(setup.setupScore) || 0}/100`, "Setup"));
+  if (chartPattern.patternDirection === "bearish") addUniqueEvidence(concerns, evidenceItem("Bearish Chart Pattern", `${chartPattern.primaryPattern || "A bearish pattern"} is present in the chart-pattern layer.`, `${Number(chartPattern.patternScore) || 0}/100`, "Chart pattern"));
+  if (Number(item.riskScore) >= 70) addUniqueEvidence(concerns, evidenceItem("High Volatility / Risk", "The stored risk score is elevated.", `${Number(item.riskScore)}/100`, "Risk"));
+  if (Number(item.riskRewardRatio) > 0 && Number(item.riskRewardRatio) < 1) addUniqueEvidence(concerns, evidenceItem("Unfavorable Risk/Reward", "The stored risk/reward ratio is below 1.0.", Number(item.riskRewardRatio).toFixed(2), "Trade plan"));
+  (item.conflictingSignals || []).slice(0, 4).forEach((signal) => addUniqueEvidence(concerns, evidenceItem(signal, "This was listed in the prediction record's conflicting signals.", "Conflict", "Model")));
+  const negativePolicy = (policySignals.signals || []).find((signal) => signal.ticker === item.ticker && signal.direction === "negative");
+  if (negativePolicy) addUniqueEvidence(concerns, evidenceItem("Negative Policy / News Catalyst", negativePolicy.title || negativePolicy.description || "A negative policy/news signal is attached to this ticker.", "Negative", "Policy/news"));
+  return concerns.slice(0, 5);
+}
+
 function briefSignalItems(item, technical, setup, chartPattern) {
-  const signals = [];
-  const add = (label, active = true) => {
-    if (active && label && !signals.includes(label)) signals.push(label);
-  };
-  add("Multi-Timeframe Alignment", ["bullish", "bearish"].includes(item.multiTimeframeAlignment?.alignmentDirection));
-  add(chartPattern.primaryPattern, chartPattern.primaryPattern && chartPattern.primaryPattern !== "none");
-  add("Above VWAP", Number(technical.priceVsVwap) > 0);
-  add("Strong Relative Volume", Number(item.shortSqueezeSignal?.relativeVolume) >= 1.5);
-  add("Congress Buying", Number(item.congressionalSignal?.buys) > 0);
-  add("Positive Policy Signals", (policySignals.signals || []).some((signal) => signal.ticker === item.ticker && signal.direction === "positive"));
-  add("High Technical Score", Number(technical.technicalSignalScore) >= 70);
-  add(setup.setupDirection && setup.setupDirection !== "none" ? `${setup.setupDirection} setup` : "", setup.setupDirection && setup.setupDirection !== "none");
-  (item.strongestSignals || []).slice(0, 3).forEach((signal) => add(signal));
-  return signals.slice(0, 7);
+  return briefBullCaseFactors(item, technical, setup, chartPattern).map((factor) => factor.title);
 }
 
-function briefRiskItems(item, technical) {
-  const risks = [];
-  const add = (label, active = true) => {
-    if (active && label && !risks.includes(label)) risks.push(label);
-  };
-  add("Near Resistance", Number(technical.nearestResistance) > 0 && Number(item.currentPrice) > 0 && Number(technical.nearestResistance) - Number(item.currentPrice) < Number(item.currentPrice) * 0.015);
-  add("Weak Volume", Number(item.shortSqueezeSignal?.relativeVolume) > 0 && Number(item.shortSqueezeSignal?.relativeVolume) < 0.8);
-  add("Mixed Signals", item.unifiedDirection === "mixed" || (item.conflictingSignals || []).length > 1);
-  add("Policy Risk", (policySignals.signals || []).some((signal) => signal.ticker === item.ticker && signal.direction === "negative"));
-  add("Data Quality", ["partial", "stale", "failed"].includes(item.dataQualityStatus));
-  (item.conflictingSignals || []).slice(0, 3).forEach((signal) => add(signal));
-  add(item.failureRisk || item.whyMayBeWrong || "Prediction can fail if market conditions change quickly.", !risks.length);
-  return risks.slice(0, 6);
+function briefRiskItems(item, technical, setup = {}, chartPattern = {}) {
+  return briefBearCaseFactors(item, technical, setup, chartPattern).map((factor) => factor.title);
 }
 
-function tradeBriefSummary(item, signals, risks) {
+function tradeBriefSummary(item, bullFactors, bearFactors, model) {
   const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
   const direction = item.unifiedDirection || "neutral";
   const confidence = item.confidenceTier || "low";
-  const action =
-    direction === "bullish" && score >= 70
-      ? "This is a stronger buy candidate, assuming position size and risk controls fit your plan."
-      : direction === "bullish"
-      ? "This is a watchable buy candidate, but it still needs confirmation before sizing aggressively."
-      : direction === "mixed"
-      ? "This is not a clean buy yet because the signal stack is mixed."
-      : "This does not currently read as a strong buy candidate.";
-  return [
-    action,
-    `${item.ticker} carries a unified score of ${score}/100 with ${confidence} confidence and a ${direction} read.`,
-    signals.length ? `The biggest opportunities are ${signals.slice(0, 3).join(", ")}.` : "The opportunity case is still developing.",
-    risks.length ? `The biggest risks are ${risks.slice(0, 3).join(", ")}.` : "No major risk factor is dominating the brief yet.",
-    "Use the trade plan and invalidation level before acting."
-  ].join(" ");
+  const timeframe = item.bestTimeframe || item.timeframe || predictionModelTitle(model);
+  const strongest = bullFactors[0]?.title || item.finalReasonSummary || "the available signal stack";
+  const concern = bearFactors[0]?.title || "a lack of additional confirmation";
+  const monitor = bearFactors.length ? bearFactors[0].title.toLowerCase() : "whether the strongest signals remain intact";
+  const sentences = [
+    `The model currently favors ${item.ticker} as a ${timeframe} research candidate with a ${score}/100 unified score, ${confidence} confidence, and a ${direction} direction.`,
+    `The strongest supporting evidence is ${strongest}.`,
+    `The primary concern is ${concern}.`,
+    `This outlook would weaken if the risk factors below worsen or if the invalidation conditions are triggered.`,
+    `Monitor ${monitor}, data freshness, and whether the next scan confirms or weakens the rank.`,
+  ];
+  return sentences.join(" ");
+}
+
+function renderEvidenceList(items, emptyText) {
+  return items.length
+    ? items
+        .map(
+          (item) => `
+            <article class="brief-evidence-item">
+              <div>
+                <strong>${escapeHtml(item.title)}</strong>
+                <p>${escapeHtml(item.explanation)}</p>
+              </div>
+              <span>${escapeHtml(item.strength)}</span>
+              <small>${escapeHtml(item.source)}</small>
+            </article>
+          `
+        )
+        .join("")
+    : `<p class="muted-copy">${escapeHtml(emptyText)}</p>`;
+}
+
+function tradePlanStatus(item, technical = {}, setup = {}) {
+  if (["failed", "unavailable"].includes(String(item.dataQualityStatus || "").toLowerCase())) return "Insufficient Data";
+  if (String(item.label || item.recommendation || "").toLowerCase().includes("avoid")) return "Avoid";
+  if (item.unifiedDirection === "mixed") return "Watch Only";
+  if (setup.confirmationStatus === "forming") return "Forming";
+  if (Number(technical.nearestResistance) > 0 && Number(item.currentPrice) > Number(technical.nearestResistance)) return "Extended";
+  if (item.unifiedDirection === "bullish" && Number(item.unifiedPredictionScore) >= 70) return "Ready";
+  return "Watch Only";
+}
+
+function outlookInvalidation(item, technical = {}, setup = {}) {
+  const stop = item.suggestedStopLevel || predictionModelForView(item)?.stopLevel || technical.nearestSupport || null;
+  const bearish = [];
+  const bullish = [];
+  if (stop) bearish.push(`Bullish outlook weakens if ${moneyOrUnavailable(stop)} is breached.`);
+  else bearish.push("No reliable price-based invalidation level is currently available.");
+  if (technical.trendDirection) bearish.push(`Trend change away from ${technical.trendDirection} would weaken the outlook.`);
+  if (setup.confirmationStatus && setup.confirmationStatus !== "none") bearish.push(`The setup would weaken if confirmation changes from ${setup.confirmationStatus} to failed.`);
+  if (Number(item.shortSqueezeSignal?.relativeVolume) > 0) bearish.push("Volume confirmation disappearing would reduce conviction.");
+  if (technical.nearestResistance) bullish.push(`Cautious outlook improves if resistance at ${moneyOrUnavailable(technical.nearestResistance)} breaks with confirmation.`);
+  bullish.push("Confidence improves if alignment turns bullish and the next scan confirms the same direction.");
+  bullish.push("Sector conditions improving would strengthen the setup.");
+  return { stop, bearish: bearish.slice(0, 5), bullish: bullish.slice(0, 5) };
+}
+
+function signalAgreement(item, technical = {}, setup = {}, chartPattern = {}) {
+  const policy = (policySignals.signals || []).find((signal) => signal.ticker === item.ticker);
+  const congress = item.congressionalSignal || {};
+  const categories = [
+    ["Price & Momentum", Number(item.oneDayScore || item.dailyScore) >= 65 ? "Positive" : Number(item.oneDayScore || item.dailyScore) ? "Neutral" : "Unavailable"],
+    ["Technical Trend", technical.trendDirection ? (String(technical.trendDirection).includes("bull") || Number(technical.technicalSignalScore) >= 65 ? "Positive" : Number(technical.technicalSignalScore) < 40 ? "Negative" : "Neutral") : "Unavailable"],
+    ["Multi-Timeframe Alignment", item.multiTimeframeAlignment?.alignmentDirection === "bullish" ? "Positive" : item.multiTimeframeAlignment?.alignmentDirection === "bearish" ? "Negative" : item.multiTimeframeAlignment?.alignmentDirection ? "Neutral" : "Unavailable"],
+    ["Setup Confirmation", setup.confirmationStatus === "confirmed" ? "Positive" : setup.confirmationStatus === "failed" ? "Negative" : setup.confirmationStatus ? "Neutral" : "Unavailable"],
+    ["Chart Pattern", chartPattern.patternDirection === "bullish" ? "Positive" : chartPattern.patternDirection === "bearish" ? "Negative" : chartPattern.primaryPattern ? "Neutral" : "Unavailable"],
+    ["Volume", Number(item.shortSqueezeSignal?.relativeVolume) >= 1.5 ? "Positive" : Number(item.shortSqueezeSignal?.relativeVolume) > 0 ? "Neutral" : "Unavailable"],
+    ["Sector / Market Regime", item.marketRegime?.primary ? "Neutral" : "Unavailable"],
+    ["News", policy?.direction ? (policy.direction === "positive" ? "Positive" : policy.direction === "negative" ? "Negative" : "Neutral") : "Unavailable"],
+    ["Policy", policy?.direction ? (policy.direction === "positive" ? "Positive" : policy.direction === "negative" ? "Negative" : "Neutral") : "Unavailable"],
+    ["Congress", Number(congress.buys || 0) > Number(congress.sells || 0) ? "Positive" : Number(congress.sells || 0) > Number(congress.buys || 0) ? "Negative" : Number(congress.buys || congress.sells) ? "Neutral" : "Unavailable"],
+    ["Fundamentals", item.fundamentalSignal || item.valuationSignal ? "Neutral" : "Unavailable"],
+    ["Data Quality", ["good", "complete"].includes(String(item.dataQualityStatus || "").toLowerCase()) ? "Positive" : ["failed", "stale", "unavailable"].includes(String(item.dataQualityStatus || "").toLowerCase()) ? "Negative" : item.dataQualityStatus ? "Neutral" : "Unavailable"],
+  ].map(([name, status]) => ({ name, status }));
+  return {
+    categories,
+    supporting: categories.filter((row) => row.status === "Positive").map((row) => row.name),
+    conflicting: categories.filter((row) => row.status === "Negative").map((row) => row.name),
+    unavailable: categories.filter((row) => row.status === "Unavailable").map((row) => row.name),
+  };
+}
+
+function rankingExplanation(item, rankMeta) {
+  const contributions = item.signalContribution || item.signalContributions || item.modelScores || {};
+  const contributionRows = Object.entries(contributions)
+    .filter(([, value]) => Number.isFinite(Number(value)))
+    .sort((a, b) => Number(b[1]) - Number(a[1]));
+  const positive = contributionRows.filter(([, value]) => Number(value) > 0).slice(0, 5);
+  const negative = contributionRows.filter(([, value]) => Number(value) < 0).sort((a, b) => Number(a[1]) - Number(b[1]))[0];
+  const reasons = positive.length
+    ? positive.map(([key, value]) => `${key.replace(/([A-Z])/g, " $1").trim()} (${Number(value).toFixed(1)})`)
+    : (item.strongestSignals || []).slice(0, 5);
+  return {
+    overallRank: rankMeta?.overallRank || item.rank || "Not available",
+    timeframeRank: item.timeframeRank || item.rank || rankMeta?.timeframeRank || "Not available",
+    priceBandRank: rankMeta?.priceBandRank || "Not available",
+    beginnerRank: rankMeta?.beginnerQualification?.qualifies ? rankMeta.investorViewRank || "Qualified" : "Not applicable",
+    pennyRank: rankMeta?.pennySpeculativeQualification?.qualifies ? rankMeta.investorViewRank || "Qualified" : "Not applicable",
+    previousRank: item.previousRank || item.rankMovement?.previousRank || "Not available",
+    rankChange: item.rankMovement?.explanation || valueOrUnavailable(item.rankMovement?.change ?? item.scoreChange),
+    scoreChange: Number.isFinite(Number(item.scoreChange)) ? Number(item.scoreChange).toFixed(1) : "Not available",
+    timeInTop25: item.timeInTop25 || "Additional scan history needed",
+    newEntrant: item.newToTopList || item.rankMovement?.status === "new addition" ? "Yes" : "No",
+    reasons,
+    largestNegative: negative ? `${negative[0].replace(/([A-Z])/g, " $1").trim()} (${Number(negative[1]).toFixed(1)})` : "No negative contribution recorded",
+  };
+}
+
+function scoreLimiters(item, technical = {}, setup = {}, chartPattern = {}) {
+  const concerns = briefBearCaseFactors(item, technical, setup, chartPattern).map((item) => item.title);
+  if (!chartPattern.primaryPattern || chartPattern.primaryPattern === "none") concerns.push("No confirmed chart pattern");
+  if (!item.finalReasonSummary) concerns.push("Limited model explanation detail");
+  if (!Number(item.shortSqueezeSignal?.relativeVolume)) concerns.push("No relative-volume confirmation");
+  if (!Array.isArray(item.signalContribution) && !item.signalContribution && !item.signalContributions) concerns.push("No detailed signal-contribution breakdown");
+  return [...new Set(concerns)].slice(0, 6);
+}
+
+function marketRegimeDiagnostic(item) {
+  const predictions = predictionEngine.predictions || [];
+  const bullish = predictions.filter((row) => row.unifiedDirection === "bullish").length;
+  const bearish = predictions.filter((row) => row.unifiedDirection === "bearish").length;
+  const breadth = predictions.length ? Math.round((bullish / predictions.length) * 100) : null;
+  const available = [];
+  const unavailable = [];
+  if (marketIndexData.broadMarketTrend && marketIndexData.broadMarketTrend !== "Unavailable") available.push("broad-market proxy trend");
+  else unavailable.push("broad-market proxy trend");
+  if (predictions.length) available.push("prediction-universe bias", "sector participation", "trend dispersion");
+  else unavailable.push("prediction-universe bias", "sector participation", "trend dispersion");
+  if (marketIndexData.rows?.some((row) => /vix/i.test(row.symbol || row.name || ""))) available.push("volatility proxy");
+  else unavailable.push("volatility proxy");
+  const primary =
+    breadth === null
+      ? "Unavailable"
+      : breadth >= 62
+      ? "Trending Bullish"
+      : breadth <= 38
+      ? "Trending Bearish"
+      : Math.abs(bullish - bearish) <= Math.max(5, predictions.length * 0.08)
+      ? "Sideways / Range-Bound"
+      : "Mixed / Transitioning";
+  return {
+    primary,
+    confidence: available.length >= 4 ? "Medium" : available.length >= 2 ? "Low" : "Unavailable",
+    available,
+    unavailable,
+    note: `Diagnostic only. This sprint does not dynamically change prediction weights based on regime. ${item.ticker} should be reviewed against its own Trade Brief signals first.`,
+  };
+}
+
+function sectorContext(item) {
+  const sector = sectorForPrediction(item);
+  const stats = sectorStats();
+  const stat = stats.find((row) => row.sector === sector);
+  const matches = stat?.matches || [];
+  const sorted = [...matches].sort((a, b) => scoreValue(b.unifiedPredictionScore || b.aiOpportunityScore) - scoreValue(a.unifiedPredictionScore || a.aiOpportunityScore));
+  const stockRank = sorted.findIndex((row) => row.ticker === item.ticker) + 1;
+  const score = scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore);
+  return {
+    label: item.sector ? "Sector" : item.industry ? "Industry" : "Custom Market Group",
+    sector,
+    sectorScore: stat?.avgScore ?? 0,
+    sectorRank: stats.sort((a, b) => b.avgScore - a.avgScore).findIndex((row) => row.sector === sector) + 1 || "Not available",
+    direction: stat?.direction || "Neutral",
+    bullishPercent: matches.length ? Math.round((matches.filter((row) => row.unifiedDirection === "bullish").length / matches.length) * 100) : 0,
+    sampleSize: matches.length,
+    stockRank: stockRank || "Not available",
+    scoreVsAverage: stat ? score - stat.avgScore : 0,
+    trend: Number(item.scoreChange || 0) > 0 ? "Improving" : Number(item.scoreChange || 0) < 0 ? "Weakening" : "Stable",
+  };
+}
+
+function confidenceTrend(item) {
+  const history = (predictionEngine.predictionHistory || predictionEngine.performanceHistory || predictionEngine.history || [])
+    .filter((row) => normalizeTicker(row.ticker) === normalizeTicker(item.ticker))
+    .slice(-5);
+  if (!history.length) return { label: "Insufficient History", rows: [], summary: "Confidence trend will appear after additional scans." };
+  const previous = history[history.length - 1] || {};
+  const currentScore = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+  const previousScore = Number(previous.unifiedPredictionScore || previous.aiOpportunityScore || previous.score || currentScore);
+  const change = currentScore - previousScore;
+  return {
+    label: change > 2 ? "Improving" : change < -2 ? "Weakening" : "Stable",
+    previousConfidence: previous.confidenceTier || previous.confidence || "Not available",
+    currentConfidence: item.confidenceTier || "low",
+    scoreChange: change.toFixed(1),
+    directionChange: previous.unifiedDirection && previous.unifiedDirection !== item.unifiedDirection ? `${previous.unifiedDirection} to ${item.unifiedDirection}` : "No change recorded",
+    recommendationChange: previous.recommendation && previous.recommendation !== item.recommendation ? `${previous.recommendation} to ${item.recommendation}` : "No change recorded",
+    rows: history,
+    summary: "Confidence trend uses stored scan history only.",
+  };
+}
+
+function dataReliability(item) {
+  const scan = completedScanHealth();
+  const missingCritical = item.missingCriticalFields || item.marketDataQuality?.missingCriticalFields || [];
+  const missingOptional = item.missingOptionalFields || item.marketDataQuality?.missingOptionalFields || [];
+  const summary =
+    item.fallbackUsed || item.fallbackDataUsed
+      ? "This recommendation includes fallback daily-session data, so short-term confidence should be interpreted cautiously."
+      : ["stale", "failed", "unavailable"].includes(String(item.dataQualityStatus || "").toLowerCase())
+      ? "This prediction has market-data reliability limitations that may cap confidence."
+      : "This recommendation is supported by the current quote and technical data available to the completed scan.";
+  return {
+    score: item.marketDataQuality?.score ?? scan.marketDataQualityScore ?? "Not available",
+    availability: scan.dataAvailability || item.dataQualityStatus || "Not available",
+    freshness: item.freshnessStatus || item.freshness || scan.dataFreshness || "Not available",
+    provider: item.providerUsed || item.marketDataProvider || "Not available",
+    cached: item.marketCacheUsed ? "Yes" : "No",
+    fallback: item.fallbackUsed || item.fallbackDataUsed ? "Yes" : "No",
+    criticalComplete: missingCritical.length ? "No" : "Yes",
+    missingCritical,
+    missingOptional,
+    quoteTimestamp: item.latestUnderlyingQuoteAt || item.quoteTimestamp || scan.latestUnderlyingQuoteAt || null,
+    intradayTimestamp: item.latestIntradayBarAt || item.intradayTimestamp || null,
+    dailyTimestamp: item.latestDailyBarAt || item.dailyBarTimestamp || null,
+    newsTimestamp: item.newsTimestamp || null,
+    policyTimestamp: (policySignals.signals || []).find((signal) => signal.ticker === item.ticker)?.updatedAt || null,
+    congressTimestamp: item.congressionalSignal?.latestDisclosureDate || congressFeedStatus.latestDisclosureDate || null,
+    summary,
+  };
+}
+
+function tradeBriefConsistencyAudit(item, model, rankMeta) {
+  const checks = [
+    { label: "Ticker matches selected brief", pass: normalizeTicker(item.ticker) === normalizeTicker(selectedBriefTicker) },
+    { label: "Timeframe uses selected prediction model", pass: Boolean(model || item.bestTimeframe || item.timeframe) },
+    { label: "Rank metadata reconciles to ticker", pass: !rankMeta || normalizeTicker(rankMeta.ticker) === normalizeTicker(item.ticker) },
+    { label: "Score comes from selected prediction record", pass: Number.isFinite(Number(item.unifiedPredictionScore || item.aiOpportunityScore)) },
+    { label: "Model version is present or marked unavailable", pass: Boolean(predictionEngine.modelVersion || item.modelVersion || "Unavailable") },
+  ];
+  return { checks, status: checks.every((check) => check.pass) ? "Consistent" : "Review" };
 }
 
 function renderTradeBrief() {
@@ -2866,6 +3134,291 @@ function renderTradeBrief() {
         <button type="button" data-page-target="predictions">Return to Predictions</button>
         <button type="button" data-add-watchlist="${escapeHtml(item.ticker)}">Add to Watchlist</button>
         <button type="button" data-create-alert-for="${escapeHtml(item.ticker)}">Create Alert</button>
+        <button type="button" disabled>Share Report <small>Coming Soon</small></button>
+      </footer>
+    </article>
+  `;
+}
+
+function renderTradeBrief() {
+  if (!output.tradeBriefPanel) return;
+  const currentRows = opportunityRowsForHub();
+  const firstPick = currentRows[0] || firstFromSection("top25OneDay") || firstFromSection("top25SevenDay") || (predictionEngine.predictions || [])[0];
+  const item = findPredictionByTicker(selectedBriefTicker) || firstPick;
+  if (!item) {
+    output.tradeBriefPanel.innerHTML = `
+      <article class="dashboard-card">
+        <span>No trade brief selected</span>
+        <h3>Run a prediction scan, then open a Trade Brief from any opportunity card.</h3>
+        <button type="button" data-run-prediction-scan>Run prediction scan</button>
+      </article>
+    `;
+    return;
+  }
+
+  selectedBriefTicker = item.ticker;
+  const model = predictionModelForView(item);
+  const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+  const setup = item.setupSignals || model?.setupSignals || {};
+  const chartPattern = item.chartPatternSignal || {};
+  const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
+  const bullCase = briefBullCaseFactors(item, technical, setup, chartPattern);
+  const bearCase = briefBearCaseFactors(item, technical, setup, chartPattern);
+  const summary = tradeBriefSummary(item, bullCase, bearCase, model);
+  const matchingPolicy = (policySignals.signals || []).filter((signal) => signal.ticker === item.ticker);
+  const congress = item.congressionalSignal || {};
+  const newsSentiment = matchingPolicy.some((signal) => signal.direction === "positive") ? "Positive" : matchingPolicy.some((signal) => signal.direction === "negative") ? "Negative" : "Neutral";
+  const targetOne = model?.profitTarget || item.suggestedProfitTarget;
+  const targetTwo = Number(item.currentPrice) && Number(item.forecasts?.thirtyDay?.expectedUpside)
+    ? dollarsPrecise(Number(item.currentPrice) * (1 + Number(item.forecasts.thirtyDay.expectedUpside) / 100))
+    : "";
+  const relatedAlerts = alertHistory.filter((alert) => normalizeTicker(alert.ticker) === normalizeTicker(item.ticker)).slice(0, 5);
+  const rankMeta = rankMetadataForTicker(item.ticker);
+  const ranking = rankingExplanation(item, rankMeta);
+  const limitedScore = scoreLimiters(item, technical, setup, chartPattern);
+  const invalidation = outlookInvalidation(item, technical, setup);
+  const agreement = signalAgreement(item, technical, setup, chartPattern);
+  const regime = marketRegimeDiagnostic(item);
+  const sector = sectorContext(item);
+  const trend = confidenceTrend(item);
+  const reliability = dataReliability(item);
+  const consistency = tradeBriefConsistencyAudit(item, model, rankMeta);
+  const rows = currentRows.length ? currentRows : predictionEngine.predictions || [];
+  const rowIndex = rows.findIndex((row) => normalizeTicker(row.ticker) === normalizeTicker(item.ticker));
+  const previousTicker = rowIndex > 0 ? rows[rowIndex - 1]?.ticker : rows[rows.length - 1]?.ticker;
+  const nextTicker = rowIndex >= 0 && rows.length ? rows[(rowIndex + 1) % rows.length]?.ticker : "";
+  const positionStatus = tradePlanStatus(item, technical, setup);
+  const recommendation = item.label || item.recommendation || recommendationCategory(item, model);
+  const qualityLabel = item.marketDataQuality?.label || item.dataQualityStatus || reliability.availability || "Not available";
+  const lastUpdated = item.scannedAt || item.updatedAt || predictionEngine.updatedAt;
+
+  output.tradeBriefPanel.innerHTML = `
+    <article class="trade-brief-report trade-brief-v2">
+      <header class="trade-brief-card brief-report-hero institutional-brief-header">
+        <div>
+          <span class="eyebrow">AI Trade Brief 2.0</span>
+          <h2>${escapeHtml(item.ticker)} | ${escapeHtml(item.name || item.company || item.ticker)}</h2>
+          <div class="brief-badge-row">
+            <span class="brief-badge ${badgeTone(recommendation)}">${escapeHtml(recommendation)}</span>
+            <span class="brief-badge ${badgeTone(item.unifiedDirection)}">${escapeHtml(item.unifiedDirection || "neutral")}</span>
+            <span class="brief-badge neutral">${escapeHtml(item.bestTimeframe || item.timeframe || predictionModelTitle(model))}</span>
+            <span class="brief-badge ${badgeTone(qualityLabel)}">${escapeHtml(qualityLabel)}</span>
+          </div>
+        </div>
+        <div class="brief-score">
+          <span>Unified score</span>
+          <strong>${score}/100</strong>
+          <small>${escapeHtml(item.confidenceTier || "low")} confidence</small>
+        </div>
+      </header>
+
+      <div class="brief-top-metrics">
+        <div><span>Current / Reference Price</span><strong>${moneyOrUnavailable(item.currentPrice)}</strong></div>
+        <div><span>Price Timestamp</span><strong>${reliability.quoteTimestamp ? exactEt(reliability.quoteTimestamp) : "Not available"}</strong></div>
+        <div><span>Selected Timeframe</span><strong>${escapeHtml(item.bestTimeframe || item.timeframe || predictionModelTitle(model))}</strong></div>
+        <div><span>Recommendation</span><strong>${escapeHtml(recommendation)}</strong></div>
+        <div><span>Confidence</span><strong>${escapeHtml(item.confidenceTier || "low")}</strong></div>
+        <div><span>Direction</span><strong>${escapeHtml(item.unifiedDirection || "neutral")}</strong></div>
+        <div><span>Risk Level</span><strong>${escapeHtml(riskCategory(item))}</strong></div>
+        <div><span>Data Freshness</span><strong>${escapeHtml(reliability.freshness)}</strong></div>
+        <div><span>Model Version</span><strong>${escapeHtml(item.modelVersion || predictionEngine.modelVersion || "Unavailable")}</strong></div>
+        <div><span>Last Updated</span><strong>${lastUpdated ? exactEt(lastUpdated) : "Not available"}</strong></div>
+        <div><span>Company</span><strong>${escapeHtml(item.name || item.company || item.ticker)}</strong></div>
+        <div><span>Consistency Audit</span><strong>${escapeHtml(consistency.status)}</strong></div>
+      </div>
+
+      <nav class="brief-actions brief-navigation" aria-label="Trade Brief navigation">
+        <button type="button" data-page-target="predictions">Back to Opportunities</button>
+        <button type="button" data-view-brief="${escapeHtml(previousTicker || item.ticker)}">Previous result</button>
+        <button type="button" data-view-brief="${escapeHtml(nextTicker || item.ticker)}">Next result</button>
+        <button type="button" data-add-watchlist="${escapeHtml(item.ticker)}">Add to Watchlist</button>
+        <button type="button" data-create-alert-for="${escapeHtml(item.ticker)}">Create Alert</button>
+        <button type="button" data-page-target="predictions">Compare</button>
+        <button type="button" disabled>Share Report <small>Coming Soon</small></button>
+      </nav>
+
+      <div class="brief-report-grid">
+        <section class="brief-section brief-wide">
+          <div class="brief-section-heading"><span>Executive Research Summary</span><strong>Verified-field brief</strong></div>
+          <p>${escapeHtml(summary)}</p>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Bull Case</span><strong>${bullCase.length} supported factor(s)</strong></div>
+          <div class="brief-evidence-list positive-list">${renderEvidenceList(bullCase, "No strong positive factor is verified in this prediction record.")}</div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>${item.unifiedDirection === "bearish" ? "Bear Case" : "Reasons to Wait"}</span><strong>${bearCase.length} concern(s)</strong></div>
+          <div class="brief-evidence-list risk-list">${renderEvidenceList(bearCase, "No major concern is verified in this prediction record.")}</div>
+        </section>
+
+        <section class="brief-section brief-wide">
+          <div class="brief-section-heading"><span>What Would Change The Outlook?</span><strong>${invalidation.stop ? `Invalidation ${moneyOrUnavailable(invalidation.stop)}` : "No price level"}</strong></div>
+          <div class="outlook-grid">
+            <div><strong>Bullish outlook weakens if</strong>${invalidation.bearish.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</div>
+            <div><strong>Cautious outlook improves if</strong>${invalidation.bullish.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</div>
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Trade Plan</span><strong>${escapeHtml(positionStatus)}</strong></div>
+          <div class="brief-plan-grid">
+            <div title="Stored entry zone from the selected prediction record."><span>Suggested Entry Zone</span><strong>${escapeHtml(valueOrUnavailable(model?.entryZone || item.suggestedEntryZone))}</strong></div>
+            <div title="Stored stop/invalidation level from the selected prediction record."><span>Invalidation / Stop</span><strong>${escapeHtml(valueOrUnavailable(model?.stopLevel || item.suggestedStopLevel || invalidation.stop))}</strong></div>
+            <div title="Stored target level when available."><span>Target 1</span><strong>${escapeHtml(valueOrUnavailable(targetOne))}</strong></div>
+            <div title="Secondary target only appears when a validated forecast field exists."><span>Target 2</span><strong>${escapeHtml(valueOrUnavailable(targetTwo))}</strong></div>
+            <div title="Stored risk/reward ratio from the prediction record."><span>Risk / Reward Ratio</span><strong>${Number(item.riskRewardRatio) ? Number(item.riskRewardRatio).toFixed(2) : "Not reliably calculated"}</strong></div>
+          </div>
+          <p class="muted-copy">This Trade Plan is research support, not personalized financial advice.</p>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Signal Agreement</span><strong>${agreement.supporting.length} support / ${agreement.conflicting.length} conflict</strong></div>
+          <div class="signal-agreement-grid">${agreement.categories.map((row) => `<div><span>${escapeHtml(row.name)}</span><strong class="${row.status.toLowerCase()}">${escapeHtml(row.status)}</strong></div>`).join("")}</div>
+          <details class="why-pick">
+            <summary>Agreement details</summary>
+            <p><strong>Supporting:</strong> ${escapeHtml(agreement.supporting.join(", ") || "None verified")}</p>
+            <p><strong>Conflicting:</strong> ${escapeHtml(agreement.conflicting.join(", ") || "None verified")}</p>
+            <p><strong>Unavailable:</strong> ${escapeHtml(agreement.unavailable.join(", ") || "None")}</p>
+          </details>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Why This Ranked</span><strong>Transparent ranking</strong></div>
+          <div class="brief-fact-list">
+            <div><span>Overall Rank</span><strong>${escapeHtml(String(ranking.overallRank))}</strong></div>
+            <div><span>Timeframe Rank</span><strong>${escapeHtml(String(ranking.timeframeRank))}</strong></div>
+            <div><span>Price-Band Rank</span><strong>${escapeHtml(String(ranking.priceBandRank))}</strong></div>
+            <div><span>Beginner Picks Rank</span><strong>${escapeHtml(String(ranking.beginnerRank))}</strong></div>
+            <div><span>Penny & Speculative Rank</span><strong>${escapeHtml(String(ranking.pennyRank))}</strong></div>
+            <div><span>Previous Rank</span><strong>${escapeHtml(String(ranking.previousRank))}</strong></div>
+            <div><span>Rank Change</span><strong>${escapeHtml(String(ranking.rankChange))}</strong></div>
+            <div><span>Score Change</span><strong>${escapeHtml(String(ranking.scoreChange))}</strong></div>
+            <div><span>Time in Top 25</span><strong>${escapeHtml(String(ranking.timeInTop25))}</strong></div>
+            <div><span>New Entrant</span><strong>${escapeHtml(String(ranking.newEntrant))}</strong></div>
+          </div>
+          <p><strong>Primary ranking reasons:</strong> ${escapeHtml(ranking.reasons.join(", ") || "No detailed contribution breakdown available.")}</p>
+          <p><strong>Largest negative contribution:</strong> ${escapeHtml(ranking.largestNegative)}</p>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>What Limited The Score?</span><strong>${limitedScore.length} constraint(s)</strong></div>
+          <div class="brief-chip-list risk-list">${limitedScore.map((risk) => `<span>${escapeHtml(risk)}</span>`).join("")}</div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Market Regime Diagnostic</span><strong>${escapeHtml(regime.primary)}</strong></div>
+          <p>${escapeHtml(regime.note)}</p>
+          <div class="brief-fact-list">
+            <div><span>Confidence</span><strong>${escapeHtml(regime.confidence)}</strong></div>
+            <div><span>Inputs Available</span><strong>${escapeHtml(regime.available.join(", ") || "None")}</strong></div>
+            <div><span>Inputs Unavailable</span><strong>${escapeHtml(regime.unavailable.join(", ") || "None")}</strong></div>
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Sector Context</span><strong>${escapeHtml(sector.sector)}</strong></div>
+          <div class="brief-fact-list">
+            <div><span>Classification</span><strong>${escapeHtml(sector.label)}</strong></div>
+            <div><span>Sector Score</span><strong>${sector.sectorScore}/100</strong></div>
+            <div><span>Sector Rank</span><strong>${escapeHtml(String(sector.sectorRank))}</strong></div>
+            <div><span>Direction</span><strong>${escapeHtml(sector.direction)}</strong></div>
+            <div><span>Bullish In Sector</span><strong>${sector.bullishPercent}%</strong></div>
+            <div><span>Sample Size</span><strong>${sector.sampleSize}</strong></div>
+            <div><span>Stock Rank In Sector</span><strong>${escapeHtml(String(sector.stockRank))}</strong></div>
+            <div><span>Score vs Sector Avg</span><strong>${Number(sector.scoreVsAverage).toFixed(1)}</strong></div>
+            <div><span>Sector Trend</span><strong>${escapeHtml(sector.trend)}</strong></div>
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Confidence Trend</span><strong>${escapeHtml(trend.label)}</strong></div>
+          <p>${escapeHtml(trend.summary)}</p>
+          <div class="brief-fact-list">
+            <div><span>Current Confidence</span><strong>${escapeHtml(trend.currentConfidence || item.confidenceTier || "low")}</strong></div>
+            <div><span>Previous Confidence</span><strong>${escapeHtml(trend.previousConfidence || "Not available")}</strong></div>
+            <div><span>Score Change</span><strong>${escapeHtml(trend.scoreChange || "Not available")}</strong></div>
+            <div><span>Direction Change</span><strong>${escapeHtml(trend.directionChange || "Not available")}</strong></div>
+            <div><span>Recommendation Change</span><strong>${escapeHtml(trend.recommendationChange || "Not available")}</strong></div>
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Data Reliability</span><strong>${escapeHtml(String(reliability.score))}/100</strong></div>
+          <p>${escapeHtml(reliability.summary)}</p>
+          <div class="brief-fact-list">
+            <div><span>Availability Label</span><strong>${escapeHtml(reliability.availability)}</strong></div>
+            <div><span>Freshness Label</span><strong>${escapeHtml(reliability.freshness)}</strong></div>
+            <div><span>Provider Used</span><strong>${escapeHtml(reliability.provider)}</strong></div>
+            <div><span>Cached Data Reused</span><strong>${escapeHtml(reliability.cached)}</strong></div>
+            <div><span>Fallback Data Used</span><strong>${escapeHtml(reliability.fallback)}</strong></div>
+            <div><span>Critical Fields Complete</span><strong>${escapeHtml(reliability.criticalComplete)}</strong></div>
+          </div>
+          <details class="why-pick">
+            <summary>Technical data reliability details</summary>
+            <div class="signal-list">
+              <span>Missing critical fields: ${escapeHtml(reliability.missingCritical.join(", ") || "None recorded")}</span>
+              <span>Missing optional fields: ${escapeHtml(reliability.missingOptional.join(", ") || "None recorded")}</span>
+              <span>Quote timestamp: ${reliability.quoteTimestamp ? exactEt(reliability.quoteTimestamp) : "Not available"}</span>
+              <span>Intraday timestamp: ${reliability.intradayTimestamp ? exactEt(reliability.intradayTimestamp) : "Not available"}</span>
+              <span>Daily-bar timestamp: ${reliability.dailyTimestamp ? exactEt(reliability.dailyTimestamp) : "Not available"}</span>
+              <span>News timestamp: ${reliability.newsTimestamp ? exactEt(reliability.newsTimestamp) : "Not available"}</span>
+              <span>Policy timestamp: ${reliability.policyTimestamp ? exactEt(reliability.policyTimestamp) : "Not available"}</span>
+              <span>Congress timestamp: ${reliability.congressTimestamp ? exactEt(reliability.congressTimestamp) : "Not available"}</span>
+            </div>
+          </details>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Technical Snapshot</span><strong>${Number(technical.technicalSignalScore) || 0}/100</strong></div>
+          <div class="brief-fact-list">
+            <div><span>Trend</span><strong>${escapeHtml(technical.trendDirection || "This signal was not available for the latest scan")}</strong></div>
+            <div><span>EMA Alignment</span><strong>${Number(technical.ema9Vs20Ema) > 0 ? "9 EMA above 20 EMA" : Number(technical.ema9Vs20Ema) < 0 ? "9 EMA below 20 EMA" : "This signal was not available for the latest scan"}</strong></div>
+            <div><span>VWAP Position</span><strong>${Number(technical.priceVsVwap) > 0 ? "Above VWAP" : Number(technical.priceVsVwap) < 0 ? "Below VWAP" : "This signal was not available for the latest scan"}</strong></div>
+            <div><span>Chart Pattern</span><strong>${escapeHtml(chartPattern.primaryPattern || "This signal was not available for the latest scan")}</strong></div>
+            <div><span>Support</span><strong>${moneyOrUnavailable(technical.nearestSupport)}</strong></div>
+            <div><span>Resistance</span><strong>${moneyOrUnavailable(technical.nearestResistance)}</strong></div>
+            <div><span>Setup Type</span><strong>${escapeHtml(setup.setupDirection && setup.setupDirection !== "none" ? setup.setupDirection : "This signal was not available for the latest scan")}</strong></div>
+          </div>
+        </section>
+
+        <section class="brief-section">
+          <div class="brief-section-heading"><span>Congress / Policy / News</span><strong>Signal tone</strong></div>
+          <div class="brief-badge-panel">
+            <div><span>Recent Congressional Activity</span><strong class="brief-badge ${Number(congress.buys) > Number(congress.sells || 0) ? "positive" : Number(congress.sells) ? "negative" : "neutral"}">${Number(congress.buys) || Number(congress.sells) ? `${Number(congress.buys) || 0} buys / ${Number(congress.sells) || 0} sells` : "Neutral"}</strong></div>
+            <div><span>Policy Catalysts</span><strong class="brief-badge ${badgeTone(matchingPolicy[0]?.direction)}">${matchingPolicy.length ? matchingPolicy[0].direction : "Neutral"}</strong></div>
+            <div><span>News Sentiment</span><strong class="brief-badge ${badgeTone(newsSentiment)}">${escapeHtml(newsSentiment)}</strong></div>
+          </div>
+        </section>
+
+        <section class="brief-section brief-wide">
+          <div class="brief-section-heading"><span>Trade Brief Consistency Audit</span><strong>${escapeHtml(consistency.status)}</strong></div>
+          <div class="signal-agreement-grid">${consistency.checks.map((check) => `<div><span>${escapeHtml(check.label)}</span><strong class="${check.pass ? "positive" : "negative"}">${check.pass ? "Pass" : "Review"}</strong></div>`).join("")}</div>
+        </section>
+
+        <section class="brief-section brief-wide">
+          <div class="brief-section-heading"><span>Related Alerts</span><strong>${relatedAlerts.length}</strong></div>
+          <div class="alert-brief-list">
+            ${
+              relatedAlerts.length
+                ? relatedAlerts.map((alert) => `<article><span class="pti-badge ${alert.priority === "Critical" ? "danger" : alert.priority === "High" ? "warning" : "neutral"}">${escapeHtml(alert.priority)}</span><strong>${escapeHtml(alert.type)}</strong><small>${alert.timestamp ? new Date(alert.timestamp).toLocaleString() : "Now"} | ${escapeHtml(alert.resolved ? "Resolved" : alert.read ? "Read" : "Unread")}</small><p>${escapeHtml(alert.explanation)}</p></article>`).join("")
+                : `<article><strong>No related alerts yet</strong><p>Create an alert to track score, trend, congress, policy, or price changes for ${escapeHtml(item.ticker)}.</p></article>`
+            }
+          </div>
+        </section>
+
+        <section class="brief-section brief-wide">
+          <div class="brief-section-heading"><span>Historical Performance</span><strong>${trend.rows.length ? `${trend.rows.length} stored scan(s)` : "Coming online"}</strong></div>
+          <p>${trend.rows.length ? "Stored scan history is available for confidence trend review." : "Historical tracking will become available as prediction history grows."}</p>
+        </section>
+      </div>
+
+      <footer class="brief-actions">
+        <button type="button" data-page-target="predictions">Back to Opportunities</button>
+        <button type="button" data-add-watchlist="${escapeHtml(item.ticker)}">Add to Watchlist</button>
+        <button type="button" data-create-alert-for="${escapeHtml(item.ticker)}">Create Alert</button>
+        <button type="button" data-page-target="predictions">Compare</button>
         <button type="button" disabled>Share Report <small>Coming Soon</small></button>
       </footer>
     </article>
@@ -4129,6 +4682,17 @@ function openTradeBrief(ticker) {
   setPage("briefs");
 }
 
+function initDashboardDisclosures() {
+  document.querySelectorAll("[data-dashboard-disclosure]").forEach((detail) => {
+    const key = `ptiDashboardDisclosure:${detail.dataset.dashboardDisclosure}`;
+    const saved = localStorage.getItem(key);
+    if (saved !== null) detail.open = saved === "open";
+    detail.addEventListener("toggle", () => {
+      localStorage.setItem(key, detail.open ? "open" : "closed");
+    });
+  });
+}
+
 Object.values(fields).filter(Boolean).forEach((field) => {
   field.addEventListener("input", calculate);
 });
@@ -4494,6 +5058,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
+initDashboardDisclosures();
 if (output.tradeDate) output.tradeDate.value = new Date().toISOString().slice(0, 10);
 Promise.all([loadSettings(), loadPolicySignals(), loadPredictions(), loadCongressFeedStatus(), loadSymbolUniverseStatus(), loadMarketIndexData(), loadPerformanceSummary(), loadPortfolioFromServer()]).then(calculate);
 setInterval(() => {
