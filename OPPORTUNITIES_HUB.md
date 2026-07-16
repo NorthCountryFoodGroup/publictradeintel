@@ -21,3 +21,6 @@ The investment access preview is a convenience calculation. It is not a portfoli
 ## Version 2.2 Update
 
 Opportunity cards now show a compact `Why selected` line and one supported `Watch` caution where available. Full reasoning belongs in Trade Brief 2.0.
+# Stocks to Buy Center Relationship
+
+The Opportunities Hub remains a broad exploration area. The Stocks to Buy Center is the focused buying-candidate workflow with independent 24-list rankings, Best Ideas, and Investment Access Preview.

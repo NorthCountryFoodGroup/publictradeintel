@@ -21,6 +21,7 @@
           <span class="nav-section-label">User Area</span>
           <button type="button" class="nav-link is-active" data-page-target="dashboard">Dashboard</button>
           <button type="button" class="nav-link" data-page-target="market">Markets</button>
+          <button type="button" class="nav-link" data-page-target="stocksToBuy">Stocks to Buy</button>
           <button type="button" class="nav-link" data-page-target="predictions">Opportunities</button>
           <button type="button" class="nav-link" data-page-target="watchlist">Watchlists</button>
           <button type="button" class="nav-link" data-page-target="alerts">Alerts</button>
@@ -127,7 +128,7 @@
             </div>
             <p id="aiDashboardBrief">Run a prediction scan to generate a concise market brief from the active universe, sector strength, policy/news signals, congressional disclosures, and data quality.</p>
             <div class="hero-links">
-              <button type="button" data-page-target="predictions">View Today's Opportunities</button>
+              <button type="button" data-page-target="stocksToBuy">View Stocks to Buy</button>
             </div>
           </section>
 
@@ -216,6 +217,111 @@
             </div>
           </details>
         </div>
+      </section>
+
+      <section class="prediction-section dashboard-page stocks-to-buy-page" data-page="stocksToBuy">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Flagship AI rankings</p>
+            <h2>Stocks to Buy Center</h2>
+            <p class="muted-copy">Ranked buying opportunities from completed scan data only. Filter changes do not run a new scan.</p>
+          </div>
+          <button type="button" data-run-prediction-scan>Run prediction scan</button>
+        </div>
+
+        <section class="dashboard-card ai-best-ideas-card">
+          <div class="card-heading">
+            <span>AI Best Ideas</span>
+            <strong>If I could only research 10 stocks today</strong>
+          </div>
+          <p id="bestIdeasSummary" class="muted-copy">Run a prediction scan to build AI Best Ideas from completed scan data.</p>
+          <p class="muted-copy">AI Best Ideas represent the model's highest-conviction research opportunities based on available data. They are not guarantees of future performance or personalized investment advice.</p>
+          <div class="stocks-to-buy-grid best-ideas-grid" id="bestIdeasGrid"></div>
+        </section>
+
+        <section class="dashboard-card stocks-to-buy-controls">
+          <div class="card-heading">
+            <span>Stocks to Buy Filters</span>
+            <strong id="stocksToBuyQualifiedCount">0 Qualified Opportunities</strong>
+          </div>
+          <div class="prediction-filter-grid">
+            <label>
+              <span>Timeframe</span>
+              <select id="stocksToBuyTimeframe">
+                <option value="oneDay">1 Day</option>
+                <option value="sevenDay" selected>7 Days</option>
+                <option value="oneMonth">1 Month</option>
+                <option value="oneYear">1 Year</option>
+              </select>
+            </label>
+            <label>
+              <span>Price Category</span>
+              <select id="stocksToBuyPriceCategory">
+                <option value="overall">Overall - Any Price</option>
+                <option value="under5">$5.00 and Under</option>
+                <option value="5to10">$5.01-$10.00</option>
+                <option value="10to25">$10.01-$25.00</option>
+                <option value="25to100">$25.01-$100.00</option>
+                <option value="over100">$100.01 and Above</option>
+              </select>
+            </label>
+            <label>
+              <span>Investor View</span>
+              <select id="stocksToBuyInvestorView">
+                <option value="all">All Opportunities</option>
+                <option value="beginner">Beginner Picks</option>
+                <option value="penny">Penny &amp; Speculative</option>
+              </select>
+            </label>
+            <label>
+              <span>Ranking View</span>
+              <select id="stocksToBuyRankingView">
+                <option value="top25">Top 25</option>
+                <option value="confidence">Highest Confidence</option>
+                <option value="risk">Lowest Risk</option>
+                <option value="momentum">Highest Momentum</option>
+                <option value="improved">Most Improved</option>
+                <option value="new">New Entrants</option>
+              </select>
+            </label>
+            <label>
+              <span>Investment Access Preview</span>
+              <select id="stocksInvestmentAmount">
+                <option value="25">$25</option>
+                <option value="50">$50</option>
+                <option value="100" selected>$100</option>
+                <option value="250">$250</option>
+                <option value="500">$500</option>
+                <option value="1000">$1,000</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <label>
+              <span>Custom amount</span>
+              <input id="stocksInvestmentCustom" type="number" min="1" placeholder="Optional" />
+            </label>
+          </div>
+          <p class="muted-copy">Investment Access Preview is a convenience calculation, not a portfolio recommendation.</p>
+        </section>
+
+        <section class="dashboard-card">
+          <div class="card-heading">
+            <span id="stocksToBuyCategoryTitle">Overall - Any Price</span>
+            <strong id="stocksToBuyCategorySubtitle">7 Days</strong>
+          </div>
+          <div class="executive-card-grid compact-executive-grid" id="stocksToBuySummaryGrid"></div>
+          <p id="stocksToBuyAISummary" class="muted-copy"></p>
+        </section>
+
+        <section class="dashboard-card">
+          <div class="card-heading">
+            <span>Quick Comparison</span>
+            <strong>Select 2-4 stocks</strong>
+          </div>
+          <div class="comparison-panel" id="stocksComparisonPanel"></div>
+        </section>
+
+        <div class="stocks-to-buy-grid" id="stocksToBuyGrid"></div>
       </section>
 
       <section class="portfolio-section portfolio-hud dashboard-page" data-page="watchlist">
@@ -976,11 +1082,11 @@
 
     <nav class="mobile-nav" aria-label="Mobile navigation">
       <button type="button" class="nav-link is-active" data-page-target="dashboard">Home</button>
+      <button type="button" class="nav-link" data-page-target="stocksToBuy">Buy</button>
       <button type="button" class="nav-link" data-page-target="predictions">Picks</button>
       <button type="button" class="nav-link" data-page-target="market">Market</button>
       <button type="button" class="nav-link" data-page-target="briefs">Briefs</button>
       <button type="button" class="nav-link" data-page-target="watchlist">Lists</button>
-      <button type="button" class="nav-link" data-page-target="performance">Perf</button>
       <button type="button" class="nav-link" data-page-target="alerts">Alerts</button>
     </nav>
 

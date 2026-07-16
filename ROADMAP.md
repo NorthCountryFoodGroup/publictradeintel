@@ -110,3 +110,10 @@
 # July 2026 Update
 
 Version 2.x data reliability now includes provider coverage metrics, provider health diagnostics, freshness distribution reporting, and full scan-duration methodology.
+# Version 2.2 Sprint 2 - Stocks to Buy Center
+
+- Stocks to Buy Center with AI Best Ideas.
+- Independent 24-list price category and timeframe rankings.
+- Beginner, Penny & Speculative, and all-opportunity investor views.
+- Investment Access Preview and quick comparison.
+- Historical ranking stability fields and atomic publishing diagnostics.

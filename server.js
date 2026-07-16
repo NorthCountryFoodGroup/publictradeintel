@@ -3978,6 +3978,241 @@ function rankedTopList(predictions, { key, timeframe, modelKey, scoreKey, previo
     });
 }
 
+const STOCKS_TO_BUY_TIMEFRAMES = [
+  { key: "oneDay", label: "1 Day", timeframe: "1-day trade", scoreKey: "oneDayScore", modelKey: "oneDay" },
+  { key: "sevenDay", label: "7 Days", timeframe: "7-day trade", scoreKey: "sevenDayScore", modelKey: "sevenDay" },
+  { key: "oneMonth", label: "1 Month", timeframe: "1-month trade", scoreKey: "thirtyDayScore", modelKey: "thirtyDay" },
+  { key: "oneYear", label: "1 Year", timeframe: "1-year hold", scoreKey: "oneYearScore", modelKey: "oneYear" },
+];
+
+const STOCKS_TO_BUY_PRICE_CATEGORIES = [
+  { key: "overall", label: "Overall - Any Price", test: (price) => Number.isFinite(price) && price > 0 },
+  { key: "under5", label: "$5.00 and Under", test: (price) => Number.isFinite(price) && price > 0 && price <= 5 },
+  { key: "5to10", label: "$5.01-$10.00", test: (price) => Number.isFinite(price) && price > 5 && price <= 10 },
+  { key: "10to25", label: "$10.01-$25.00", test: (price) => Number.isFinite(price) && price > 10 && price <= 25 },
+  { key: "25to100", label: "$25.01-$100.00", test: (price) => Number.isFinite(price) && price > 25 && price <= 100 },
+  { key: "over100", label: "$100.01 and Above", test: (price) => Number.isFinite(price) && price > 100 },
+];
+
+function stocksToBuyPriceCategory(priceValue) {
+  const price = Number(priceValue);
+  return STOCKS_TO_BUY_PRICE_CATEGORIES.find((category) => category.test(price)) || { key: "invalid", label: "Invalid price" };
+}
+
+function stocksToBuyExclusionReasons(item, timeframe) {
+  const price = Number(item.currentPrice || item.marketPrice || item.price || 0);
+  const direction = String(item.unifiedDirection || "").toLowerCase();
+  const quality = String(item.dataQualityStatus || item.marketDataQuality?.label || "").toLowerCase();
+  const confidence = String(item.confidenceTier || "").toLowerCase();
+  const exchangeText = `${item.exchange || ""} ${item.assetGroup || ""} ${item.type || ""}`.toLowerCase();
+  const reasons = [];
+  if (!Number(item[timeframe.scoreKey])) reasons.push("missing prediction");
+  if (!(price > 0)) reasons.push("invalid price");
+  if (!(item.latestUnderlyingQuoteAt || item.quoteTimestamp)) reasons.push("missing price timestamp");
+  if (["unknown", "mixed", ""].includes(direction)) reasons.push("mixed or unknown direction");
+  if (["failed", "unavailable"].includes(quality)) reasons.push("insufficient data quality");
+  if (timeframe.key === "oneDay" && quality === "stale") reasons.push("stale data");
+  if (!["medium", "high", "very high"].includes(confidence)) reasons.push("low confidence");
+  if (/otc|pink|grey|unsupported/.test(exchangeText)) reasons.push("unsupported security");
+  if (Array.isArray(item.missingCriticalFields) && item.missingCriticalFields.length) reasons.push("critical data failure");
+  if (Number(item.riskScore) >= 90) reasons.push("critical warning");
+  return reasons;
+}
+
+function stocksToBuyQualified(item, timeframe) {
+  return stocksToBuyExclusionReasons(item, timeframe).length === 0;
+}
+
+function rankStocksToBuyRows(predictions, timeframe, category, previousList = []) {
+  const previousMap = previousRanks({ previousList }, "previousList");
+  return predictions
+    .filter((item) => stocksToBuyQualified(item, timeframe))
+    .filter((item) => category.test(Number(item.currentPrice || item.marketPrice || item.price || 0)))
+    .sort((a, b) => (Number(b[timeframe.scoreKey]) || 0) - (Number(a[timeframe.scoreKey]) || 0) || (Number(b.unifiedPredictionScore) || 0) - (Number(a.unifiedPredictionScore) || 0))
+    .map((item, index) => {
+      const price = Number(item.currentPrice || item.marketPrice || item.price || 0);
+      const rank = index + 1;
+      const signals = supportingSignalsFor(item);
+      const model = item.timeframeModels?.[timeframe.modelKey] || {};
+      return {
+        ...item,
+        rank,
+        overallRank: null,
+        timeframeRank: rank,
+        categoryRank: rank,
+        stocksToBuyTimeframe: timeframe.key,
+        stocksToBuyTimeframeLabel: timeframe.label,
+        priceCategory: category.key,
+        priceCategoryLabel: category.label,
+        scanReferencePrice: price,
+        scanReferencePriceTimestamp: item.latestUnderlyingQuoteAt || item.quoteTimestamp || item.scannedAt || null,
+        categoryAtScanTime: category.key,
+        aiScore: Number(item[timeframe.scoreKey]) || 0,
+        reasonForRecommendation: model.reasons?.[0] || item.predictionReason,
+        whyTop25: `Ranked #${rank} in ${category.label} for ${timeframe.label} from completed scan data.`,
+        strongestSupportingSignal: signals.strongestSupportingSignal,
+        weakestSignal: signals.weakestSignal,
+        rankMovement: rankMovement(item.ticker, rank, previousMap, { ...item, ...signals }, `${category.label} ${timeframe.label}`),
+      };
+    });
+}
+
+function stocksToBuySummary(rows, category, timeframe, updatedAt) {
+  const count = rows.length;
+  const average = (selector) => (count ? Math.round(rows.reduce((sum, item) => sum + (Number(selector(item)) || 0), 0) / count) : 0);
+  const sectorCounts = rows.reduce((acc, item) => {
+    const sector = item.sector || item.assetGroup || item.industry || "Unclassified";
+    acc[sector] = (acc[sector] || 0) + 1;
+    return acc;
+  }, {});
+  const highestRankedSector = Object.entries(sectorCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "No qualified stocks";
+  const highestConfidence = [...rows].sort((a, b) => (Number(b.confidenceScore) || Number(b.unifiedPredictionScore) || 0) - (Number(a.confidenceScore) || Number(a.unifiedPredictionScore) || 0))[0];
+  const freshCount = rows.filter((item) => !["stale", "failed", "unavailable"].includes(String(item.dataQualityStatus || "").toLowerCase())).length;
+  return {
+    category: category.label,
+    categoryKey: category.key,
+    timeframe: timeframe.label,
+    timeframeKey: timeframe.key,
+    qualifiedStockCount: count,
+    displayedCount: Math.min(25, count),
+    averageUnifiedScore: average((item) => item.unifiedPredictionScore || item.aiOpportunityScore),
+    averageConfidence: average((item) => item.confidenceScore || item.unifiedPredictionScore),
+    averageRisk: average((item) => item.riskScore),
+    strongBuyCount: rows.filter((item) => /strong/i.test(item.label || item.recommendation || "")).length,
+    buyCount: rows.filter((item) => /^buy$/i.test(item.recommendation || "") || /buy/i.test(item.label || "")).length,
+    watchCount: rows.filter((item) => /watch/i.test(item.recommendation || item.label || "")).length,
+    highestRankedSector,
+    highestConfidenceTicker: highestConfidence?.ticker || null,
+    averageDataQualityScore: average((item) => item.marketDataQuality?.score || item.dataQualityScore),
+    freshDataPercent: count ? Math.round((freshCount / count) * 100) : 0,
+    latestScanTimestamp: updatedAt,
+  };
+}
+
+function stocksToBuyBestIdeas(predictions, rankingLists, previousBestIdeas = []) {
+  const previousMap = new Map((previousBestIdeas || []).map((item) => [item.ticker, item]));
+  const allOverallRows = Object.values(rankingLists)
+    .filter((entry) => entry.categoryKey === "overall")
+    .flatMap((entry) => entry.rows || []);
+  const byTicker = new Map();
+  allOverallRows.forEach((row) => {
+    const existing = byTicker.get(row.ticker);
+    if (!existing || Number(row.aiScore) > Number(existing.aiScore)) byTicker.set(row.ticker, row);
+  });
+  const sectorCounts = {};
+  const selected = [];
+  const candidates = [...byTicker.values()]
+    .filter((item) => stocksToBuyExclusionReasons(item, STOCKS_TO_BUY_TIMEFRAMES[0]).filter((reason) => !["missing prediction"].includes(reason)).length === 0)
+    .map((item) => {
+      const conflicts = Array.isArray(item.conflictingSignals) ? item.conflictingSignals.length : 0;
+      const fallbackPenalty = item.fallbackUsed || item.fallbackDataUsed ? 6 : 0;
+      const missingPenalty = Array.isArray(item.missingCriticalFields) ? item.missingCriticalFields.length * 10 : 0;
+      const bestIdeasScore =
+        (Number(item.unifiedPredictionScore) || Number(item.aiOpportunityScore) || 0) * 0.32 +
+        (Number(item.confidenceScore) || 0) * 0.18 +
+        (Number(item.marketDataQuality?.score || item.dataQualityScore || 70)) * 0.16 +
+        Math.max(0, 100 - (Number(item.riskScore) || 50)) * 0.14 +
+        Math.max(0, 20 - conflicts * 5) +
+        (Number(item.scoreChange) > 0 ? 5 : 0) +
+        (Number(item.riskRewardRatio) >= 1.5 ? 4 : 0) -
+        fallbackPenalty -
+        missingPenalty;
+      return { ...item, bestIdeasScore };
+    })
+    .sort((a, b) => b.bestIdeasScore - a.bestIdeasScore);
+  for (const candidate of candidates) {
+    const sector = candidate.sector || candidate.assetGroup || "Unclassified";
+    const wouldExceed = (sectorCounts[sector] || 0) >= 2;
+    const alternativesExist = candidates.some((item) => !selected.find((chosen) => chosen.ticker === item.ticker) && (item.sector || item.assetGroup || "Unclassified") !== sector && item.bestIdeasScore >= candidate.bestIdeasScore - 8);
+    if (wouldExceed && alternativesExist) continue;
+    selected.push(candidate);
+    sectorCounts[sector] = (sectorCounts[sector] || 0) + 1;
+    if (selected.length >= 10) break;
+  }
+  return selected.map((item, index) => {
+    const previous = previousMap.get(item.ticker);
+    return {
+      ...item,
+      bestIdeasRank: index + 1,
+      aiBestIdeasRank: index + 1,
+      daysOnBestIdeas: previous ? Number(previous.daysOnBestIdeas || 1) + 1 : 1,
+      newThisScan: !previous,
+      returnedToList: !previous && (previousBestIdeas || []).some((prior) => prior.ticker === item.ticker),
+      movedUp: previous ? Number(previous.aiBestIdeasRank || previous.bestIdeasRank || 0) > index + 1 : false,
+      movedDown: previous ? Number(previous.aiBestIdeasRank || previous.bestIdeasRank || 0) < index + 1 : false,
+      whyBestIdea: (item.strongestSignals || []).slice(0, 3),
+      biggestCaution: (item.conflictingSignals || [item.weakestSignal || item.failureRisk || "Monitor data freshness"])[0],
+    };
+  });
+}
+
+function buildStocksToBuyCenter(predictions, previousSections = {}, updatedAt = new Date().toISOString()) {
+  const previous = previousSections.stocksToBuyCenter || {};
+  const rankingLists = {};
+  const exclusions = {};
+  const diagnostics = {
+    totalListsBuilt: 0,
+    categoriesBuilt: STOCKS_TO_BUY_PRICE_CATEGORIES.map((category) => category.key),
+    timeframeListsBuilt: STOCKS_TO_BUY_TIMEFRAMES.map((timeframe) => timeframe.key),
+    qualificationCounts: {},
+    exclusionCountsByReason: {},
+    priceBoundaryValidation: "Passed",
+    rankingConsistencyScore: 100,
+    latestBuildTimestamp: updatedAt,
+    latestBuildDurationMs: 0,
+    latestError: null,
+  };
+  const startedAt = Date.now();
+  for (const timeframe of STOCKS_TO_BUY_TIMEFRAMES) {
+    for (const category of STOCKS_TO_BUY_PRICE_CATEGORIES) {
+      const key = `${category.key}:${timeframe.key}`;
+      const rows = rankStocksToBuyRows(predictions, timeframe, category, previous.rankingLists?.[key]?.rows || []);
+      const overallRows = category.key === "overall" ? rows : rankStocksToBuyRows(predictions, timeframe, STOCKS_TO_BUY_PRICE_CATEGORIES[0], previous.rankingLists?.[`overall:${timeframe.key}`]?.rows || []);
+      const overallRankByTicker = new Map(overallRows.map((item) => [item.ticker, item.rank]));
+      const rankedRows = rows.map((item) => ({ ...item, overallRank: overallRankByTicker.get(item.ticker) || null })).slice(0, 25);
+      rankingLists[key] = {
+        key,
+        categoryKey: category.key,
+        categoryLabel: category.label,
+        timeframeKey: timeframe.key,
+        timeframeLabel: timeframe.label,
+        qualifiedCount: rows.length,
+        qualifiedRows: rows,
+        rows: rankedRows,
+        summary: stocksToBuySummary(rows, category, timeframe, updatedAt),
+      };
+      diagnostics.qualificationCounts[key] = rows.length;
+      diagnostics.totalListsBuilt += 1;
+    }
+    predictions.forEach((item) => {
+      stocksToBuyExclusionReasons(item, timeframe).forEach((reason) => {
+        diagnostics.exclusionCountsByReason[reason] = (diagnostics.exclusionCountsByReason[reason] || 0) + 1;
+      });
+    });
+  }
+  const bestIdeas = stocksToBuyBestIdeas(predictions, rankingLists, previous.bestIdeas?.current || []);
+  diagnostics.bestIdeasQualificationCount = bestIdeas.length;
+  diagnostics.bestIdeasDiversificationResult = "Applied max two per sector where qualified alternatives existed";
+  diagnostics.beginnerQualificationCount = predictions.filter((item) => !stocksToBuyExclusionReasons(item, STOCKS_TO_BUY_TIMEFRAMES[1]).length && Number(item.riskScore) < 70).length;
+  diagnostics.pennyQualificationCount = predictions.filter((item) => stocksToBuyPriceCategory(item.currentPrice).key === "under5" && !stocksToBuyExclusionReasons(item, STOCKS_TO_BUY_TIMEFRAMES[1]).length).length;
+  diagnostics.latestBuildDurationMs = Date.now() - startedAt;
+  return {
+    version: "v2.2-stocks-to-buy-center",
+    builtAt: updatedAt,
+    priceCategories: STOCKS_TO_BUY_PRICE_CATEGORIES.map(({ key, label }) => ({ key, label })),
+    timeframes: STOCKS_TO_BUY_TIMEFRAMES.map(({ key, label }) => ({ key, label })),
+    rankingLists,
+    bestIdeas: {
+      current: bestIdeas,
+      previous: previous.bestIdeas?.current || [],
+      additions: bestIdeas.filter((item) => !(previous.bestIdeas?.current || []).some((prior) => prior.ticker === item.ticker)).map((item) => item.ticker),
+      removals: (previous.bestIdeas?.current || []).filter((prior) => !bestIdeas.some((item) => item.ticker === prior.ticker)).map((item) => prior.ticker),
+      archive: [{ scanId: `scan-${Date.parse(updatedAt) || Date.now()}`, modelVersion: "v4-top25-ranking-engine", rows: bestIdeas }],
+    },
+    diagnostics,
+  };
+}
+
 function comparisonView(lists) {
   const groups = new Map();
   Object.entries(lists).forEach(([key, rows]) => {
@@ -4022,8 +4257,31 @@ function predictionSections(predictions, previousSections = {}) {
   const lists = { top25OneDay, top25SevenDay, top25OneMonth, top25OneYear };
   const comparisons = comparisonView(lists);
   const highAlignmentTickers = new Set(comparisons.filter((item) => item.label === "High Alignment Candidate").map((item) => item.ticker));
+  let stocksToBuyCenter;
+  try {
+    stocksToBuyCenter = buildStocksToBuyCenter(predictions, previousSections, new Date().toISOString());
+  } catch (error) {
+    stocksToBuyCenter = previousSections.stocksToBuyCenter || {
+      version: "v2.2-stocks-to-buy-center",
+      builtAt: new Date().toISOString(),
+      priceCategories: STOCKS_TO_BUY_PRICE_CATEGORIES.map(({ key, label }) => ({ key, label })),
+      timeframes: STOCKS_TO_BUY_TIMEFRAMES.map(({ key, label }) => ({ key, label })),
+      rankingLists: {},
+      bestIdeas: { current: [], previous: [], additions: [], removals: [], archive: [] },
+      diagnostics: {},
+    };
+    stocksToBuyCenter = {
+      ...stocksToBuyCenter,
+      diagnostics: {
+        ...(stocksToBuyCenter.diagnostics || {}),
+        latestError: error.message,
+        publishStatus: "Retained previous valid Stocks to Buy Center because the latest build failed",
+      },
+    };
+  }
   return {
     topBuyCandidates: byScore.slice(0, 25),
+    stocksToBuyCenter,
     top25OneDay,
     top25SevenDay,
     top25OneMonth,

@@ -55,6 +55,17 @@
     "smoke:confidence-trend": "node scripts/smoke-test-confidence-trend.js",
     "smoke:dashboard-disclosure": "node scripts/smoke-test-dashboard-progressive-disclosure.js",
     "smoke:trade-brief-consistency": "node scripts/smoke-test-trade-brief-consistency.js",
+    "smoke:stocks-to-buy": "node scripts/smoke-test-stocks-to-buy-center.js",
+    "smoke:stocks-to-buy-24-lists": "node scripts/smoke-test-24-ranking-lists.js",
+    "smoke:stocks-to-buy-independent-rankings": "node scripts/smoke-test-independent-price-rankings.js",
+    "smoke:stocks-to-buy-price-boundaries": "node scripts/smoke-test-price-boundaries-v2.js",
+    "smoke:ai-best-ideas": "node scripts/smoke-test-ai-best-ideas.js",
+    "smoke:best-ideas-history": "node scripts/smoke-test-best-ideas-history.js",
+    "smoke:beginner-stocks-to-buy": "node scripts/smoke-test-beginner-stocks-to-buy.js",
+    "smoke:penny-stocks-to-buy": "node scripts/smoke-test-penny-stocks-to-buy.js",
+    "smoke:investment-access-v2": "node scripts/smoke-test-investment-access-v2.js",
+    "smoke:stocks-to-buy-consistency": "node scripts/smoke-test-stocks-to-buy-consistency.js",
+    "smoke:stocks-to-buy-atomic-publish": "node scripts/smoke-test-stocks-to-buy-atomic-publish.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
   }
 }

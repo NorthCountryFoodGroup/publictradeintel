@@ -44,3 +44,6 @@ Public Trade Intel should feel like a professional research dashboard, not a raw
 The prediction engine should feel active, transparent, and broad enough to discover fresh ideas. Scans should show progress while they run, report how many symbols were actually screened, explain data freshness, and avoid repeating the same names across every dashboard role unless the evidence truly supports it.
 
 Congressional trading data is valuable context, but it should remain a secondary catalyst inside a larger evidence stack that includes market data, technical conditions, sector strength, policy/news signals, risk, and data quality.
+# Stocks to Buy Center
+
+The Stocks to Buy Center is the product's flagship research destination for ranked buy candidates. It turns completed prediction scans into clear, segmented lists by timeframe, price category, investor view, and ranking lens while preserving data-quality and risk context.

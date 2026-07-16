@@ -27,4 +27,7 @@ Trade Brief 2.0 does not change prediction scoring, ranking weights, provider in
 - Confidence Trend: stored scan history only.
 - Data Reliability: availability, freshness, provider, cache, fallback, and missing fields.
 - Consistency Audit: checks ticker, timeframe, rank metadata, score, and model version.
+# Stocks to Buy Entry Point
+
+Every Stocks to Buy card links to the existing Trade Brief 2.0. The center does not replace the Trade Brief; it sends users there for deeper rationale, risks, technicals, and data-quality context.
 

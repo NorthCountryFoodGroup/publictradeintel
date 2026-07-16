@@ -18,4 +18,7 @@ A candidate must generally have:
 Penny and speculative stocks can be highly volatile, illiquid, and subject to rapid losses. This section is for high-risk research only.
 
 The filter does not change model scoring or ranking.
+# Stocks to Buy Penny & Speculative View
+
+Penny & Speculative is available inside the Stocks to Buy Center with persistent high-risk warnings. It is a research view for volatile, lower-priced securities and does not weaken qualification standards to fill a list.
 

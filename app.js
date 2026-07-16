@@ -63,6 +63,21 @@ const output = {
   opportunityRankingView: document.querySelector("#opportunityRankingView"),
   investmentAmountPreview: document.querySelector("#investmentAmountPreview"),
   investmentAmountCustom: document.querySelector("#investmentAmountCustom"),
+  stocksToBuyTimeframe: document.querySelector("#stocksToBuyTimeframe"),
+  stocksToBuyPriceCategory: document.querySelector("#stocksToBuyPriceCategory"),
+  stocksToBuyInvestorView: document.querySelector("#stocksToBuyInvestorView"),
+  stocksToBuyRankingView: document.querySelector("#stocksToBuyRankingView"),
+  stocksInvestmentAmount: document.querySelector("#stocksInvestmentAmount"),
+  stocksInvestmentCustom: document.querySelector("#stocksInvestmentCustom"),
+  stocksToBuyGrid: document.querySelector("#stocksToBuyGrid"),
+  stocksToBuySummaryGrid: document.querySelector("#stocksToBuySummaryGrid"),
+  stocksToBuyAISummary: document.querySelector("#stocksToBuyAISummary"),
+  stocksToBuyQualifiedCount: document.querySelector("#stocksToBuyQualifiedCount"),
+  stocksToBuyCategoryTitle: document.querySelector("#stocksToBuyCategoryTitle"),
+  stocksToBuyCategorySubtitle: document.querySelector("#stocksToBuyCategorySubtitle"),
+  bestIdeasGrid: document.querySelector("#bestIdeasGrid"),
+  bestIdeasSummary: document.querySelector("#bestIdeasSummary"),
+  stocksComparisonPanel: document.querySelector("#stocksComparisonPanel"),
   globalSearch: document.querySelector("#globalSearch"),
   filterTimeframe: document.querySelector("#filterTimeframe"),
   filterRecommendation: document.querySelector("#filterRecommendation"),
@@ -264,6 +279,7 @@ let predictionLayout = "cards";
 let portfolio = [];
 let selectedBriefTicker = "";
 let selectedMarketSector = "All sectors";
+let stocksToBuyComparison = [];
 let watchlists = [];
 let watchlistAlerts = [];
 let alertHistory = [];
@@ -271,6 +287,7 @@ let selectedWatchlistId = "core-holdings";
 
 const pageLabels = {
   dashboard: "Dashboard",
+  stocksToBuy: "Stocks to Buy",
   predictions: "Opportunities",
   briefs: "AI Trade Briefs",
   watchlist: "Watchlists",
@@ -398,6 +415,7 @@ function calculate() {
   renderStockIdeas(activeInvestAmount);
   renderBestStocks(activeInvestAmount);
   renderPredictions();
+  renderStocksToBuyCenter();
   renderDayTrades();
   renderAlertsCenter();
   renderPolicySignals();
@@ -2096,6 +2114,387 @@ function opportunityRowsForHub() {
 
 function rankMetadataForTicker(ticker) {
   return opportunityRowsForHub().find((item) => item.ticker === ticker) || enrichOpportunityRows().find((item) => item.ticker === ticker) || null;
+}
+
+const stocksToBuyTimeframes = {
+  oneDay: { label: "1 Day", scoreKey: "oneDayScore", sectionKey: "top25OneDay" },
+  sevenDay: { label: "7 Days", scoreKey: "sevenDayScore", sectionKey: "top25SevenDay" },
+  oneMonth: { label: "1 Month", scoreKey: "thirtyDayScore", sectionKey: "top25OneMonth" },
+  oneYear: { label: "1 Year", scoreKey: "oneYearScore", sectionKey: "top25OneYear" },
+};
+
+const stocksToBuyPriceCategories = [
+  { key: "overall", label: "Overall - Any Price", test: (price) => Number.isFinite(price) && price > 0 },
+  { key: "under5", label: "$5.00 and Under", test: (price) => Number.isFinite(price) && price > 0 && price <= 5 },
+  { key: "5to10", label: "$5.01-$10.00", test: (price) => Number.isFinite(price) && price > 5 && price <= 10 },
+  { key: "10to25", label: "$10.01-$25.00", test: (price) => Number.isFinite(price) && price > 10 && price <= 25 },
+  { key: "25to100", label: "$25.01-$100.00", test: (price) => Number.isFinite(price) && price > 25 && price <= 100 },
+  { key: "over100", label: "$100.01 and Above", test: (price) => Number.isFinite(price) && price > 100 },
+];
+
+function stocksToBuyPriceCategory(priceValue) {
+  const price = Number(priceValue);
+  return stocksToBuyPriceCategories.find((category) => category.test(price)) || { key: "invalid", label: "Invalid price" };
+}
+
+function stocksInvestmentAmount() {
+  const selected = output.stocksInvestmentAmount?.value || "100";
+  if (selected === "custom") return Math.max(0, Number(output.stocksInvestmentCustom?.value) || 0);
+  return Number(selected) || 100;
+}
+
+function stocksInvestmentPreview(item) {
+  const amount = stocksInvestmentAmount();
+  const price = currentPriceForPrediction(item);
+  if (!amount || !price) return { amount, wholeShares: 0, fractionalRequired: true, fractionalShares: 0, remainingCash: amount || 0, oneSharePercent: 0 };
+  const wholeShares = Math.floor(amount / price);
+  const remainingCash = Math.max(0, amount - wholeShares * price);
+  return {
+    amount,
+    wholeShares,
+    fractionalRequired: wholeShares < 1 || remainingCash > 0,
+    fractionalShares: Math.round((amount / price) * 10000) / 10000,
+    remainingCash,
+    oneSharePercent: Math.round((price / amount) * 1000) / 10,
+  };
+}
+
+function stocksToBuyExclusionReasons(item, timeframeKey) {
+  const price = currentPriceForPrediction(item);
+  const direction = String(item.unifiedDirection || "").toLowerCase();
+  const quality = String(item.dataQualityStatus || item.marketDataQuality?.label || "").toLowerCase();
+  const timeframe = stocksToBuyTimeframes[timeframeKey] || stocksToBuyTimeframes.sevenDay;
+  const reasons = [];
+  if (!Number(item[timeframe.scoreKey])) reasons.push("missing prediction");
+  if (!(price > 0)) reasons.push("invalid price");
+  if (!(item.latestUnderlyingQuoteAt || item.quoteTimestamp)) reasons.push("missing price timestamp");
+  if (["unknown", "mixed", ""].includes(direction)) reasons.push("mixed or unknown direction");
+  if (["failed", "unavailable"].includes(quality)) reasons.push("insufficient data quality");
+  if (timeframeKey === "oneDay" && quality === "stale") reasons.push("stale data");
+  if (confidenceRank(item.confidenceTier) < 2) reasons.push("low confidence");
+  if (!isExchangeListed(item)) reasons.push("unsupported security");
+  if (Array.isArray(item.missingCriticalFields) && item.missingCriticalFields.length) reasons.push("critical data failure");
+  if (Number(item.riskScore) >= 90) reasons.push("critical warning");
+  return reasons;
+}
+
+function qualifiesForStocksToBuy(item, timeframeKey, investorView = "all") {
+  if (stocksToBuyExclusionReasons(item, timeframeKey).length) return false;
+  if (investorView === "beginner") return beginnerQualification(item).qualifies;
+  if (investorView === "penny") return pennySpeculativeQualification(item).qualifies;
+  return true;
+}
+
+function fallbackStocksToBuyCenter() {
+  const predictions = predictionEngine.predictions || [];
+  const rankingLists = {};
+  Object.entries(stocksToBuyTimeframes).forEach(([timeframeKey, timeframe]) => {
+    const overallRows = predictions
+      .filter((item) => qualifiesForStocksToBuy(item, timeframeKey))
+      .sort((a, b) => scoreValue(b[timeframe.scoreKey]) - scoreValue(a[timeframe.scoreKey]) || scoreValue(b.unifiedPredictionScore) - scoreValue(a.unifiedPredictionScore));
+    const overallRank = new Map(overallRows.map((item, index) => [item.ticker, index + 1]));
+    stocksToBuyPriceCategories.forEach((category) => {
+      const allRows = predictions
+        .filter((item) => qualifiesForStocksToBuy(item, timeframeKey))
+        .filter((item) => category.test(currentPriceForPrediction(item)))
+        .sort((a, b) => scoreValue(b[timeframe.scoreKey]) - scoreValue(a[timeframe.scoreKey]) || scoreValue(b.unifiedPredictionScore) - scoreValue(a.unifiedPredictionScore))
+        .map((item, index) => ({
+          ...item,
+          rank: index + 1,
+          categoryRank: index + 1,
+          timeframeRank: index + 1,
+          overallRank: overallRank.get(item.ticker) || null,
+          stocksToBuyTimeframe: timeframeKey,
+          stocksToBuyTimeframeLabel: timeframe.label,
+          priceCategory: category.key,
+          priceCategoryLabel: category.label,
+          scanReferencePrice: currentPriceForPrediction(item),
+          scanReferencePriceTimestamp: item.latestUnderlyingQuoteAt || item.quoteTimestamp || predictionEngine.updatedAt,
+          categoryAtScanTime: category.key,
+          aiScore: scoreValue(item[timeframe.scoreKey]),
+        }));
+      rankingLists[`${category.key}:${timeframeKey}`] = {
+        key: `${category.key}:${timeframeKey}`,
+        categoryKey: category.key,
+        categoryLabel: category.label,
+        timeframeKey,
+        timeframeLabel: timeframe.label,
+        qualifiedCount: allRows.length,
+        qualifiedRows: allRows,
+        rows: allRows.slice(0, 25),
+        summary: stocksToBuyCategorySummary(allRows, category, timeframe),
+      };
+    });
+  });
+  return {
+    builtAt: predictionEngine.updatedAt,
+    priceCategories: stocksToBuyPriceCategories.map(({ key, label }) => ({ key, label })),
+    timeframes: Object.entries(stocksToBuyTimeframes).map(([key, value]) => ({ key, label: value.label })),
+    rankingLists,
+    bestIdeas: { current: buildBestIdeasFromCompletedScan(predictions), previous: [], additions: [], removals: [], archive: [] },
+    diagnostics: { totalListsBuilt: Object.keys(rankingLists).length, latestBuildTimestamp: predictionEngine.updatedAt },
+  };
+}
+
+function stocksToBuyCenterData() {
+  return predictionEngine.sections?.stocksToBuyCenter || predictionEngine.stocksToBuyCenter || fallbackStocksToBuyCenter();
+}
+
+function stocksToBuyCategorySummary(rows, category, timeframe) {
+  const count = rows.length;
+  const avg = (selector) => (count ? Math.round(rows.reduce((sum, item) => sum + (Number(selector(item)) || 0), 0) / count) : 0);
+  const sectors = rows.reduce((acc, item) => {
+    const sector = sectorForPrediction(item);
+    acc[sector] = (acc[sector] || 0) + 1;
+    return acc;
+  }, {});
+  return {
+    category: category.label,
+    timeframe: timeframe.label,
+    qualifiedStockCount: count,
+    averageUnifiedScore: avg((item) => item.unifiedPredictionScore || item.aiOpportunityScore),
+    averageConfidence: avg((item) => item.confidenceScore || item.unifiedPredictionScore),
+    averageRisk: avg((item) => item.riskScore),
+    strongBuyCount: rows.filter((item) => /strong/i.test(item.label || item.recommendation || "")).length,
+    buyCount: rows.filter((item) => /buy/i.test(item.label || item.recommendation || "")).length,
+    watchCount: rows.filter((item) => /watch/i.test(item.label || item.recommendation || "")).length,
+    highestRankedSector: Object.entries(sectors).sort((a, b) => b[1] - a[1])[0]?.[0] || "No qualified stocks",
+    highestConfidenceTicker: [...rows].sort((a, b) => confidenceRank(b.confidenceTier) - confidenceRank(a.confidenceTier))[0]?.ticker || null,
+    averageDataQualityScore: avg((item) => item.marketDataQuality?.score || item.dataQualityScore || 70),
+    freshDataPercent: count ? Math.round((rows.filter((item) => !["stale", "failed", "unavailable"].includes(String(item.dataQualityStatus || "").toLowerCase())).length / count) * 100) : 0,
+    latestScanTimestamp: predictionEngine.updatedAt,
+  };
+}
+
+function buildBestIdeasFromCompletedScan(predictions) {
+  const selected = [];
+  const sectorCounts = {};
+  const candidates = [...(predictions || [])]
+    .filter((item) => qualifiesForStocksToBuy(item, "sevenDay"))
+    .map((item) => {
+      const conflicts = (item.conflictingSignals || []).length;
+      const score =
+        scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore) * 0.32 +
+        scoreValue(item.confidenceScore || item.unifiedPredictionScore) * 0.18 +
+        scoreValue(item.marketDataQuality?.score || item.dataQualityScore || 70) * 0.16 +
+        Math.max(0, 100 - (Number(item.riskScore) || 50)) * 0.14 +
+        Math.max(0, 20 - conflicts * 5) +
+        (Number(item.scoreChange) > 0 ? 5 : 0) -
+        (item.fallbackUsed || item.fallbackDataUsed ? 6 : 0);
+      return { ...item, bestIdeasScore: score };
+    })
+    .sort((a, b) => b.bestIdeasScore - a.bestIdeasScore);
+  for (const item of candidates) {
+    const sector = sectorForPrediction(item);
+    if ((sectorCounts[sector] || 0) >= 2 && candidates.some((candidate) => sectorForPrediction(candidate) !== sector && candidate.bestIdeasScore >= item.bestIdeasScore - 8 && !selected.find((row) => row.ticker === candidate.ticker))) continue;
+    selected.push({ ...item, aiBestIdeasRank: selected.length + 1, bestIdeasRank: selected.length + 1, daysOnBestIdeas: 1, newThisScan: true, whyBestIdea: opportunityCardReasons(item).selected, biggestCaution: opportunityCardReasons(item).caution });
+    sectorCounts[sector] = (sectorCounts[sector] || 0) + 1;
+    if (selected.length >= 10) break;
+  }
+  return selected;
+}
+
+function currentStocksToBuyRows() {
+  const center = stocksToBuyCenterData();
+  const timeframe = output.stocksToBuyTimeframe?.value || "sevenDay";
+  const category = output.stocksToBuyPriceCategory?.value || "overall";
+  const investorView = output.stocksToBuyInvestorView?.value || "all";
+  const ranking = output.stocksToBuyRankingView?.value || "top25";
+  const list = center.rankingLists?.[`${category}:${timeframe}`] || { rows: [], qualifiedCount: 0, summary: {} };
+  let rows = (list.qualifiedRows || list.rows || []).filter((item) => qualifiesForStocksToBuy(item, timeframe, investorView));
+  if (ranking === "confidence") rows.sort((a, b) => confidenceRank(b.confidenceTier) - confidenceRank(a.confidenceTier) || scoreValue(b.unifiedPredictionScore) - scoreValue(a.unifiedPredictionScore));
+  if (ranking === "risk") rows.sort((a, b) => Number(a.riskScore || 100) - Number(b.riskScore || 100));
+  if (ranking === "momentum") rows.sort((a, b) => scoreValue(b.oneDayScore || b.dailyScore) - scoreValue(a.oneDayScore || a.dailyScore));
+  if (ranking === "improved") rows.sort((a, b) => Number(b.scoreChange || 0) - Number(a.scoreChange || 0));
+  if (ranking === "new") rows = rows.filter((item) => item.newToTopList || item.rankMovement?.status === "new addition" || item.newThisScan);
+  return { center, list, rows: rows.slice(0, 25), timeframe, category, investorView, ranking };
+}
+
+function stocksToBuyReasonPair(item) {
+  const reasons = opportunityCardReasons(item);
+  return {
+    reasons: reasons.selected.length ? reasons.selected.slice(0, 2) : ["Completed scan score", "Verified data quality"],
+    caution: reasons.caution || item.biggestCaution || item.weakestSignal || "Monitor price and data freshness",
+  };
+}
+
+function stocksToBuyInvestmentPreview(item) {
+  const amount = stocksInvestmentAmount();
+  const price = currentPriceForPrediction(item);
+  if (!(amount > 0) || !(price > 0)) {
+    return { amount, wholeShares: 0, fractionalRequired: true, fractionalShares: 0, remainingCash: amount, oneSharePercent: 0 };
+  }
+  const wholeShares = Math.floor(amount / price);
+  const fractionalShares = amount / price;
+  return {
+    amount,
+    wholeShares,
+    fractionalRequired: wholeShares < 1 || Math.abs(fractionalShares - wholeShares) > 0.001,
+    fractionalShares,
+    remainingCash: amount - wholeShares * price,
+    oneSharePercent: Math.round((price / amount) * 1000) / 10,
+  };
+}
+
+function renderStocksMetric(label, value, note = "") {
+  return `
+    <article class="market-metric-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(String(value))}</strong>
+      ${note ? `<p>${escapeHtml(note)}</p>` : ""}
+    </article>
+  `;
+}
+
+function renderStocksToBuyCard(item, options = {}) {
+  const model = predictionModelForView(item);
+  const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
+  const recommendation = recommendationCategory(item, model);
+  const confidence = confidenceCategory(item);
+  const dataQuality = item.dataQualityStatus || item.dataQuality?.dataQualityStatus || item.marketDataQuality?.label || "partial";
+  const price = Number(item.scanReferencePrice || currentPriceForPrediction(item));
+  const score = scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore);
+  const timeframeScore = scoreValue(item.aiScore || item[stocksToBuyTimeframes[item.stocksToBuyTimeframe || options.timeframe]?.scoreKey] || score);
+  const reasonPair = stocksToBuyReasonPair(item);
+  const preview = stocksToBuyInvestmentPreview(item);
+  const priceCategory = item.priceCategoryLabel || stocksToBuyPriceCategory(price).label;
+  const timestamp = item.scanReferencePriceTimestamp || item.latestUnderlyingQuoteAt || item.quoteTimestamp || predictionEngine.updatedAt;
+  const rankLabel = options.bestIdea ? `Best Idea #${item.aiBestIdeasRank || item.bestIdeasRank || ""}` : `#${item.categoryRank || item.rank || "n/a"}`;
+  const beginner = beginnerQualification(item);
+  const penny = pennySpeculativeQualification(item);
+  return `
+    <article class="prediction-screener-card stocks-to-buy-card">
+      <header class="prediction-card-header">
+        <div>
+          <strong>${escapeHtml(item.ticker || "N/A")}</strong>
+          <span>${escapeHtml(item.name || item.companyName || item.ticker || "Unknown company")}</span>
+        </div>
+        <em>${moneyOrCalculating(price)}</em>
+      </header>
+      <div class="prediction-score-block">
+        <span>${escapeHtml(rankLabel)}</span>
+        <strong>${timeframeScore}</strong>
+        <small>${escapeHtml(item.stocksToBuyTimeframeLabel || stocksToBuyTimeframes[options.timeframe]?.label || "Selected")}</small>
+      </div>
+      <div class="prediction-badge-row">
+        <span class="pti-badge ${badgeClassForRecommendation(recommendation)}">${escapeHtml(recommendation)}</span>
+        <span class="pti-badge ${badgeClassForConfidence(confidence)}">${escapeHtml(confidence)}</span>
+        <span class="pti-badge ${dataQualityBadgeClass(dataQuality)}">${escapeHtml(dataQuality)}</span>
+        <span class="pti-badge ${Number(item.riskScore) >= 70 ? "market-stale" : "market-good"}">${escapeHtml(riskCategory(item))} Risk</span>
+      </div>
+      <div class="prediction-metadata-grid">
+        <div><span>Overall Rank</span><strong>${item.overallRank ? `#${item.overallRank}` : "n/a"}</strong></div>
+        <div><span>Timeframe Rank</span><strong>${item.timeframeRank ? `#${item.timeframeRank}` : "n/a"}</strong></div>
+        <div><span>Category Rank</span><strong>${item.categoryRank || item.rank ? `#${item.categoryRank || item.rank}` : "n/a"}</strong></div>
+        <div><span>Category</span><strong>${escapeHtml(priceCategory)}</strong></div>
+        <div><span>Unified</span><strong>${score}/100</strong></div>
+        <div><span>Direction</span><strong>${escapeHtml(item.unifiedDirection || "neutral")}</strong></div>
+        <div><span>Conviction</span><strong>${escapeHtml(item.convictionTier || item.confidenceTier || "Measured")}</strong></div>
+        <div><span>Provider</span><strong>${escapeHtml(item.providerUsed || item.marketProvider || item.quoteProvider || "scan record")}</strong></div>
+        <div><span>Fallback</span><strong>${item.fallbackUsed || item.fallbackDataUsed ? "Yes" : "No"}</strong></div>
+        <div><span>Freshness</span><strong>${escapeHtml(item.freshnessStatus || item.freshness || "unknown")}</strong></div>
+      </div>
+      <p class="prediction-ai-summary">${escapeHtml(oneLineAiSummary(item, model))}</p>
+      <p class="prediction-ai-summary compact-reason-line"><strong>Top reasons:</strong> ${escapeHtml(reasonPair.reasons.join(", "))}. <strong>Caution:</strong> ${escapeHtml(reasonPair.caution)}.</p>
+      ${beginner.qualifies ? `<p class="prediction-ai-summary">Beginner rank eligible: ${escapeHtml((beginner.reasons || []).slice(0, 2).join(", ") || "clearer risk profile")}.</p>` : ""}
+      ${penny.qualifies ? `<p class="prediction-ai-summary warning-copy">Penny & speculative view: high volatility and liquidity risk. Use this as research only.</p>` : ""}
+      <div class="prediction-metadata-grid">
+        <div><span>Preview Amount</span><strong>${moneyOrCalculating(preview.amount)}</strong></div>
+        <div><span>Whole Shares</span><strong>${preview.wholeShares}</strong></div>
+        <div><span>Fractional</span><strong>${preview.fractionalRequired ? "Required/possible" : "Not needed"}</strong></div>
+        <div><span>Fractional Shares</span><strong>${preview.fractionalShares.toFixed(3)}</strong></div>
+        <div><span>Remaining Cash</span><strong>${dollarsPrecise(preview.remainingCash)}</strong></div>
+        <div><span>One Share Uses</span><strong>${preview.oneSharePercent}%</strong></div>
+      </div>
+      <p class="prediction-ai-summary">Reference price timestamp: ${escapeHtml(timestamp ? new Date(timestamp).toLocaleString() : "Not available")}. Preview is not position-size advice.</p>
+      <footer class="prediction-actions">
+        <button type="button" class="pti-button" data-view-brief="${escapeHtml(item.ticker)}">View Trade Brief</button>
+        <button type="button" class="pti-button ghost" data-add-watchlist="${escapeHtml(item.ticker)}">Add to Watchlist</button>
+        <button type="button" class="pti-button ghost" data-create-alert-for="${escapeHtml(item.ticker)}">Create Alert</button>
+        <button type="button" class="pti-button ghost" data-stocks-compare="${escapeHtml(item.ticker)}">Quick Compare</button>
+      </footer>
+    </article>
+  `;
+}
+
+function renderStocksComparison(rows) {
+  if (!output.stocksComparisonPanel) return;
+  const selected = stocksToBuyComparison
+    .map((ticker) => rows.find((item) => String(item.ticker || "").toUpperCase() === ticker))
+    .filter(Boolean)
+    .slice(0, 4);
+  if (selected.length < 2) {
+    output.stocksComparisonPanel.innerHTML = `<p class="muted-copy">Select 2-4 cards with Quick Compare to compare score, price, confidence, risk, and caution side by side.</p>`;
+    return;
+  }
+  output.stocksComparisonPanel.innerHTML = `
+    <div class="prediction-table-wrap">
+      <table class="pti-table prediction-screener-table">
+        <thead><tr><th>Ticker</th><th>Score</th><th>Price</th><th>Confidence</th><th>Risk</th><th>Reason</th><th>Caution</th></tr></thead>
+        <tbody>
+          ${selected.map((item) => {
+            const pair = stocksToBuyReasonPair(item);
+            return `<tr>
+              <td><strong>${escapeHtml(item.ticker)}</strong></td>
+              <td>${scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore)}/100</td>
+              <td>${moneyOrCalculating(currentPriceForPrediction(item))}</td>
+              <td>${escapeHtml(confidenceCategory(item))}</td>
+              <td>${escapeHtml(riskCategory(item))}</td>
+              <td>${escapeHtml(pair.reasons[0] || "Completed scan")}</td>
+              <td>${escapeHtml(pair.caution)}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderStocksToBuyCenter() {
+  if (!output.stocksToBuyGrid) return;
+  const { center, list, rows, timeframe, category, investorView, ranking } = currentStocksToBuyRows();
+  const timeframeLabel = stocksToBuyTimeframes[timeframe]?.label || "Selected";
+  const categoryLabel = stocksToBuyPriceCategories.find((item) => item.key === category)?.label || "Overall";
+  const allRows = list.rows || [];
+  const summary = list.summary || stocksToBuyCategorySummary(allRows, { key: category, label: categoryLabel }, { key: timeframe, label: timeframeLabel });
+  const bestIdeas = center.bestIdeas?.current || buildBestIdeasFromCompletedScan(predictionEngine.predictions || []);
+  const bestIdeaTickers = new Set(bestIdeas.map((item) => item.ticker));
+
+  if (output.bestIdeasSummary) {
+    output.bestIdeasSummary.textContent = `${bestIdeas.length} AI Best Ideas selected from completed scan results with diversification, quality, confidence, and risk checks.`;
+  }
+  if (output.bestIdeasGrid) {
+    output.bestIdeasGrid.innerHTML = bestIdeas.length
+      ? bestIdeas.slice(0, 10).map((item) => renderStocksToBuyCard({ ...item, categoryRank: item.categoryRank || item.rank }, { bestIdea: true, timeframe: item.stocksToBuyTimeframe || "sevenDay" })).join("")
+      : `<article class="stock-card"><span>No Best Ideas yet</span><strong>Run a prediction scan</strong><p>Best Ideas publish after qualified completed scan records are available.</p></article>`;
+  }
+
+  if (output.stocksToBuyCategoryTitle) output.stocksToBuyCategoryTitle.textContent = categoryLabel;
+  if (output.stocksToBuyCategorySubtitle) output.stocksToBuyCategorySubtitle.textContent = `${timeframeLabel} - ${output.stocksToBuyRankingView?.selectedOptions?.[0]?.textContent || "Top 25"}`;
+  if (output.stocksToBuyQualifiedCount) {
+    output.stocksToBuyQualifiedCount.textContent = `${rows.length} shown / ${Number(list.qualifiedCount || summary.qualifiedStockCount || 0)} qualified`;
+  }
+  if (output.stocksToBuySummaryGrid) {
+    output.stocksToBuySummaryGrid.innerHTML = [
+      renderStocksMetric("Qualified", Number(list.qualifiedCount || summary.qualifiedStockCount || 0), "Standards are not weakened to fill 25"),
+      renderStocksMetric("Displayed", rows.length, "Selected view"),
+      renderStocksMetric("Avg Unified", `${Number(summary.averageUnifiedScore || 0)}/100`, "Completed scan records"),
+      renderStocksMetric("Avg Risk", `${Number(summary.averageRisk || 0)}/100`, "Lower is better"),
+      renderStocksMetric("Leading Sector", summary.highestRankedSector || "Unclassified", "Largest share of qualified list"),
+      renderStocksMetric("Fresh Data", `${Number(summary.freshDataPercent || 0)}%`, "From scan metadata"),
+    ].join("");
+  }
+  if (output.stocksToBuyAISummary) {
+    const beginnerNote = investorView === "beginner" ? " Beginner view applies extra clarity, liquidity, quality, and risk screens." : "";
+    const pennyNote = investorView === "penny" ? " Penny & Speculative view is high-risk research and keeps volatility warnings visible." : "";
+    output.stocksToBuyAISummary.textContent = `${categoryLabel} for ${timeframeLabel} has ${Number(list.qualifiedCount || 0)} qualified stocks. ${summary.highestRankedSector || "Unclassified"} is the leading sector, average unified score is ${Number(summary.averageUnifiedScore || 0)}, and average data quality is ${Number(summary.averageDataQualityScore || 0)}.${beginnerNote}${pennyNote}`;
+  }
+
+  const sortedRows = rows.map((item) => ({ ...item, inBestIdeas: bestIdeaTickers.has(item.ticker) }));
+  output.stocksToBuyGrid.innerHTML = sortedRows.length
+    ? sortedRows.map((item) => renderStocksToBuyCard(item, { timeframe, category, ranking })).join("")
+    : `<article class="stock-card"><span>No qualified stocks</span><strong>This list stayed empty honestly</strong><p>The completed scan did not produce stocks meeting the ${escapeHtml(categoryLabel)} ${escapeHtml(timeframeLabel)} standards for ${escapeHtml(output.stocksToBuyInvestorView?.selectedOptions?.[0]?.textContent || "this view")}.</p></article>`;
+  renderStocksComparison(sortedRows);
 }
 
 function opportunityCardReasons(item) {
@@ -3968,6 +4367,7 @@ async function runPredictionScan() {
     const duration = ((performance.now() - startedAt) / 1000).toFixed(1);
     setScanUi("Scan complete", 100, `Prediction scan complete. ${result.predictions?.length || 0} records generated in ${duration}s.${warningText}`);
     renderPredictions();
+    renderStocksToBuyCenter();
     renderMarketIntelligence();
     renderPerformanceCenter();
     renderAlertsCenter();
@@ -4659,6 +5059,7 @@ function setPage(pageName) {
   if (output.pageBreadcrumb) output.pageBreadcrumb.textContent = label;
   if (output.pageTitle) output.pageTitle.textContent = label;
   if (target === "briefs") renderTradeBrief();
+  if (target === "stocksToBuy") renderStocksToBuyCenter();
   if (target === "market") renderMarketIntelligence();
   if (target === "performance") renderPerformanceCenter();
   if (target === "alerts") renderAlertsCenter();
@@ -4947,6 +5348,19 @@ output.performanceSearch?.addEventListener("input", () => renderPredictionAudit(
     control.addEventListener("input", renderPredictions);
     control.addEventListener("change", renderPredictions);
   });
+[
+  output.stocksToBuyTimeframe,
+  output.stocksToBuyPriceCategory,
+  output.stocksToBuyInvestorView,
+  output.stocksToBuyRankingView,
+  output.stocksInvestmentAmount,
+  output.stocksInvestmentCustom,
+]
+  .filter(Boolean)
+  .forEach((control) => {
+    control.addEventListener("input", renderStocksToBuyCenter);
+    control.addEventListener("change", renderStocksToBuyCenter);
+  });
 document.querySelectorAll("[data-prediction-layout]").forEach((button) => {
   button.addEventListener("click", () => {
     predictionLayout = button.dataset.predictionLayout || "cards";
@@ -5018,6 +5432,16 @@ document.addEventListener("click", (event) => {
     const rule = addAlertRuleForTicker(ticker, "tradeBrief");
     setPage("alerts");
     if (output.alertsDashboardStatus) output.alertsDashboardStatus.textContent = rule ? `${ticker} alert created.` : "We could not create that alert. Please retry.";
+  }
+  const stocksCompareButton = event.target.closest("[data-stocks-compare]");
+  if (stocksCompareButton) {
+    const ticker = normalizeTicker(stocksCompareButton.dataset.stocksCompare);
+    if (ticker) {
+      stocksToBuyComparison = stocksToBuyComparison.includes(ticker)
+        ? stocksToBuyComparison.filter((item) => item !== ticker)
+        : [...stocksToBuyComparison, ticker].slice(-4);
+      renderStocksToBuyCenter();
+    }
   }
   const watchButton = event.target.closest("[data-add-watchlist]");
   if (watchButton && !output.predictionGrid?.contains(watchButton)) {

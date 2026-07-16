@@ -1401,6 +1401,32 @@ li {
   transform: translateY(-1px);
 }
 
+.stocks-to-buy-page {
+  gap: var(--space-5, 20px);
+}
+
+.stocks-to-buy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4, 16px);
+}
+
+.stocks-to-buy-card .prediction-score-block strong {
+  color: var(--color-success, #45d19a);
+}
+
+.comparison-panel {
+  min-height: 64px;
+}
+
+.compact-reason-line {
+  line-height: 1.45;
+}
+
+.warning-copy {
+  color: var(--color-warning, #f5c15c);
+}
+
 .prediction-card-header {
   display: flex;
   align-items: start;
@@ -3952,6 +3978,7 @@ button,
   .alerts-overview-grid,
   .watchlist-overview-grid,
   .prediction-grid,
+  .stocks-to-buy-grid,
   .opportunity-grid,
   .sector-rotation-grid,
   .sector-heatmap-grid,
@@ -4010,6 +4037,7 @@ button,
   .alerts-overview-grid,
   .watchlist-overview-grid,
   .prediction-grid,
+  .stocks-to-buy-grid,
   .opportunity-grid,
   .sector-rotation-grid,
   .sector-heatmap-grid,

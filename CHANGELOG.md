@@ -164,3 +164,12 @@
 - Added provider-health diagnostics and scan-stage duration reporting.
 - Separated Engine Health from Market Data Availability and Market Data Freshness.
 - Added per-prediction data-usability flags for fallback, stale, missing critical fields, and confidence downgrade reasons.
+# Version 2.2 Sprint 2 - Stocks to Buy Center
+
+- Added the Stocks to Buy Center as the flagship ranked-buy-ideas page.
+- Added 24 independent price-category/timeframe ranking lists from completed scan results.
+- Added AI Best Ideas with quality, risk, fallback, confidence, and diversification checks.
+- Added Beginner and Penny & Speculative investor views inside Stocks to Buy.
+- Added Investment Access Preview for small-dollar share accessibility.
+- Added quick comparison, category summaries, and atomic publish diagnostics.
+- Added Sprint 2 documentation and smoke tests.

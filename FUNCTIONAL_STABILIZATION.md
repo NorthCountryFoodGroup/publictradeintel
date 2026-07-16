@@ -69,3 +69,6 @@ The Opportunities Hub is a presentation and filtering layer only. It does not ch
 # Version 2.2 Update
 
 Trade Brief 2.0, market-regime diagnostics, sector context, confidence trend, and dashboard disclosure are presentation-layer upgrades. Prediction scoring and provider integrations remain unchanged.
+# Stocks to Buy Stabilization
+
+Sprint 2 preserves prediction scoring, provider integrations, Trade Brief 2.0, watchlists, alerts, diagnostics, and existing scan behavior. The new center reads completed scan results and uses atomic publish fallback diagnostics if list generation fails.

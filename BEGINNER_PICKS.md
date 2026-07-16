@@ -20,4 +20,7 @@ A candidate must generally have:
 Qualified cards show why they qualify, such as liquidity, clear trend, data quality, or moderate risk.
 
 This filter is designed to reduce clutter for newer users, not to imply that a stock is safe or guaranteed to rise.
+# Stocks to Buy Beginner View
+
+Beginner Picks are now available inside the Stocks to Buy Center. The view applies additional qualification checks for clarity, liquidity, data quality, confidence, and controlled risk before displaying a stock.
 

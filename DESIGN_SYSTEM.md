@@ -232,3 +232,6 @@ If a page becomes longer than approximately two screen heights on desktop, redes
 - Drill-down pages
 
 Do not keep adding content to long pages.
+# Stocks to Buy Components
+
+The Stocks to Buy Center uses existing dashboard cards, prediction cards, badges, buttons, tables, and metric cards. It keeps AI Best Ideas first, compact cards in the main grid, and advanced context one click away through Trade Briefs.

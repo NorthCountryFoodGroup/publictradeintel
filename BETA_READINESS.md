@@ -61,3 +61,6 @@ The normal user dashboard now summarizes provider coverage without exposing conf
 # Version 2.2 Update
 
 Private beta now includes Trade Brief 2.0 and dashboard progressive disclosure. The report is still research support, not personalized financial advice, and depends on the quality of completed scan data.
+# Version 2.2 Sprint 2 Beta Notes
+
+Stocks to Buy is beta-ready when completed scans publish the 24 ranking lists, Best Ideas render first, filters rerender locally, and no list weakens qualification standards just to reach 25 names.
