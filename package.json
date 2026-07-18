@@ -5,6 +5,9 @@
   "description": "PublicTradeIntel market, congressional trade, and policy catalyst intelligence app.",
   "scripts": {
     "start": "node server.js",
+    "smoke:discovery:api-contract": "node scripts/smoke-test-discovery-api-contract.js",
+    "smoke:discovery:prediction-boundary": "node scripts/smoke-test-prediction-engine-boundary.js",
+    "smoke:discovery:persistence-contract": "node scripts/smoke-test-discovery-persistence-contract.js",
     "smoke:predictions": "node scripts/smoke-test-prediction-scan.js",
     "smoke:watchlists": "node scripts/smoke-test-watchlists.js",
     "smoke:alerts": "node scripts/smoke-test-alerts.js",
