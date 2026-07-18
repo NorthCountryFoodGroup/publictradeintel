@@ -9,6 +9,11 @@ const {
   DISCOVERY_ENGINE_VERSIONS,
 } = require("./discovery/constants");
 const { buildEvidenceRecords } = require("./discovery/evidence");
+const { buildMarketRegime } = require("./discovery/regime");
+const { evaluateAllBuckets } = require("./discovery/buckets");
+const { buildCandidatePool } = require("./discovery/candidate-pool");
+const { buildDiscoveryExplanations } = require("./discovery/explanations");
+const { runShadowComparison } = require("./discovery/shadow-comparison");
 
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PIN = process.env.ADMIN_PIN || "";
@@ -381,7 +386,9 @@ function sanitizeDiscoverySettings(settings = {}) {
     includeClosedEndFunds: source.includeClosedEndFunds === true,
     lastChangedAt: String(source.lastChangedAt || "").slice(0, 40),
     discoveryEngineVersion: normalizeDiscoveryEngineVersion(source.discoveryEngineVersion),
-    discoveryShadowComparisonEnabled: source.discoveryShadowComparisonEnabled !== false,
+    discoveryShadowComparisonEnabled:
+      DISCOVERY_ENGINE_VERSIONS.includes(source.discoveryEngineVersion === undefined ? "legacy" : source.discoveryEngineVersion) &&
+      source.discoveryShadowComparisonEnabled !== false,
     discoveryEvidenceVersion: String(source.discoveryEvidenceVersion || DEFAULT_V3_DISCOVERY_SETTINGS.discoveryEvidenceVersion).slice(0, 80),
     discoveryMaximumEvidenceAgeMs: boundedNumber(source.discoveryMaximumEvidenceAgeMs, DEFAULT_V3_DISCOVERY_SETTINGS.discoveryMaximumEvidenceAgeMs, 60000, 30 * 24 * 60 * 60 * 1000),
     minimumDiscoveryDataQuality: boundedNumber(source.minimumDiscoveryDataQuality, DEFAULT_V3_DISCOVERY_SETTINGS.minimumDiscoveryDataQuality, 0, 100),
@@ -445,6 +452,61 @@ function buildDiscoveryEvidenceDiagnostics({ config, policySignals, quotes, univ
       ],
     };
   }
+}
+
+function buildDiscoveryShadowDiagnostics({ config, policySignals, quotes, universe, legacyCandidates, generatedAt }) {
+  return runShadowComparison(
+    {
+      generatedAt,
+      discoverySettings: config.discoverySettings,
+      legacyCandidates,
+      watchlistTickers: (config.stockIdeas || []).map((stock) => stock.ticker),
+    },
+    () => {
+      const evidence = buildEvidenceRecords(
+        { config, policySignals, quotes, universe },
+        {
+          now: Date.parse(generatedAt) || Date.now(),
+          maximumEvidenceAgeMs: config.discoverySettings?.discoveryMaximumEvidenceAgeMs,
+        },
+      );
+      const regime = buildMarketRegime({}, {
+        evaluatedAt: generatedAt,
+        maximumEvidenceAgeMs: config.discoverySettings?.discoveryMaximumEvidenceAgeMs,
+      });
+      const watchlist = new Set((config.stockIdeas || []).map((stock) => String(stock.ticker || "").toUpperCase()));
+      const bucketResults = [...evidence.records.entries()].map(([ticker, record]) => ({
+        ticker,
+        results: evaluateAllBuckets(record, regime, { evaluatedAt: generatedAt }),
+      }));
+      const candidatePool = buildCandidatePool({
+        evaluatedAt: generatedAt,
+        entries: bucketResults.map(({ ticker, results }) => ({
+          evidenceRecord: evidence.records.get(ticker),
+          bucketResults: results,
+          watchlist: watchlist.has(ticker),
+        })),
+        settings: {
+          maximumSectorConcentrationPercent: config.discoverySettings?.maximumSectorConcentrationPercent,
+          watchlistOverrideEnabled: config.discoverySettings?.watchlistOverrideEnabled,
+        },
+      }, { evaluatedAt: generatedAt });
+      const explanations = buildDiscoveryExplanations(candidatePool.qualifiedCandidates.map((candidate) => ({
+        evidenceRecord: evidence.records.get(candidate.canonicalTicker),
+        candidate,
+        bucketResults: bucketResults.find((entry) => entry.ticker === candidate.canonicalTicker)?.results || [],
+        poolResult: candidatePool,
+        regime,
+        evaluatedAt: generatedAt,
+      })));
+      return {
+        candidatePool,
+        explanations,
+        bucketResults,
+        evidenceDiagnostics: evidence.diagnostics,
+      };
+    },
+  );
 }
 
 function sanitizeConfig(config) {
@@ -4985,6 +5047,14 @@ async function refreshPredictions(options = {}) {
   const predictions = scanUniverse
     .map((stock) => buildPrediction(stock, config, policySignals, previousByTicker))
     .sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
+  const discoveryShadowDiagnostics = buildDiscoveryShadowDiagnostics({
+    config,
+    policySignals,
+    quotes: options.quotes || [],
+    universe: loadSymbolUniverse(),
+    legacyCandidates: scanUniverse,
+    generatedAt: new Date().toISOString(),
+  });
   stageDurations.deepAnalysisDuration = elapsedMs(deepStartedAt);
   const rankingStartedAt = Date.now();
   const updatedAt = new Date().toISOString();
@@ -5106,6 +5176,7 @@ async function refreshPredictions(options = {}) {
     totalDuration: Number.isFinite(durationMs) ? durationMs : 0,
     broadScreen: broadStats,
     discoveryEvidence: discoveryEvidenceDiagnostics,
+    discoveryShadowComparison: discoveryShadowDiagnostics,
     symbolUniverseMetadata: broadStats.symbolUniverseMetadata,
     sectorAllocation: sectorAllocationSummary(scanUniverse),
     stages: [

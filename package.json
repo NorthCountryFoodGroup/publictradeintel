@@ -15,6 +15,7 @@
     "smoke:discovery:persistence-contract": "node scripts/smoke-test-discovery-persistence-contract.js",
     "smoke:discovery:regime": "node scripts/smoke-test-discovery-regime.js",
     "smoke:discovery:schema": "node scripts/smoke-test-discovery-schema.js",
+    "smoke:discovery:shadow-comparison": "node scripts/smoke-test-discovery-shadow-comparison.js",
     "smoke:predictions": "node scripts/smoke-test-prediction-scan.js",
     "smoke:watchlists": "node scripts/smoke-test-watchlists.js",
     "smoke:alerts": "node scripts/smoke-test-alerts.js",
