@@ -1,0 +1,146 @@
+{
+  "now": "2026-07-18T16:00:00.000Z",
+  "universe": {
+    "symbols": [
+      {
+        "canonicalTicker": "REAL",
+        "displayTicker": "REAL",
+        "providerTicker": "REAL",
+        "name": "Real Evidence Corp",
+        "exchange": "NASDAQ",
+        "securityType": "Common Stock",
+        "active": true,
+        "source": "Nasdaq Trader nasdaqlisted"
+      },
+      {
+        "canonicalTicker": "POLI",
+        "displayTicker": "POLI",
+        "providerTicker": "POLI",
+        "name": "Policy Evidence Corp",
+        "exchange": "NYSE",
+        "securityType": "Common Stock",
+        "active": true,
+        "source": "Nasdaq Trader otherlisted"
+      },
+      {
+        "canonicalTicker": "FXZZ",
+        "displayTicker": "FXZZ",
+        "providerTicker": "FXZZ",
+        "name": "Generated Fixture",
+        "exchange": "NASDAQ",
+        "securityType": "Common Stock",
+        "active": true,
+        "source": "fixture-fallback"
+      }
+    ],
+    "symbolUniverseMetadata": {
+      "source": "Nasdaq Trader exchange listing files",
+      "fetchedAt": "2026-07-18T14:00:00.000Z",
+      "refreshStatus": "live",
+      "eligibleSymbolCount": 3
+    }
+  },
+  "quotes": [
+    {
+      "ticker": "REAL",
+      "marketPrice": 25,
+      "marketChange": 1,
+      "marketChangePercent": "4.17%",
+      "marketVolume": 1000000,
+      "marketUpdatedAt": "2026-07-18T15:30:00.000Z",
+      "providerFetchedAt": "2026-07-18T15:31:00.000Z",
+      "latestUnderlyingQuoteAt": "2026-07-18T15:30:00.000Z",
+      "marketProvider": "Yahoo chart",
+      "providerUsed": "Yahoo",
+      "fallbackUsed": false
+    },
+    {
+      "ticker": "POLI",
+      "marketPrice": 12,
+      "marketChangePercent": "-1.25%",
+      "marketVolume": 250000,
+      "marketUpdatedAt": "2026-07-15T15:30:00.000Z",
+      "providerFetchedAt": "2026-07-18T15:00:00.000Z",
+      "latestUnderlyingQuoteAt": "2026-07-15T15:30:00.000Z",
+      "marketProvider": "Saved market data",
+      "providerUsed": "Saved quote fallback",
+      "fallbackUsed": true
+    }
+  ],
+  "config": {
+    "stockIdeas": [
+      {
+        "ticker": "REAL",
+        "name": "Real Evidence Corp",
+        "valuationScore": 99,
+        "momentumScore": 98,
+        "qualityScore": 97,
+        "volatilityScore": 96,
+        "pressScore": 95,
+        "committeeScore": 94
+      }
+    ],
+    "congressTrades": [
+      {
+        "representative": "Member One",
+        "party": "D",
+        "ticker": "REAL",
+        "transaction": "Buy",
+        "reportedRange": "$15,001 - $50,000",
+        "transactionDate": "2026-06-10",
+        "disclosureDate": "2026-06-20",
+        "fetchedAt": "2026-07-18T12:00:00.000Z",
+        "sourceUrl": "https://example.gov/disclosure/1"
+      },
+      {
+        "representative": "Member One",
+        "party": "D",
+        "ticker": "REAL",
+        "transaction": "Buy",
+        "reportedRange": "$15,001 - $50,000",
+        "transactionDate": "2026-06-10",
+        "disclosureDate": "2026-06-20",
+        "fetchedAt": "2026-07-18T12:00:00.000Z",
+        "sourceUrl": "https://example.gov/disclosure/1"
+      },
+      {
+        "representative": "Member Two",
+        "party": "R",
+        "ticker": "REAL",
+        "transaction": "Sell",
+        "reportedRange": "Not reported",
+        "reportedDate": "2026-07-01",
+        "sourceUrl": "https://example.gov/disclosure/2"
+      }
+    ]
+  },
+  "policySignals": {
+    "updatedAt": "2026-07-18T13:00:00.000Z",
+    "signals": [
+      {
+        "ticker": "POLI",
+        "sourceName": "Federal policy source",
+        "sourceUrl": "https://example.gov/policy",
+        "direction": "positive",
+        "score": 100,
+        "matchedTerms": ["POLI", "grant"],
+        "foundAt": "2026-07-18T13:00:00.000Z"
+      },
+      {
+        "ticker": "POLI",
+        "sourceName": "Federal policy source",
+        "sourceUrl": "https://example.gov/policy",
+        "direction": "positive",
+        "score": 100,
+        "matchedTerms": ["grant", "POLI"],
+        "foundAt": "2026-07-18T13:00:00.000Z"
+      },
+      {
+        "ticker": "",
+        "sourceName": "Unassociated source",
+        "direction": "positive",
+        "foundAt": "2026-07-18T13:00:00.000Z"
+      }
+    ]
+  }
+}

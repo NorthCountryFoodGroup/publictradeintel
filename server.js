@@ -8,6 +8,7 @@ const {
   DISCOVERY_BUCKET_DEFINITIONS,
   DISCOVERY_ENGINE_VERSIONS,
 } = require("./discovery/constants");
+const { buildEvidenceRecords } = require("./discovery/evidence");
 
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PIN = process.env.ADMIN_PIN || "";
@@ -404,6 +405,46 @@ function sanitizeModelWeights(weights = {}) {
   next.lastChangedAt = String(next.lastChangedAt || "").slice(0, 40);
   next.changedBy = String(next.changedBy || "admin").slice(0, 80);
   return next;
+}
+
+function buildDiscoveryEvidenceDiagnostics({ config, policySignals, quotes, universe }) {
+  if (config.discoverySettings?.discoveryShadowComparisonEnabled === false) {
+    return {
+      schemaVersion: "v3-evidence-build-diagnostics-1",
+      status: "disabled",
+      recordCount: 0,
+      activeSelectorAffected: false,
+      limitations: [
+        "Evidence diagnostics are disabled. Legacy discovery remains authoritative.",
+      ],
+    };
+  }
+  try {
+    const built = buildEvidenceRecords(
+      {
+        config,
+        policySignals,
+        quotes,
+        universe,
+      },
+      {
+        now: Date.now(),
+        maximumEvidenceAgeMs: config.discoverySettings?.discoveryMaximumEvidenceAgeMs,
+      },
+    );
+    return built.diagnostics;
+  } catch (error) {
+    return {
+      schemaVersion: "v3-evidence-build-diagnostics-1",
+      status: "failed",
+      recordCount: 0,
+      error: publicErrorMessage(error, "Discovery evidence diagnostics failed."),
+      activeSelectorAffected: false,
+      limitations: [
+        "Evidence diagnostics failed in isolation. Legacy discovery remains authoritative.",
+      ],
+    };
+  }
 }
 
 function sanitizeConfig(config) {
@@ -4930,6 +4971,12 @@ async function refreshPredictions(options = {}) {
   const discoveryPipeline = buildDiscoveryPipeline(config, options.quotes || []);
   const scanUniverse = discoveryPipeline.deepAnalysisCandidates;
   const broadStats = broadUniverseStats(config, options.quotes || []);
+  const discoveryEvidenceDiagnostics = buildDiscoveryEvidenceDiagnostics({
+    config,
+    policySignals,
+    quotes: options.quotes || [],
+    universe: loadSymbolUniverse(),
+  });
   stageDurations.universeLoadDuration = Number(stageDurations.universeLoadDuration) || Math.max(0, broadScreenStartedAt - stageStartedAt);
   stageDurations.broadScreenDuration = elapsedMs(broadScreenStartedAt);
   const deepStartedAt = Date.now();
@@ -5058,6 +5105,7 @@ async function refreshPredictions(options = {}) {
     parallelStageTiming: { ...stageDurations },
     totalDuration: Number.isFinite(durationMs) ? durationMs : 0,
     broadScreen: broadStats,
+    discoveryEvidence: discoveryEvidenceDiagnostics,
     symbolUniverseMetadata: broadStats.symbolUniverseMetadata,
     sectorAllocation: sectorAllocationSummary(scanUniverse),
     stages: [

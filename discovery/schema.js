@@ -90,6 +90,11 @@ function normalizeProvenanceEntry(entry = {}, options = {}) {
     fields,
     fallback: entry.fallback === true,
     stale,
+    limitations: [...new Set(
+      (Array.isArray(entry.limitations) ? entry.limitations : [])
+        .map((limitation) => normalizeNullableString(limitation, 400))
+        .filter(Boolean),
+    )].sort(),
   };
 }
 
