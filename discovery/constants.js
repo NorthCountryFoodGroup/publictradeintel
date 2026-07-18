@@ -69,14 +69,14 @@ const DISCOVERY_EVIDENCE_FIELD_PATHS = Object.freeze([
 ]);
 
 const DISCOVERY_BUCKET_DEFINITIONS = Object.freeze({
-  momentum: Object.freeze({ label: "Momentum Leaders", minimumScore: 55, reservationTarget: 40 }),
-  relativeVolume: Object.freeze({ label: "High Relative Volume", minimumScore: 55, reservationTarget: 40 }),
-  breakout: Object.freeze({ label: "Breakout Candidates", minimumScore: 55, reservationTarget: 40 }),
-  earnings: Object.freeze({ label: "Earnings Catalysts", minimumScore: 55, reservationTarget: 30 }),
-  congressional: Object.freeze({ label: "Congressional Activity", minimumScore: 45, reservationTarget: 20 }),
-  policy: Object.freeze({ label: "Policy Catalysts", minimumScore: 45, reservationTarget: 20 }),
-  sectorLeaders: Object.freeze({ label: "Sector Leaders", minimumScore: 55, reservationTarget: 40 }),
-  reversal: Object.freeze({ label: "Reversal Candidates", minimumScore: 55, reservationTarget: 30 }),
+  momentum: Object.freeze({ label: "Momentum Leaders", minimumScore: 55, reservationTarget: 40, requiredEvidence: ["market.return5", "market.return20", "context.marketRelativeStrength"] }),
+  relativeVolume: Object.freeze({ label: "High Relative Volume", minimumScore: 55, reservationTarget: 40, requiredEvidence: ["market.volume", "market.averageVolume20", "market.relativeVolume"] }),
+  breakout: Object.freeze({ label: "Breakout Candidates", minimumScore: 55, reservationTarget: 40, requiredEvidence: ["market.price", "market.high20", "market.distanceFromHigh20Percent", "market.relativeVolume"] }),
+  earnings: Object.freeze({ label: "Earnings Catalysts", minimumScore: 55, reservationTarget: 30, requiredEvidence: ["catalysts.earnings.daysUntilEarnings", "catalysts.earnings.nextEarningsAt"] }),
+  congressional: Object.freeze({ label: "Congressional Activity", minimumScore: 45, reservationTarget: 20, requiredEvidence: ["catalysts.congressional.buyCount", "catalysts.congressional.memberCount", "catalysts.congressional.latestDisclosureAt"] }),
+  policy: Object.freeze({ label: "Policy Catalysts", minimumScore: 45, reservationTarget: 20, requiredEvidence: ["catalysts.policy.signalCount", "catalysts.policy.independentSourceCount", "catalysts.policy.strongestDirection"] }),
+  sectorLeaders: Object.freeze({ label: "Sector Leaders", minimumScore: 55, reservationTarget: 40, requiredEvidence: ["context.sectorReturn5", "context.sectorReturn20", "context.sectorRelativeStrength"] }),
+  reversal: Object.freeze({ label: "Reversal Candidates", minimumScore: 55, reservationTarget: 30, requiredEvidence: ["market.return5", "market.return20", "market.distanceFromLow20Percent", "market.movingAverage20"] }),
 });
 
 const DEFAULT_BUCKET_SETTINGS = Object.freeze(

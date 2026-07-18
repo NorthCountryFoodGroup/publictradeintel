@@ -1,0 +1,24 @@
+{
+  "evaluatedAt": "2026-07-18T16:00:00.000Z",
+  "sourceTimestamp": "2026-07-18T15:30:00.000Z",
+  "momentum": {
+    "return5": 0.06,
+    "return20": 0.12,
+    "marketRelativeStrength": 0.04
+  },
+  "congressional": {
+    "buyCount": 2,
+    "sellCount": 0,
+    "memberCount": 2,
+    "bipartisan": true,
+    "latestTransactionAt": "2026-06-10T00:00:00.000Z",
+    "latestDisclosureAt": "2026-06-20T00:00:00.000Z"
+  },
+  "policy": {
+    "signalCount": 2,
+    "positiveCount": 2,
+    "negativeCount": 0,
+    "independentSourceCount": 2,
+    "strongestDirection": "positive"
+  }
+}
