@@ -9,6 +9,7 @@
     "smoke:discovery:config": "node scripts/smoke-test-discovery-config.js",
     "smoke:discovery:prediction-boundary": "node scripts/smoke-test-prediction-engine-boundary.js",
     "smoke:discovery:persistence-contract": "node scripts/smoke-test-discovery-persistence-contract.js",
+    "smoke:discovery:schema": "node scripts/smoke-test-discovery-schema.js",
     "smoke:predictions": "node scripts/smoke-test-prediction-scan.js",
     "smoke:watchlists": "node scripts/smoke-test-watchlists.js",
     "smoke:alerts": "node scripts/smoke-test-alerts.js",
