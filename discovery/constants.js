@@ -98,6 +98,15 @@ const DISCOVERY_REGIME_NEUTRAL_BUCKET_EMPHASIS = Object.freeze(
   ),
 );
 
+const DISCOVERY_CANDIDATE_POOL_DEFAULTS = Object.freeze({
+  deepAnalysisLimit: 40,
+  maximumSectorConcentrationPercent: 20,
+  maximumBreadthContribution: 12,
+  perAdditionalBucketContribution: 3,
+  watchlistPriorityContribution: 2,
+  watchlistOverrideEnabled: true,
+});
+
 const DEFAULT_V3_DISCOVERY_SETTINGS = Object.freeze({
   discoveryEngineVersion: "legacy",
   discoveryShadowComparisonEnabled: true,
@@ -114,6 +123,7 @@ const DEFAULT_V3_DISCOVERY_SETTINGS = Object.freeze({
 module.exports = {
   DEFAULT_BUCKET_SETTINGS,
   DEFAULT_V3_DISCOVERY_SETTINGS,
+  DISCOVERY_CANDIDATE_POOL_DEFAULTS,
   DISCOVERY_BUCKET_DEFINITIONS,
   DISCOVERY_EVIDENCE_FIELD_PATHS,
   DISCOVERY_EVIDENCE_SCHEMA_VERSION,

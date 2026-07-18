@@ -1,0 +1,11 @@
+{
+  "evaluatedAt": "2026-07-18T16:00:00.000Z",
+  "settings": {
+    "deepAnalysisLimit": 4,
+    "maximumSectorConcentrationPercent": 50,
+    "maximumBreadthContribution": 6,
+    "perAdditionalBucketContribution": 3,
+    "watchlistPriorityContribution": 2,
+    "watchlistOverrideEnabled": true
+  }
+}

@@ -7,6 +7,7 @@
     "start": "node server.js",
     "smoke:discovery:api-contract": "node scripts/smoke-test-discovery-api-contract.js",
     "smoke:discovery:buckets": "node scripts/smoke-test-discovery-buckets.js",
+    "smoke:discovery:candidate-pool": "node scripts/smoke-test-discovery-candidate-pool.js",
     "smoke:discovery:config": "node scripts/smoke-test-discovery-config.js",
     "smoke:discovery:evidence": "node scripts/smoke-test-discovery-evidence.js",
     "smoke:discovery:prediction-boundary": "node scripts/smoke-test-prediction-engine-boundary.js",
