@@ -2,6 +2,12 @@ const http = require("http");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const {
+  DEFAULT_BUCKET_SETTINGS,
+  DEFAULT_V3_DISCOVERY_SETTINGS,
+  DISCOVERY_BUCKET_DEFINITIONS,
+  DISCOVERY_ENGINE_VERSIONS,
+} = require("./discovery/constants");
 
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PIN = process.env.ADMIN_PIN || "";
@@ -67,6 +73,7 @@ const DEFAULT_DISCOVERY_SETTINGS = {
   symbolUniverseRefreshHours: 24,
   includeAdrs: true,
   includeClosedEndFunds: false,
+  ...DEFAULT_V3_DISCOVERY_SETTINGS,
 };
 const DEFAULT_MODEL_WEIGHTS = {
   modelVersion: "v5-responsive-discovery",
@@ -315,6 +322,27 @@ function boundedNumber(value, fallback, min, max) {
   return Math.min(max, Math.max(min, number));
 }
 
+function normalizeDiscoveryEngineVersion(value) {
+  return DISCOVERY_ENGINE_VERSIONS.includes(value) ? value : "legacy";
+}
+
+function sanitizeBucketSettings(settings = {}) {
+  return Object.fromEntries(
+    Object.keys(DISCOVERY_BUCKET_DEFINITIONS).map((key) => {
+      const defaults = DEFAULT_BUCKET_SETTINGS[key];
+      const source = settings?.[key] || {};
+      return [
+        key,
+        {
+          enabled: source.enabled !== false,
+          minimumScore: boundedNumber(source.minimumScore, defaults.minimumScore, 0, 100),
+          reservationTarget: boundedNumber(source.reservationTarget, defaults.reservationTarget, 0, 1000),
+        },
+      ];
+    }),
+  );
+}
+
 function sanitizeDiscoverySettings(settings = {}) {
   const source = { ...DEFAULT_DISCOVERY_SETTINGS, ...(settings || {}) };
   const broadScreenTarget = boundedNumber(source.broadScreenTarget ?? source.targetSymbolCount, BROAD_SCREEN_TARGET, 25, 5000);
@@ -351,6 +379,16 @@ function sanitizeDiscoverySettings(settings = {}) {
     includeAdrs: source.includeAdrs !== false,
     includeClosedEndFunds: source.includeClosedEndFunds === true,
     lastChangedAt: String(source.lastChangedAt || "").slice(0, 40),
+    discoveryEngineVersion: normalizeDiscoveryEngineVersion(source.discoveryEngineVersion),
+    discoveryShadowComparisonEnabled: source.discoveryShadowComparisonEnabled !== false,
+    discoveryEvidenceVersion: String(source.discoveryEvidenceVersion || DEFAULT_V3_DISCOVERY_SETTINGS.discoveryEvidenceVersion).slice(0, 80),
+    discoveryMaximumEvidenceAgeMs: boundedNumber(source.discoveryMaximumEvidenceAgeMs, DEFAULT_V3_DISCOVERY_SETTINGS.discoveryMaximumEvidenceAgeMs, 60000, 30 * 24 * 60 * 60 * 1000),
+    minimumDiscoveryDataQuality: boundedNumber(source.minimumDiscoveryDataQuality, DEFAULT_V3_DISCOVERY_SETTINGS.minimumDiscoveryDataQuality, 0, 100),
+    minimumDiscoveryScore: boundedNumber(source.minimumDiscoveryScore, DEFAULT_V3_DISCOVERY_SETTINGS.minimumDiscoveryScore, 0, 100),
+    minimumDollarVolume: boundedNumber(source.minimumDollarVolume, DEFAULT_V3_DISCOVERY_SETTINGS.minimumDollarVolume, 0, 1000000000000),
+    maximumSectorConcentrationPercent: boundedNumber(source.maximumSectorConcentrationPercent, DEFAULT_V3_DISCOVERY_SETTINGS.maximumSectorConcentrationPercent, 0, 100),
+    watchlistOverrideEnabled: source.watchlistOverrideEnabled !== false,
+    bucketSettings: sanitizeBucketSettings(source.bucketSettings),
   };
 }
 
