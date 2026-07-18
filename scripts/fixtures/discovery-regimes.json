@@ -1,0 +1,21 @@
+{
+  "evaluatedAt": "2026-07-18T16:00:00.000Z",
+  "freshSourceTimestamp": "2026-07-18T15:55:00.000Z",
+  "staleSourceTimestamp": "2026-07-15T15:55:00.000Z",
+  "riskOn": {
+    "broadMarketReturn5": 0.025,
+    "broadMarketReturn20": 0.07,
+    "percentAboveMovingAverage20": 68,
+    "advancingPercent": 62,
+    "decliningPercent": 38,
+    "medianVolatility20": 0.015
+  },
+  "riskOff": {
+    "broadMarketReturn5": -0.03,
+    "broadMarketReturn20": -0.08,
+    "percentAboveMovingAverage20": 32,
+    "advancingPercent": 34,
+    "decliningPercent": 66,
+    "medianVolatility20": 0.04
+  }
+}

@@ -4,6 +4,8 @@ const DISCOVERY_ENGINE_VERSIONS = Object.freeze([
 ]);
 
 const DISCOVERY_EVIDENCE_SCHEMA_VERSION = "v3-evidence-1";
+const DISCOVERY_REGIME_SCHEMA_VERSION = "v3-regime-1";
+const DISCOVERY_REGIME_MAXIMUM_ADJUSTMENT = 0.15;
 
 const DISCOVERY_SUPPORTED_SECURITY_TYPES = Object.freeze([
   "Common Stock",
@@ -90,6 +92,12 @@ const DEFAULT_BUCKET_SETTINGS = Object.freeze(
   ),
 );
 
+const DISCOVERY_REGIME_NEUTRAL_BUCKET_EMPHASIS = Object.freeze(
+  Object.fromEntries(
+    Object.keys(DISCOVERY_BUCKET_DEFINITIONS).map((bucket) => [bucket, 1]),
+  ),
+);
+
 const DEFAULT_V3_DISCOVERY_SETTINGS = Object.freeze({
   discoveryEngineVersion: "legacy",
   discoveryShadowComparisonEnabled: true,
@@ -110,5 +118,8 @@ module.exports = {
   DISCOVERY_EVIDENCE_FIELD_PATHS,
   DISCOVERY_EVIDENCE_SCHEMA_VERSION,
   DISCOVERY_ENGINE_VERSIONS,
+  DISCOVERY_REGIME_MAXIMUM_ADJUSTMENT,
+  DISCOVERY_REGIME_NEUTRAL_BUCKET_EMPHASIS,
+  DISCOVERY_REGIME_SCHEMA_VERSION,
   DISCOVERY_SUPPORTED_SECURITY_TYPES,
 };
