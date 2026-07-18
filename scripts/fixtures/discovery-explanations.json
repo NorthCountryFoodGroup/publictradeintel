@@ -1,0 +1,7 @@
+{
+  "evaluatedAt": "2026-07-18T16:00:00.000Z",
+  "poolSettings": {
+    "deepAnalysisLimit": 2,
+    "maximumSectorConcentrationPercent": 50
+  }
+}

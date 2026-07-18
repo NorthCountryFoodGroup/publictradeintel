@@ -10,6 +10,7 @@
     "smoke:discovery:candidate-pool": "node scripts/smoke-test-discovery-candidate-pool.js",
     "smoke:discovery:config": "node scripts/smoke-test-discovery-config.js",
     "smoke:discovery:evidence": "node scripts/smoke-test-discovery-evidence.js",
+    "smoke:discovery:explanations": "node scripts/smoke-test-discovery-explanations.js",
     "smoke:discovery:prediction-boundary": "node scripts/smoke-test-prediction-engine-boundary.js",
     "smoke:discovery:persistence-contract": "node scripts/smoke-test-discovery-persistence-contract.js",
     "smoke:discovery:regime": "node scripts/smoke-test-discovery-regime.js",
