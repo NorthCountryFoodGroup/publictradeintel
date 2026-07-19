@@ -21,6 +21,7 @@ const contracts = [
   "smoke:scan-metadata-consistency",
   "smoke:scan-summary-display",
   "smoke:prediction-data-usability",
+  "smoke:packaged-symbol-first-run",
 ];
 
 function run(script, options = {}) {
