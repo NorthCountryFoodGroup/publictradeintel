@@ -17,6 +17,7 @@ const { buildDiscoveryExplanations } = require("./discovery/explanations");
 const { runShadowComparison } = require("./discovery/shadow-comparison");
 const { selectDiscoveryEngine } = require("./discovery/selector");
 const { evaluateReadiness } = require("./discovery/readiness-gate");
+const { resolveUniverseProvenance } = require("./discovery/provenance");
 const {
   readinessHistoryDiagnostics,
   recordReadinessObservation,
@@ -27,7 +28,10 @@ const ADMIN_PIN = process.env.ADMIN_PIN || "";
 const LOGIN_PIN = process.env.LOGIN_PIN || ADMIN_PIN;
 const PORTFOLIO_PIN = process.env.PORTFOLIO_PIN || ADMIN_PIN;
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, "data");
+const CONFIGURED_DATA_DIR = String(process.env.DATA_DIR || "").trim();
+const DATA_DIR = CONFIGURED_DATA_DIR
+  ? path.resolve(CONFIGURED_DATA_DIR)
+  : path.join(__dirname, "data");
 const DISCOVERY_READINESS_HISTORY_FILE = path.join(DATA_DIR, DISCOVERY_READINESS_HISTORY_FILENAME);
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");
@@ -138,8 +142,14 @@ function readJson(file, fallback) {
 }
 
 function writeJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+  } catch {
+    const error = new Error("Runtime data storage is unavailable.");
+    error.code = "RUNTIME_STORAGE_UNAVAILABLE";
+    throw error;
+  }
 }
 
 function ageMs(timestamp) {
@@ -627,12 +637,8 @@ function buildDiscoveryReadinessObservation({
     persistenceCompatible: null,
     predictionBoundaryCompatible: null,
     selectorAmbiguous: ["UNKNOWN_ENGINE", "MALFORMED_CONFIGURATION"].includes(selectorDiagnostics?.fallbackReason),
-    unresolvedCriticalDiagnostics: [{
-      reasonCode: "UNRESOLVED_DATA_PROVENANCE_FAILURE",
-      message: "Known pre-existing frontend label and data-provenance contract mismatch remains unresolved.",
-      preExisting: true,
-    }],
-    knownDataProvenanceBlocker: true,
+    unresolvedCriticalDiagnostics: [],
+    knownDataProvenanceBlocker: false,
   };
 }
 
@@ -1570,17 +1576,12 @@ function broadUniverseStats(config, quotes = []) {
   const symbolUniverse = loadSymbolUniverse();
   const withQuotes = pipeline.allTickers.filter((ticker) => quoteMap.has(ticker)).length;
   const metadata = symbolUniverse.symbolUniverseMetadata || {};
+  const universeProvenance = resolveUniverseProvenance(metadata);
   const emergencyPresetCount = universePresetTickers("combined").length;
   const emergencyPresetUsed = Boolean(metadata.emergencyFallbackActive || metadata.refreshStatus === "emergency-preset-fallback") && pipeline.allTickers.length <= emergencyPresetCount;
   const packagedSnapshotUsed = !emergencyPresetUsed && (metadata.refreshStatus === "packaged-snapshot" || /Cached Public Snapshot|Cached public listing snapshot/i.test(metadata.source || ""));
   const liveListingRefreshUsed = !emergencyPresetUsed && metadata.refreshStatus === "live";
-  const activeUniverseSource = liveListingRefreshUsed
-    ? "Live Listing Source"
-    : packagedSnapshotUsed || pipeline.allTickers.length > emergencyPresetCount
-      ? "Cached Public Snapshot"
-      : emergencyPresetUsed
-        ? "Emergency Preset Fallback"
-        : "Failed";
+  const activeUniverseSource = universeProvenance.label;
   return {
     mode: pipeline.mode,
     targetSymbolCount: pipeline.discovery.broadScreenTarget,
@@ -1609,6 +1610,7 @@ function broadUniverseStats(config, quotes = []) {
     emergencyPresetCount,
     emergencyFallbackActive: emergencyPresetUsed,
     fallbackReason: metadata.initializationDiagnostics?.fallbackReason || metadata.lastRefreshError || null,
+    universeProvenance,
     marketSession: pipeline.marketSession,
     deepAnalysisTarget: pipeline.deepLimit,
   };
@@ -1760,6 +1762,74 @@ function validateScanMetadata(scanHealth) {
     failures: failedChecks,
     errors: failedChecks.map((check) => `${check.name}: expected ${check.expected}; actual ${check.actual}; source ${check.sourceField}`),
     checkedAt: isoNow(),
+  };
+}
+
+function boundedReadinessAdminPayload(saved = {}) {
+  const scanHealth = saved?.scanHealth || {};
+  const selector = scanHealth.discoverySelector || {};
+  const readiness = scanHealth.discoveryReadiness || {};
+  const history = scanHealth.discoveryReadinessHistory || {};
+  const criteria = Array.isArray(readiness.criteria) ? readiness.criteria : [];
+  const criterion = (id) => {
+    const item = criteria.find((entry) => entry?.criterionId === id);
+    return item ? {
+      status: ["PASS", "FAIL", "UNKNOWN"].includes(item.status) ? item.status : "UNKNOWN",
+      observedValue: item.observedValue ?? null,
+      threshold: String(item.threshold ?? "").slice(0, 120) || null,
+    } : { status: "UNKNOWN", observedValue: null, threshold: null };
+  };
+  return {
+    scanId: String(scanHealth.scanId || "").slice(0, 120) || null,
+    scanCompletedAt: scanHealth.scanCompletedAt || null,
+    engine: {
+      active: selector.activeEngine || "legacy",
+      requested: selector.requestedEngine || "legacy",
+      resolved: selector.resolvedEngine || selector.activeEngine || "legacy",
+    },
+    readiness: {
+      status: readiness.status || "ERROR",
+      recommendation: readiness.recommendation || "KEEP_LEGACY_DEFAULT",
+      observationCount: Number(readiness.observationCount) || 0,
+      minimumObservationCount: Number(readiness.minimumObservationCount) || 20,
+      evidenceCoverage: readiness.evidenceCoverage || null,
+      explanationCoverage: readiness.explanationHealth || null,
+      runtimeCompliance: readiness.runtimeHealth || null,
+      compatibility: {
+        api: criterion("api-compatibility"),
+        persistence: criterion("persistence-compatibility"),
+        predictionBoundary: criterion("prediction-boundary"),
+      },
+      fallbackReliability: readiness.fallbackHealth || null,
+      availableBucketCount: Number(readiness.bucketCoverage?.availableBucketCount) || 0,
+      blockingReasons: (Array.isArray(readiness.blockingReasons) ? readiness.blockingReasons : [])
+        .slice(0, 30)
+        .map((item) => ({
+          reasonCode: String(item?.reasonCode || "UNKNOWN").slice(0, 100),
+          message: String(item?.message || "Readiness requirement not met.").slice(0, 240),
+          preExisting: item?.preExisting === true,
+        })),
+      knownProvenanceBlocker: (Array.isArray(readiness.blockingReasons) ? readiness.blockingReasons : [])
+        .some((item) => item?.reasonCode === "UNRESOLVED_DATA_PROVENANCE_FAILURE"),
+    },
+    history: {
+      historyVersion: history.historyVersion || null,
+      retainedObservationCount: Number(history.retainedObservationCount) || 0,
+      maximumObservationCount: Number(history.maximumObservationCount) || 100,
+      oldestObservationAt: history.oldestObservationAt || null,
+      newestObservationAt: history.newestObservationAt || null,
+      storageAvailable: history.storageAvailable === true,
+      observationRecorded: history.observationRecorded === true,
+      malformedSourceDetected: history.malformedSourceDetected === true,
+      malformedSourceQuarantined: history.malformedSourceQuarantined === true,
+      warnings: (Array.isArray(history.warnings) ? history.warnings : [])
+        .map((item) => String(item).slice(0, 240))
+        .slice(0, 10),
+    },
+    limitations: [
+      "READY means eligible for human promotion review; it never activates v3 automatically.",
+      "The complete readiness observation history is not exposed through this endpoint.",
+    ],
   };
 }
 
@@ -5331,6 +5401,7 @@ async function refreshPredictions(options = {}) {
     underlyingMarketDataAgeMs: representativeUnderlyingQuoteAt ? ageMs(representativeUnderlyingQuoteAt) : null,
     universeSource: broadStats.activeUniverseSource || "Unknown",
     universeSourceStatus: broadStats.universeSourceStatus || broadStats.activeUniverseSource || "Unknown",
+    universeProvenance: broadStats.universeProvenance || null,
     universeRawCount: broadStats.universeRawCount,
     universeEligibleCount: broadStats.universeEligibleCount,
     packagedSnapshotUsed: Boolean(broadStats.packagedSnapshotUsed),
@@ -5972,6 +6043,11 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "GET" && pathname === "/api/admin/summary") {
     sendJson(response, 200, summarizeEvents());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/discovery-readiness") {
+    sendJson(response, 200, boundedReadinessAdminPayload(readJson(PREDICTIONS_FILE, {})));
     return;
   }
 

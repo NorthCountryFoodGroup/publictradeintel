@@ -29,9 +29,15 @@ Congressional and policy buckets can qualify candidates when real saved evidence
 - Limited real-evidence and bucket coverage
 - Limited candidate-pool viability
 - Production determinism history unavailable
-- Known data-provenance frontend-label/test mismatch
+- Production compatibility observations remain unknown until measured in completed production scans
 
-The known `smoke:data-provenance` assertion expects `Cached public listing snapshot` while the frontend uses a different label. It is pre-existing, remains unresolved, and blocks promotion under `UNRESOLVED_DATA_PROVENANCE_FAILURE`. Phase 1 records but does not fix it.
+Symbol-universe provenance now uses the completed scan's source metadata. Cached, saved,
+live, mixed, emergency, and unknown states remain distinct; missing metadata never implies a
+live or cached source.
+
+The former `UNRESOLVED_DATA_PROVENANCE_FAILURE` blocker is no longer emitted after the
+truthful resolver and frontend/API consistency contract pass. Future provenance failures must
+fail their contract or appear as a new bounded diagnostic rather than being silently ignored.
 
 ## Intentionally deferred to Phase 2
 

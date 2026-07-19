@@ -81,6 +81,7 @@ const predictionSections = extractFunction(server, "predictionSections");
   ["GET", "/api/admin/config"],
   ["PUT", "/api/admin/config"],
   ["GET", "/api/admin/summary"],
+  ["GET", "/api/admin/discovery-readiness"],
   ["GET", "/api/admin/symbol-universe-diagnostic"],
   ["GET", "/api/admin/market-index-diagnostic"],
   ["GET", "/api/admin/congress-connection-diagnostic"],

@@ -15,6 +15,7 @@ const contracts = [
   "smoke:discovery:selector",
   "smoke:discovery:readiness-gate",
   "smoke:discovery:readiness-history",
+  "smoke:discovery:readiness-admin",
   "smoke:discovery:phase1-docs",
   "smoke:broad",
   "smoke:scan-metadata-consistency",
@@ -44,18 +45,9 @@ for (const contract of contracts) {
   }
 }
 
-const provenance = run("smoke:data-provenance", { capture: true });
-const provenanceOutput = `${provenance.stdout || ""}\n${provenance.stderr || ""}`;
-const knownFailure =
-  provenance.status === 1 &&
-  /AssertionError \[ERR_ASSERTION\]: symbol source should be visible/.test(provenanceOutput) &&
-  /expected: \/Cached public listing snapshot\//.test(provenanceOutput) &&
-  /scripts[\\/]smoke-test-data-provenance\.js:11:8/.test(provenanceOutput);
-
-if (!knownFailure) {
-  console.error("Phase 1 validation failed: smoke:data-provenance no longer matches the acknowledged blocker.");
-  process.exit(1);
+const provenance = run("smoke:data-provenance");
+if (provenance.status !== 0) {
+  console.error("Phase 1 validation failed: smoke:data-provenance");
+  process.exit(provenance.status || 1);
 }
-
-console.warn("KNOWN BLOCKER: smoke:data-provenance retains the acknowledged frontend-label mismatch.");
 console.log(`Phase 1 validation passed ${contracts.length} contracts; legacy remains the default and no runtime data was written.`);

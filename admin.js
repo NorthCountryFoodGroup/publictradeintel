@@ -22,6 +22,7 @@ const goalsEditor = document.querySelector("#goalsEditor");
 const stocksEditor = document.querySelector("#stocksEditor");
 const congressEditor = document.querySelector("#congressEditor");
 const predictionHealthPanel = document.querySelector("#predictionHealthPanel");
+const discoveryReadinessContent = document.querySelector("#discoveryReadinessContent");
 const symbolUniversePanel = document.querySelector("#symbolUniversePanel");
 const congressStatusPanel = document.querySelector("#congressStatusPanel");
 const marketIndexPanel = document.querySelector("#marketIndexPanel");
@@ -441,27 +442,76 @@ function renderMarketIndexDiagnostics(data) {
   `;
 }
 
+function readinessMetric(label, value, note = "") {
+  return `<div class="mini-stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? "Unknown")}</strong><small>${escapeHtml(note)}</small></div>`;
+}
+
+function renderDiscoveryReadiness(data) {
+  if (!discoveryReadinessContent) return;
+  const readiness = data?.readiness || {};
+  const history = data?.history || {};
+  const engine = data?.engine || {};
+  const compatibility = readiness.compatibility || {};
+  const blockers = readiness.blockingReasons || [];
+  const warnings = history.warnings || [];
+  const observations = Number(readiness.observationCount) || 0;
+  const required = Number(readiness.minimumObservationCount) || 20;
+  const status = ["READY", "NOT_READY", "ERROR", "INSUFFICIENT_OBSERVATIONS"].includes(readiness.status)
+    ? readiness.status
+    : "ERROR";
+  const formatTime = (value) => value ? new Date(value).toLocaleString() : "None";
+  discoveryReadinessContent.innerHTML = `
+    <div class="metric-grid">
+      ${readinessMetric("Status", status, readiness.recommendation || "KEEP_LEGACY_DEFAULT")}
+      ${readinessMetric("Observation progress", `${observations} of ${required}`, "Valid completed production scans.")}
+      ${readinessMetric("Engine", engine.active || "legacy", `Requested ${engine.requested || "legacy"}; resolved ${engine.resolved || "legacy"}`)}
+      ${readinessMetric("History retained", `${Number(history.retainedObservationCount) || 0} / ${Number(history.maximumObservationCount) || 100}`, history.storageAvailable ? "Storage available" : "Storage unavailable")}
+      ${readinessMetric("Evidence coverage", `${Number(readiness.evidenceCoverage?.coveragePercent) || 0}%`, `${Number(readiness.evidenceCoverage?.sufficientEvidence) || 0} sufficiently evidenced`)}
+      ${readinessMetric("Explanation coverage", `${Number(readiness.explanationCoverage?.completenessRate) || 0}%`, `${Number(readiness.explanationCoverage?.errorCount) || 0} errors`)}
+      ${readinessMetric("Runtime compliance", `${Number(readiness.runtimeCompliance?.complianceRate) || 0}%`, `${Number(readiness.runtimeCompliance?.overLimitCount) || 0} over limit`)}
+      ${readinessMetric("Fallback reliability", `${Number(readiness.fallbackReliability?.reliabilityRate) || 0}%`, `${Number(readiness.fallbackReliability?.requiredCount) || 0} required`)}
+      ${readinessMetric("Available buckets", String(Number(readiness.availableBucketCount) || 0), "Structurally available evidence buckets.")}
+      ${readinessMetric("Compatibility", `API ${compatibility.api?.status || "UNKNOWN"}`, `Persistence ${compatibility.persistence?.status || "UNKNOWN"}; prediction boundary ${compatibility.predictionBoundary?.status || "UNKNOWN"}`)}
+      ${readinessMetric("Oldest observation", formatTime(history.oldestObservationAt), `Newest: ${formatTime(history.newestObservationAt)}`)}
+      ${readinessMetric("Last observation", history.observationRecorded ? "Recorded" : "Not recorded", readiness.knownProvenanceBlocker ? "Known provenance blocker active" : "No known provenance blocker")}
+    </div>
+    <label class="wide-field">
+      <span>Blocking reasons</span>
+      <textarea rows="6" readonly>${escapeHtml(blockers.map((item) => `${item.reasonCode}: ${item.message}`).join("\n") || "None")}</textarea>
+    </label>
+    <label class="wide-field">
+      <span>History warnings</span>
+      <textarea rows="4" readonly>${escapeHtml(warnings.join("\n") || "None")}</textarea>
+    </label>
+    <p class="muted-copy">READY means eligible for human promotion review. It does not activate v3 automatically.</p>
+  `;
+}
+
 async function loadAdminStatusPanels() {
   try {
-    const [symbolResponse, congressResponse, congressDiagnosticResponse, marketResponse] = await Promise.all([
+    const [symbolResponse, congressResponse, congressDiagnosticResponse, marketResponse, readinessResponse] = await Promise.all([
       fetch("/api/admin/symbol-universe-diagnostic", { headers: adminHeaders() }),
       fetch("/api/congress-feed-status"),
       fetch("/api/admin/congress-connection-diagnostic", { headers: adminHeaders() }),
       fetch("/api/admin/market-index-diagnostic", { headers: adminHeaders() }),
+      fetch("/api/admin/discovery-readiness", { headers: adminHeaders() }),
     ]);
     state.symbolUniverse = symbolResponse.ok ? await symbolResponse.json() : null;
     state.congressFeedStatus = congressResponse.ok ? await congressResponse.json() : null;
     state.congressDiagnostic = congressDiagnosticResponse.ok ? await congressDiagnosticResponse.json() : null;
     state.marketIndexData = marketResponse.ok ? await marketResponse.json() : null;
+    state.discoveryReadiness = readinessResponse.ok ? await readinessResponse.json() : null;
   } catch (error) {
     state.symbolUniverse = null;
     state.congressFeedStatus = { status: "Failed", userMessage: error.message };
     state.congressDiagnostic = { failureReason: error.message };
     state.marketIndexData = { broadMarketTrend: "Unavailable", rows: [] };
+    state.discoveryReadiness = null;
   }
   renderSymbolUniverse(state.symbolUniverse);
   renderCongressStatus(state.congressFeedStatus);
   renderMarketIndexDiagnostics(state.marketIndexData);
+  renderDiscoveryReadiness(state.discoveryReadiness);
   renderScanSettingsStatus();
 }
 
@@ -1148,6 +1198,8 @@ document.querySelector("#refreshPredictions")?.addEventListener("click", async (
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Prediction scan failed.");
     renderPredictionHealth(result.predictionEngineHealth, result.scanHealth);
+    const readinessResponse = await fetch("/api/admin/discovery-readiness", { headers: adminHeaders() });
+    renderDiscoveryReadiness(readinessResponse.ok ? await readinessResponse.json() : null);
     predictionHealthMessage.textContent = `Scan complete. ${result.predictions?.length || 0} predictions generated.`;
   } catch (error) {
     predictionHealthMessage.textContent = error.message;

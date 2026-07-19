@@ -32,8 +32,17 @@ On non-Windows systems:
 npm run validate:discovery:phase1
 ```
 
-The validator does not write runtime data. It treats the exact known `smoke:data-provenance` mismatch as an acknowledged readiness blocker and fails if that signature changes.
+The validator does not write runtime data. Symbol-universe provenance is resolved from the
+completed scan's actual source metadata and fails closed to `Unknown` when that metadata is
+insufficient.
 
 Completed production scans contribute one validated, bounded readiness observation to
 `DATA_DIR/discoveryReadinessHistory.json`. The rolling file retains at most 100 observations,
 uses safe replacement, and is diagnostic only: it never changes the configured engine.
+
+Local development defaults `DATA_DIR` to `<repository>/data`. Production may override that
+root with the `DATA_DIR` environment variable; surrounding whitespace is ignored, blank values
+use the local default, and relative values resolve deterministically from the process working
+directory. Production deployments should use an absolute path. Render production uses
+`/var/data`, and only runtime files beneath that mounted path persist across deployments and
+application restarts.
