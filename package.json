@@ -14,6 +14,7 @@
     "smoke:discovery:prediction-boundary": "node scripts/smoke-test-prediction-engine-boundary.js",
     "smoke:discovery:persistence-contract": "node scripts/smoke-test-discovery-persistence-contract.js",
     "smoke:discovery:regime": "node scripts/smoke-test-discovery-regime.js",
+    "smoke:discovery:readiness-gate": "node scripts/smoke-test-discovery-readiness-gate.js",
     "smoke:discovery:schema": "node scripts/smoke-test-discovery-schema.js",
     "smoke:discovery:shadow-comparison": "node scripts/smoke-test-discovery-shadow-comparison.js",
     "smoke:discovery:selector": "node scripts/smoke-test-discovery-selector.js",

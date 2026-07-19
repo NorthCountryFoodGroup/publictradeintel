@@ -15,6 +15,7 @@ const { buildCandidatePool } = require("./discovery/candidate-pool");
 const { buildDiscoveryExplanations } = require("./discovery/explanations");
 const { runShadowComparison } = require("./discovery/shadow-comparison");
 const { selectDiscoveryEngine } = require("./discovery/selector");
+const { evaluateReadiness } = require("./discovery/readiness-gate");
 
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PIN = process.env.ADMIN_PIN || "";
@@ -529,6 +530,78 @@ function buildDiscoveryShadowDiagnostics({ config, policySignals, quotes, univer
       generatedAt,
     }),
   );
+}
+
+function buildDiscoveryReadinessDiagnostics({ config, evidenceDiagnostics, shadowDiagnostics, selectorDiagnostics, evaluatedAt }) {
+  try {
+    const recordCount = Number(evidenceDiagnostics?.recordCount) || 0;
+    const unavailableCounts = shadowDiagnostics?.v3Summary?.unavailableBucketCounts || {};
+    const bucketAvailability = Object.fromEntries(Object.keys(DISCOVERY_BUCKET_DEFINITIONS).map((bucketId) => [
+      bucketId,
+      recordCount > 0 && Number(unavailableCounts[bucketId]) < recordCount,
+    ]));
+    const explicitV3Requested = selectorDiagnostics?.requestedEngine === "v3-evidence-buckets";
+    const selectorAttempted = selectorDiagnostics?.v3ExecutionAttempted === true;
+    const shadowExpected = config.discoverySettings?.discoveryShadowComparisonEnabled === true;
+    const shadowAvailable = shadowExpected &&
+      shadowDiagnostics?.shadowEnabled === true &&
+      !shadowDiagnostics?.errorState;
+    const v3ExecutionAttempted = selectorAttempted || shadowExpected;
+    const v3ExecutionSucceeded = selectorAttempted
+      ? selectorDiagnostics?.v3ExecutionSucceeded === true
+      : shadowAvailable;
+    const qualifiedCount = Number(shadowDiagnostics?.v3Summary?.qualifiedCandidateCount) || 0;
+    const explanationCount = Number(shadowDiagnostics?.explanationCoverage?.explanationCount) || 0;
+    const explanationErrors = Number(shadowDiagnostics?.explanationCoverage?.errorCount) || 0;
+    return evaluateReadiness({
+      evaluatedAt,
+      observationSource: "current-scan-only; no persisted readiness history",
+      observations: [{
+        observedAt: evaluatedAt,
+        v3ExecutionAttempted,
+        v3ExecutionSucceeded,
+        explicitV3Requested,
+        selectorActivatedV3: selectorDiagnostics?.activeEngine === "v3-evidence-buckets",
+        fallbackRequired: explicitV3Requested && selectorDiagnostics?.fallbackApplied === true,
+        fallbackSucceeded: explicitV3Requested &&
+          selectorDiagnostics?.fallbackApplied === true &&
+          selectorDiagnostics?.activeEngine === "legacy",
+        hybridPoolUsed: false,
+        scanInterrupted: false,
+        fatalErrorCount: (shadowDiagnostics?.errorState ? 1 : 0) + explanationErrors,
+        durationMs: selectorAttempted ? selectorDiagnostics?.durationMs : null,
+        runtimeLimitMs: config.discoverySettings?.discoverySelectorMaximumDurationMs,
+        eligibleEvaluatedCount: Number(evidenceDiagnostics?.productionEligibleCount) || 0,
+        sufficientEvidenceCount: Number(evidenceDiagnostics?.productionUsableCount) || 0,
+        bucketAvailability,
+        deepAnalysisCandidateCount: Number(shadowDiagnostics?.v3Summary?.deepAnalysisCandidateCount) || 0,
+        minimumViableCandidateCount: config.discoverySettings?.discoveryMinimumViableCandidateCount,
+        ineligibleSelectedCount: 0,
+        unqualifiedSelectedCount: 0,
+        explanationRequiredCount: qualifiedCount,
+        explanationCompleteCount: Math.min(qualifiedCount, explanationCount),
+        explanationErrorCount: explanationErrors,
+        deterministicPassed: false,
+        duplicateTickerCount: 0,
+        shadowExpected,
+        shadowAvailable,
+        apiCompatible: true,
+        persistenceCompatible: true,
+        predictionBoundaryCompatible: true,
+        selectorAmbiguous: ["UNKNOWN_ENGINE", "MALFORMED_CONFIGURATION"].includes(selectorDiagnostics?.fallbackReason),
+        unresolvedCriticalDiagnostics: [{
+          reasonCode: "UNRESOLVED_DATA_PROVENANCE_FAILURE",
+          message: "Known pre-existing frontend label and data-provenance contract mismatch remains unresolved.",
+          preExisting: true,
+        }],
+      }],
+    });
+  } catch (error) {
+    return evaluateReadiness({
+      evaluatedAt,
+      observations: "readiness-calculation-failed",
+    });
+  }
 }
 
 function sanitizeConfig(config) {
@@ -5105,6 +5178,13 @@ async function refreshPredictions(options = {}) {
     generatedAt: new Date().toISOString(),
     prebuiltV3Output: selectedV3Output,
   });
+  const discoveryReadinessDiagnostics = buildDiscoveryReadinessDiagnostics({
+    config,
+    evidenceDiagnostics: discoveryEvidenceDiagnostics,
+    shadowDiagnostics: discoveryShadowDiagnostics,
+    selectorDiagnostics: discoverySelectorDiagnostics,
+    evaluatedAt: new Date().toISOString(),
+  });
   stageDurations.deepAnalysisDuration = elapsedMs(deepStartedAt);
   const rankingStartedAt = Date.now();
   const updatedAt = new Date().toISOString();
@@ -5228,6 +5308,7 @@ async function refreshPredictions(options = {}) {
     discoveryEvidence: discoveryEvidenceDiagnostics,
     discoveryShadowComparison: discoveryShadowDiagnostics,
     discoverySelector: discoverySelectorDiagnostics,
+    discoveryReadiness: discoveryReadinessDiagnostics,
     symbolUniverseMetadata: broadStats.symbolUniverseMetadata,
     sectorAllocation: sectorAllocationSummary(selectedScanUniverse),
     stages: [

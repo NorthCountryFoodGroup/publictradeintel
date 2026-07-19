@@ -9,6 +9,25 @@ const DISCOVERY_SHADOW_COMPARISON_VERSION = "v3-shadow-comparison-1";
 const DISCOVERY_SHADOW_DIAGNOSTIC_MAX_ITEMS = 200;
 const DISCOVERY_SELECTOR_VERSION = "v3-selector-1";
 const DISCOVERY_SELECTOR_DIAGNOSTIC_MAX_ITEMS = 200;
+const DISCOVERY_READINESS_VERSION = "v3-readiness-1";
+const DISCOVERY_READINESS_MINIMUM_OBSERVATIONS = 20;
+const DISCOVERY_READINESS_MAXIMUM_OBSERVATIONS = 100;
+
+const DISCOVERY_READINESS_THRESHOLDS = Object.freeze({
+  executionSuccessRate: 99,
+  selectorActivationSuccessRate: 99,
+  fallbackReliabilityRate: 100,
+  maximumFatalErrorRate: 0,
+  runtimeComplianceRate: 99,
+  minimumEvidenceCoveragePercent: 70,
+  minimumAvailableBucketCount: 6,
+  candidatePoolViabilityRate: 99,
+  productionEligibilityViolationCount: 0,
+  explanationCompletenessRate: 100,
+  deterministicStabilityRate: 100,
+  duplicateTickerCount: 0,
+  shadowAvailabilityRate: 100,
+});
 
 const DISCOVERY_SELECTOR_FALLBACK_REASONS = Object.freeze([
   "DEFAULTED_TO_LEGACY",
@@ -188,5 +207,9 @@ module.exports = {
   DISCOVERY_SELECTOR_DIAGNOSTIC_MAX_ITEMS,
   DISCOVERY_SELECTOR_FALLBACK_REASONS,
   DISCOVERY_SELECTOR_VERSION,
+  DISCOVERY_READINESS_MAXIMUM_OBSERVATIONS,
+  DISCOVERY_READINESS_MINIMUM_OBSERVATIONS,
+  DISCOVERY_READINESS_THRESHOLDS,
+  DISCOVERY_READINESS_VERSION,
   DISCOVERY_SUPPORTED_SECURITY_TYPES,
 };
