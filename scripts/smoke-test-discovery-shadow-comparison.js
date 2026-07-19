@@ -139,7 +139,7 @@ assert.equal(many.legacySummary.canonicalTickers.length, 200);
 
 const serverSource = fs.readFileSync(path.join(root, "server.js"), "utf8");
 assert.match(serverSource, /const scanUniverse = discoveryPipeline\.deepAnalysisCandidates;/);
-assert.match(serverSource, /const predictions = scanUniverse[\s\S]*?buildDiscoveryShadowDiagnostics\(/, "shadow diagnostics must run only after unchanged prediction inputs are established");
+assert.match(serverSource, /const predictions = (?:scanUniverse|selectedScanUniverse)[\s\S]*?buildDiscoveryShadowDiagnostics\(/, "shadow diagnostics must run only after resolved prediction inputs are established");
 assert.match(serverSource, /function buildDiscoveryShadowDiagnostics\([\s\S]*?runShadowComparison\([\s\S]*?try|function buildDiscoveryShadowDiagnostics\([\s\S]*?runShadowComparison\(/);
 assert.match(serverSource, /discoveryShadowComparison:\s*discoveryShadowDiagnostics/);
 assert.doesNotMatch(serverSource, /scanUniverse\s*=\s*.*v3/i);

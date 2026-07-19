@@ -14,6 +14,7 @@ const { evaluateAllBuckets } = require("./discovery/buckets");
 const { buildCandidatePool } = require("./discovery/candidate-pool");
 const { buildDiscoveryExplanations } = require("./discovery/explanations");
 const { runShadowComparison } = require("./discovery/shadow-comparison");
+const { selectDiscoveryEngine } = require("./discovery/selector");
 
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PIN = process.env.ADMIN_PIN || "";
@@ -396,6 +397,9 @@ function sanitizeDiscoverySettings(settings = {}) {
     minimumDollarVolume: boundedNumber(source.minimumDollarVolume, DEFAULT_V3_DISCOVERY_SETTINGS.minimumDollarVolume, 0, 1000000000000),
     maximumSectorConcentrationPercent: boundedNumber(source.maximumSectorConcentrationPercent, DEFAULT_V3_DISCOVERY_SETTINGS.maximumSectorConcentrationPercent, 0, 100),
     watchlistOverrideEnabled: source.watchlistOverrideEnabled !== false,
+    discoveryMinimumViableCandidateCount: boundedNumber(source.discoveryMinimumViableCandidateCount, DEFAULT_V3_DISCOVERY_SETTINGS.discoveryMinimumViableCandidateCount, 1, 1000),
+    discoveryMaximumCandidateCount: boundedNumber(source.discoveryMaximumCandidateCount, DEFAULT_V3_DISCOVERY_SETTINGS.discoveryMaximumCandidateCount, 1, 2000),
+    discoverySelectorMaximumDurationMs: boundedNumber(source.discoverySelectorMaximumDurationMs, DEFAULT_V3_DISCOVERY_SETTINGS.discoverySelectorMaximumDurationMs, 1, 120000),
     bucketSettings: sanitizeBucketSettings(source.bucketSettings),
   };
 }
@@ -454,7 +458,61 @@ function buildDiscoveryEvidenceDiagnostics({ config, policySignals, quotes, univ
   }
 }
 
-function buildDiscoveryShadowDiagnostics({ config, policySignals, quotes, universe, legacyCandidates, generatedAt }) {
+function buildV3DiscoveryPipelineOutput({ config, policySignals, quotes, universe, candidateInputUniverse, generatedAt }) {
+  const evidence = buildEvidenceRecords(
+    { config, policySignals, quotes, universe },
+    {
+      now: Date.parse(generatedAt) || Date.now(),
+      maximumEvidenceAgeMs: config.discoverySettings?.discoveryMaximumEvidenceAgeMs,
+    },
+  );
+  const regime = buildMarketRegime({}, {
+    evaluatedAt: generatedAt,
+    maximumEvidenceAgeMs: config.discoverySettings?.discoveryMaximumEvidenceAgeMs,
+  });
+  const watchlist = new Set((config.stockIdeas || []).map((stock) => String(stock.ticker || "").toUpperCase()));
+  const bucketResults = [...evidence.records.entries()].map(([ticker, record]) => ({
+    ticker,
+    results: evaluateAllBuckets(record, regime, { evaluatedAt: generatedAt }),
+  }));
+  const candidatePool = buildCandidatePool({
+    evaluatedAt: generatedAt,
+    entries: bucketResults.map(({ ticker, results }) => ({
+      evidenceRecord: evidence.records.get(ticker),
+      bucketResults: results,
+      watchlist: watchlist.has(ticker),
+    })),
+    settings: {
+      maximumSectorConcentrationPercent: config.discoverySettings?.maximumSectorConcentrationPercent,
+      watchlistOverrideEnabled: config.discoverySettings?.watchlistOverrideEnabled,
+    },
+  }, { evaluatedAt: generatedAt });
+  const explanations = buildDiscoveryExplanations(candidatePool.qualifiedCandidates.map((candidate) => ({
+    evidenceRecord: evidence.records.get(candidate.canonicalTicker),
+    candidate,
+    bucketResults: bucketResults.find((entry) => entry.ticker === candidate.canonicalTicker)?.results || [],
+    poolResult: candidatePool,
+    regime,
+    evaluatedAt: generatedAt,
+  })));
+  const candidateInputsByTicker = new Map((candidateInputUniverse || []).map((candidate) => [
+    String(candidate.ticker || "").toUpperCase(),
+    candidate,
+  ]));
+  const candidateInputs = candidatePool.deepAnalysisCandidates
+    .map((candidate) => candidateInputsByTicker.get(candidate.canonicalTicker))
+    .filter(Boolean);
+  return {
+    candidatePool,
+    candidateInputs,
+    explanations,
+    bucketResults,
+    evidenceDiagnostics: evidence.diagnostics,
+    fatalErrors: explanations.filter((explanation) => explanation.status === "error"),
+  };
+}
+
+function buildDiscoveryShadowDiagnostics({ config, policySignals, quotes, universe, legacyCandidates, candidateInputUniverse, generatedAt, prebuiltV3Output = null }) {
   return runShadowComparison(
     {
       generatedAt,
@@ -462,50 +520,14 @@ function buildDiscoveryShadowDiagnostics({ config, policySignals, quotes, univer
       legacyCandidates,
       watchlistTickers: (config.stockIdeas || []).map((stock) => stock.ticker),
     },
-    () => {
-      const evidence = buildEvidenceRecords(
-        { config, policySignals, quotes, universe },
-        {
-          now: Date.parse(generatedAt) || Date.now(),
-          maximumEvidenceAgeMs: config.discoverySettings?.discoveryMaximumEvidenceAgeMs,
-        },
-      );
-      const regime = buildMarketRegime({}, {
-        evaluatedAt: generatedAt,
-        maximumEvidenceAgeMs: config.discoverySettings?.discoveryMaximumEvidenceAgeMs,
-      });
-      const watchlist = new Set((config.stockIdeas || []).map((stock) => String(stock.ticker || "").toUpperCase()));
-      const bucketResults = [...evidence.records.entries()].map(([ticker, record]) => ({
-        ticker,
-        results: evaluateAllBuckets(record, regime, { evaluatedAt: generatedAt }),
-      }));
-      const candidatePool = buildCandidatePool({
-        evaluatedAt: generatedAt,
-        entries: bucketResults.map(({ ticker, results }) => ({
-          evidenceRecord: evidence.records.get(ticker),
-          bucketResults: results,
-          watchlist: watchlist.has(ticker),
-        })),
-        settings: {
-          maximumSectorConcentrationPercent: config.discoverySettings?.maximumSectorConcentrationPercent,
-          watchlistOverrideEnabled: config.discoverySettings?.watchlistOverrideEnabled,
-        },
-      }, { evaluatedAt: generatedAt });
-      const explanations = buildDiscoveryExplanations(candidatePool.qualifiedCandidates.map((candidate) => ({
-        evidenceRecord: evidence.records.get(candidate.canonicalTicker),
-        candidate,
-        bucketResults: bucketResults.find((entry) => entry.ticker === candidate.canonicalTicker)?.results || [],
-        poolResult: candidatePool,
-        regime,
-        evaluatedAt: generatedAt,
-      })));
-      return {
-        candidatePool,
-        explanations,
-        bucketResults,
-        evidenceDiagnostics: evidence.diagnostics,
-      };
-    },
+    () => prebuiltV3Output || buildV3DiscoveryPipelineOutput({
+      config,
+      policySignals,
+      quotes,
+      universe,
+      candidateInputUniverse,
+      generatedAt,
+    }),
   );
 }
 
@@ -5023,7 +5045,8 @@ function samplePredictionConfig() {
 }
 
 async function refreshPredictions(options = {}) {
-  const config = sanitizeConfig(options.config || readJson(CONFIG_FILE, {}));
+  const rawConfig = options.config || readJson(CONFIG_FILE, {});
+  const config = sanitizeConfig(rawConfig);
   const policySignals = options.policySignals || readJson(POLICY_FILE, { updatedAt: null, signals: [], errors: [] });
   const warnings = Array.isArray(options.warnings) ? [...options.warnings] : [];
   const scanStartedAt = options.scanStartedAt || new Date().toISOString();
@@ -5039,12 +5062,37 @@ async function refreshPredictions(options = {}) {
     quotes: options.quotes || [],
     universe: loadSymbolUniverse(),
   });
+  const selectorSelectedAt = new Date().toISOString();
+  let selectedV3Output = null;
+  const discoverySelection = selectDiscoveryEngine({
+    requestedEngine: rawConfig?.discoverySettings?.discoveryEngineVersion,
+    legacyCandidates: scanUniverse,
+    shadowEnabled: config.discoverySettings?.discoveryShadowComparisonEnabled,
+    minimumViableCandidateCount: config.discoverySettings?.discoveryMinimumViableCandidateCount,
+    maximumCandidateCount: config.discoverySettings?.discoveryMaximumCandidateCount,
+    maximumDurationMs: config.discoverySettings?.discoverySelectorMaximumDurationMs,
+    selectedAt: selectorSelectedAt,
+  }, () => {
+    selectedV3Output = buildV3DiscoveryPipelineOutput({
+      config,
+      policySignals,
+      quotes: options.quotes || [],
+      universe: loadSymbolUniverse(),
+      candidateInputUniverse: discoveryPipeline.eligibleCandidates,
+      generatedAt: selectorSelectedAt,
+    });
+    return selectedV3Output;
+  });
+  const {
+    selectedCandidates: selectedScanUniverse,
+    ...discoverySelectorDiagnostics
+  } = discoverySelection;
   stageDurations.universeLoadDuration = Number(stageDurations.universeLoadDuration) || Math.max(0, broadScreenStartedAt - stageStartedAt);
   stageDurations.broadScreenDuration = elapsedMs(broadScreenStartedAt);
   const deepStartedAt = Date.now();
   const previous = readJson(PREDICTIONS_FILE, { predictions: [] });
   const previousByTicker = new Map((previous.predictions || []).map((item) => [item.ticker, item]));
-  const predictions = scanUniverse
+  const predictions = selectedScanUniverse
     .map((stock) => buildPrediction(stock, config, policySignals, previousByTicker))
     .sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
   const discoveryShadowDiagnostics = buildDiscoveryShadowDiagnostics({
@@ -5053,7 +5101,9 @@ async function refreshPredictions(options = {}) {
     quotes: options.quotes || [],
     universe: loadSymbolUniverse(),
     legacyCandidates: scanUniverse,
+    candidateInputUniverse: discoveryPipeline.eligibleCandidates,
     generatedAt: new Date().toISOString(),
+    prebuiltV3Output: selectedV3Output,
   });
   stageDurations.deepAnalysisDuration = elapsedMs(deepStartedAt);
   const rankingStartedAt = Date.now();
@@ -5063,7 +5113,7 @@ async function refreshPredictions(options = {}) {
     predictions,
     providerDiagnostics: options.providerDiagnostics,
     marketSession: broadStats.marketSession,
-    requestedCount: Number(options.marketRequestsUsed) || scanUniverse.length,
+    requestedCount: Number(options.marketRequestsUsed) || selectedScanUniverse.length,
   });
   const quoteDiagnostic = quoteCoverageDiagnostic(options.providerDiagnostics, predictions);
   const predictionEngineHealth = buildPredictionEngineHealth({ predictions, sections, warnings, updatedAt, marketDataAnalysis });
@@ -5103,9 +5153,9 @@ async function refreshPredictions(options = {}) {
     deepAnalysisAfterHoursTarget: broadStats.deepAnalysisAfterHoursTarget,
     activeDeepAnalysisTarget: discoveryPipeline.deepLimit,
     deepAnalysisTarget: broadStats.deepAnalysisTarget,
-    deepAnalysisCandidatesSelected: scanUniverse.length,
+    deepAnalysisCandidatesSelected: selectedScanUniverse.length,
     symbolsAvailable: broadStats.totalSymbolsAvailable,
-    deepCandidatesSelected: scanUniverse.length,
+    deepCandidatesSelected: selectedScanUniverse.length,
     marketStatus: broadStats.marketSession?.status || null,
     marketSession: broadStats.marketSession || null,
     scanMode: broadStats.marketSession?.scanMode || null,
@@ -5159,7 +5209,7 @@ async function refreshPredictions(options = {}) {
     providerCapacity: {
       providerName: MARKET_API_KEY ? "Yahoo + Alpha Vantage secondary + cached fallback" : "Yahoo + cached fallback",
       estimatedRequestLimit: MARKET_API_KEY ? "Yahoo public endpoint plus Alpha Vantage plan limits" : "No authenticated secondary provider limit configured",
-      requestsUsedLatestScan: Number(options.marketRequestsUsed) || scanUniverse.length,
+      requestsUsedLatestScan: Number(options.marketRequestsUsed) || selectedScanUniverse.length,
       configuredRequestBudget: broadStats.providerRequestBudget,
       configuredConcurrencyLimit: broadStats.providerConcurrencyLimit,
       configuredMaxScanDurationMs: broadStats.maxScanDurationMs,
@@ -5177,14 +5227,15 @@ async function refreshPredictions(options = {}) {
     broadScreen: broadStats,
     discoveryEvidence: discoveryEvidenceDiagnostics,
     discoveryShadowComparison: discoveryShadowDiagnostics,
+    discoverySelector: discoverySelectorDiagnostics,
     symbolUniverseMetadata: broadStats.symbolUniverseMetadata,
-    sectorAllocation: sectorAllocationSummary(scanUniverse),
+    sectorAllocation: sectorAllocationSummary(selectedScanUniverse),
     stages: [
       { name: "Preparing scan", completed: true, completedCount: 1, totalCount: 1 },
       { name: "Broad screening", completed: true, completedCount: broadStats.broadScreenedSymbols, totalCount: broadStats.targetSymbolCount },
-      { name: "Selecting deep-analysis candidates", completed: true, completedCount: scanUniverse.length, totalCount: discoveryPipeline.deepLimit },
-      { name: "Refreshing market and news data", completed: true, completedCount: scanUniverse.length, totalCount: scanUniverse.length },
-      { name: "Analyzing candidates", completed: true, completedCount: predictions.length, totalCount: scanUniverse.length },
+      { name: "Selecting deep-analysis candidates", completed: true, completedCount: selectedScanUniverse.length, totalCount: discoveryPipeline.deepLimit },
+      { name: "Refreshing market and news data", completed: true, completedCount: selectedScanUniverse.length, totalCount: selectedScanUniverse.length },
+      { name: "Analyzing candidates", completed: true, completedCount: predictions.length, totalCount: selectedScanUniverse.length },
       { name: "Building timeframe rankings", completed: true, completedCount: 4, totalCount: 4 },
       { name: "Validating prediction results", completed: true, completedCount: 1, totalCount: 1 },
       { name: "Saving predictions", completed: true, completedCount: 1, totalCount: 1 },
@@ -5226,7 +5277,7 @@ async function refreshPredictions(options = {}) {
     scanUniverse: {
       mode: config.scanSettings?.universe || "combined",
       customTickerCount: parseTickerList(config.scanSettings?.customTickers).length,
-      candidateCount: scanUniverse.length,
+      candidateCount: selectedScanUniverse.length,
       totalSymbolsAvailable: broadStats.totalSymbolsAvailable,
       targetSymbolCount: broadStats.targetSymbolCount,
       broadScreenTarget: broadStats.broadScreenTarget,
@@ -5234,8 +5285,8 @@ async function refreshPredictions(options = {}) {
       symbolsScreened: broadStats.broadScreenedSymbols,
       broadScreenedSymbols: broadStats.broadScreenedSymbols,
       deepAnalysisTarget: broadStats.deepAnalysisTarget,
-      deepCandidatesSelected: scanUniverse.length,
-      deepAnalysisCandidatesSelected: scanUniverse.length,
+      deepCandidatesSelected: selectedScanUniverse.length,
+      deepAnalysisCandidatesSelected: selectedScanUniverse.length,
       universeSource: broadStats.activeUniverseSource || "Unknown",
       universeSourceStatus: broadStats.universeSourceStatus || broadStats.activeUniverseSource || "Unknown",
       packagedSnapshotUsed: Boolean(broadStats.packagedSnapshotUsed),
