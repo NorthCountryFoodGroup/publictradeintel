@@ -349,12 +349,12 @@ function renderSymbolUniverse(universe) {
         <input readonly value="${Number(universe?.rawRecordCount || diagnostics.rawRecordCount || 0)} / ${Number(universe?.validRecordCount || diagnostics.validRecordCount || eligibleCount)} / ${Number(universe?.rejectedRecordCount || diagnostics.rejectedRecordCount || 0)}" />
       </label>
       <label class="wide-field">
-        <span>Snapshot path</span>
-        <input readonly value="${escapeHtml(universe?.resolvedSnapshotPath || diagnostics.resolvedSnapshotPath || "Not reported")}" />
+        <span>Snapshot source attempted</span>
+        <input readonly value="${escapeHtml(diagnostics.sourceAttempted || "Not reported")}" />
       </label>
       <label class="wide-field">
         <span>Last universe error</span>
-        <input readonly value="${escapeHtml(universe?.fallbackReason || diagnostics.fallbackReason || universe?.lastRefreshError || metadata.lastRefreshError || "No universe error reported.")}" />
+        <input readonly value="${escapeHtml(universe?.fallbackReason || diagnostics.fallbackReason || universe?.lastRefreshErrorCategory || metadata.lastRefreshErrorCategory || "No universe error reported.")}" />
       </label>
       <label class="wide-field">
         <span>Rejected record summary</span>

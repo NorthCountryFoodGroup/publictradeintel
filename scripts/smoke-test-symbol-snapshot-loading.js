@@ -9,10 +9,12 @@ const snapshot = JSON.parse(fs.readFileSync(snapshotPath, "utf8"));
 const symbols = Array.isArray(snapshot.symbols) ? snapshot.symbols : [];
 
 assert.ok(symbols.length >= 2500, "packaged public symbol snapshot should include at least 2,500 rows");
-assert.match(server, /PUBLIC_SYMBOL_SNAPSHOT_FILE\s*=\s*path\.join\(DATA_DIR,\s*"publicSymbolSnapshot\.json"\)/, "snapshot path must resolve from DATA_DIR");
+assert.match(server, /PUBLIC_SYMBOL_SNAPSHOT_FILE\s*=\s*path\.join\(DATA_DIR,\s*"publicSymbolSnapshot\.json"\)/, "saved snapshot path must resolve from DATA_DIR");
+assert.match(server, /PACKAGED_PUBLIC_SYMBOL_SNAPSHOT_FILE\s*=\s*path\.join\(ROOT,\s*"data",\s*"publicSymbolSnapshot\.json"\)/, "packaged snapshot must remain available from the repository");
 assert.match(server, /function normalizedSnapshotRow/, "server should normalize snapshot records");
 assert.match(server, /function snapshotInitializationBase/, "server should record initialization diagnostics");
 assert.match(server, /function packagedSymbolUniverse/, "server should load the packaged snapshot");
+assert.match(server, /function persistedSnapshotUniverse/, "server should load a saved snapshot before packaged fallback");
 assert.match(server, /row\?\.canonicalTicker/, "loader should accept canonicalTicker");
 assert.match(server, /row\?\.displayTicker/, "loader should accept displayTicker");
 assert.match(server, /row\?\.providerTicker/, "loader should accept providerTicker");

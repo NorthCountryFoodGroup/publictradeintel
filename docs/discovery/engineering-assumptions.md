@@ -35,6 +35,20 @@ Symbol-universe provenance now uses the completed scan's source metadata. Cached
 live, mixed, emergency, and unknown states remain distinct; missing metadata never implies a
 live or cached source.
 
+Symbol-universe resolution keeps immutable and mutable sources separate. The checked-in
+public snapshot is read from the application package, while `symbolUniverse.json` and the
+saved `publicSymbolSnapshot.json` are rooted beneath `DATA_DIR`. Normal scans resolve a valid
+saved universe, then a valid saved public snapshot, then the checked-in public snapshot, and
+only then use the emergency preset. Explicit live refreshes attempt both Nasdaq Trader listing
+files with bounded timeouts and response-format validation, then persist a validated result to
+both mutable files. Snapshots older than 45 days or missing truthful source/timestamp metadata
+are not treated as valid broad-market evidence.
+
+An emergency-preset scan remains a structurally valid readiness observation because the scan
+completed and exercised fallback behavior. Its limited universe and evidence coverage continue
+to reduce the applicable readiness-quality metrics; it is not rewritten, deleted, or converted
+into a passing broad-market observation.
+
 The former `UNRESOLVED_DATA_PROVENANCE_FAILURE` blocker is no longer emitted after the
 truthful resolver and frontend/API consistency contract pass. Future provenance failures must
 fail their contract or appear as a new bounded diagnostic rather than being silently ignored.

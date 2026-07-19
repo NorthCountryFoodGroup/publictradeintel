@@ -41,6 +41,7 @@
     "smoke:congress-connection": "node scripts/smoke-test-congress-connection.js",
     "smoke:render-persistence": "node scripts/smoke-test-render-persistence.js",
     "smoke:symbol-snapshot-loading": "node scripts/smoke-test-symbol-snapshot-loading.js",
+    "smoke:symbol-source-resolution": "node scripts/smoke-test-symbol-universe-source-resolution.js",
     "smoke:production-universe-count": "node scripts/smoke-test-production-universe-count.js",
     "smoke:market-closed-mode": "node scripts/smoke-test-market-closed-mode.js",
     "smoke:universe-reload": "node scripts/smoke-test-universe-reload.js",

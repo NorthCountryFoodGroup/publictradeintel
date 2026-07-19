@@ -9,8 +9,8 @@ function boundedProvenanceText(value, fallback = null) {
 function sourceKind(value) {
   const text = String(value || "").toLowerCase();
   if (/emergency|preset fallback|generated fixture/.test(text)) return "emergency";
+  if (/saved[- ]snapshot|saved listing|stale|saved|cache/.test(text)) return "saved";
   if (/packaged|cached public|snapshot/.test(text)) return "cached";
-  if (/stale|saved|cache/.test(text)) return "saved";
   if (/live|nasdaq trader|exchange listing/.test(text)) return "live";
   return "unknown";
 }
@@ -32,6 +32,7 @@ function resolveUniverseProvenance(metadata = {}) {
   let kind = emergency ? "emergency" : sourceKind(status);
   if (kind === "unknown") kind = sourceKind(primarySource);
   if (metadata.packagedSnapshot === true || status === "packaged-snapshot") kind = "cached";
+  if (metadata.savedSnapshot === true || status === "saved-snapshot") kind = "saved";
   if (status === "stale" && kind === "live") kind = "saved";
 
   let label = "Unknown";
