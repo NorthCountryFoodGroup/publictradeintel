@@ -1,0 +1,24 @@
+{
+  "historyVersion": "v3-readiness-history-1",
+  "observations": [
+    {
+      "source": "production-scan",
+      "completedScan": true,
+      "observedAt": "2026-07-18T16:00:00.000Z",
+      "scanIdentifier": "scan-valid-fixture",
+      "v3ExecutionAttempted": true
+    },
+    {
+      "source": "smoke-fixture",
+      "completedScan": true,
+      "observedAt": "2026-07-18T16:01:00.000Z",
+      "scanIdentifier": "scan-ineligible-fixture"
+    },
+    {
+      "source": "production-scan",
+      "completedScan": false,
+      "observedAt": "not-a-timestamp",
+      "scanIdentifier": "scan-malformed"
+    }
+  ]
+}

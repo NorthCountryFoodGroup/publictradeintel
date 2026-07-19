@@ -53,6 +53,19 @@ Inspect:
 
 `READY` means eligible for review, not authorized for activation.
 
+Readiness summaries are stored in `DATA_DIR/discoveryReadinessHistory.json`. The file retains
+the newest 100 valid completed-scan observations in oldest-to-newest order and is replaced
+atomically. Missing or malformed storage starts safely from an empty history. Read or write
+failures appear only under `scanHealth.discoveryReadinessHistory`; they do not change
+selection, prediction generation, or prediction persistence. Normal APIs expose status and
+counts, never the observations.
+
+Malformed source files are quarantined before replacement, with at most three quarantine
+siblings retained. If quarantine fails, the source is preserved and no new history is written.
+The process-local mutation queue protects overlapping scans within one application process.
+It does not coordinate multiple independent application instances writing the same disk; the
+supported deployment assumption is one application instance and one persistent-disk writer.
+
 ## Diagnostic failure
 
 Structured diagnostic failures must not interrupt scans. If a diagnostic is absent or malformed, keep legacy, record the issue, and rerun validation. Never copy raw provider payloads, secrets, tokens, stack traces, or unbounded evidence into incident notes.

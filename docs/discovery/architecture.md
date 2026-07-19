@@ -14,6 +14,7 @@ Architecture version: `v3-phase1-architecture-1`
 | Explanation engine | Produces stable reasons, evidence, provenance, missing-data, regime, and selection explanations. | Diagnostics and auditability. |
 | Shadow comparison | Compares legacy and v3 candidates without changing production selection. | Diagnostics only. |
 | Versioned selector | Resolves exact engine configuration and applies every v3 readiness safeguard. | Production-critical boundary; defaults and fails back to legacy. |
+| Readiness history | Retains bounded summaries from completed production scans for the existing promotion gate. | Diagnostic-only JSON under `DATA_DIR`; maximum 100 observations; process-local mutation queue. |
 | Readiness gate | Measures whether v3 is suitable for future promotion. | Diagnostics only; never changes configuration. |
 | Prediction engine | Runs unchanged `buildPrediction()` scoring, ranking, API shaping, and persistence. | Production-critical and unchanged by Phase 1. |
 
@@ -26,7 +27,9 @@ Trusted source inputs
   -> Eight independent bucket evaluations
   -> Diversified candidate pool
   -> Structured explanations
-  -> Shadow comparison and readiness diagnostics
+  -> Shadow comparison
+  -> Completed prediction generation
+  -> Atomic readiness-observation retention and readiness diagnostics
 
 Legacy discovery ---------------------> Versioned selector
 V3 candidate pool --------------------> Versioned selector
@@ -45,4 +48,4 @@ The selector is the only boundary allowed to change discovery inputs. It never c
 - `buildPrediction()` receives one resolved candidate pool once per scan.
 - API required fields and prediction persistence remain governed by compatibility contracts.
 
-Shadow comparison, explanations, evidence coverage, and readiness are bounded additive diagnostics. Their failure cannot interrupt the legacy scan.
+Shadow comparison, explanations, evidence coverage, readiness history, and readiness are bounded additive diagnostics. Their failure cannot interrupt the legacy scan.

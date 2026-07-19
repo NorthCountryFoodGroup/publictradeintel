@@ -14,6 +14,7 @@ const contracts = [
   "smoke:discovery:shadow-comparison",
   "smoke:discovery:selector",
   "smoke:discovery:readiness-gate",
+  "smoke:discovery:readiness-history",
   "smoke:discovery:phase1-docs",
   "smoke:broad",
   "smoke:scan-metadata-consistency",

@@ -7,6 +7,7 @@ const {
   DEFAULT_V3_DISCOVERY_SETTINGS,
   DISCOVERY_BUCKET_DEFINITIONS,
   DISCOVERY_ENGINE_VERSIONS,
+  DISCOVERY_READINESS_HISTORY_FILENAME,
 } = require("./discovery/constants");
 const { buildEvidenceRecords } = require("./discovery/evidence");
 const { buildMarketRegime } = require("./discovery/regime");
@@ -16,6 +17,10 @@ const { buildDiscoveryExplanations } = require("./discovery/explanations");
 const { runShadowComparison } = require("./discovery/shadow-comparison");
 const { selectDiscoveryEngine } = require("./discovery/selector");
 const { evaluateReadiness } = require("./discovery/readiness-gate");
+const {
+  readinessHistoryDiagnostics,
+  recordReadinessObservation,
+} = require("./discovery/readiness-history");
 
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PIN = process.env.ADMIN_PIN || "";
@@ -23,6 +28,7 @@ const LOGIN_PIN = process.env.LOGIN_PIN || ADMIN_PIN;
 const PORTFOLIO_PIN = process.env.PORTFOLIO_PIN || ADMIN_PIN;
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
+const DISCOVERY_READINESS_HISTORY_FILE = path.join(DATA_DIR, DISCOVERY_READINESS_HISTORY_FILENAME);
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");
 const POLICY_FILE = path.join(DATA_DIR, "policySignals.json");
@@ -532,75 +538,149 @@ function buildDiscoveryShadowDiagnostics({ config, policySignals, quotes, univer
   );
 }
 
-function buildDiscoveryReadinessDiagnostics({ config, evidenceDiagnostics, shadowDiagnostics, selectorDiagnostics, evaluatedAt }) {
+function buildDiscoveryReadinessObservation({
+  config,
+  evidenceDiagnostics,
+  shadowDiagnostics,
+  selectorDiagnostics,
+  evaluatedAt,
+  scanIdentifier,
+}) {
+  const diagnosticNumber = (value) =>
+    value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
+  const recordCount = diagnosticNumber(evidenceDiagnostics?.recordCount);
+  const v3SummaryAvailable = Boolean(shadowDiagnostics?.v3Summary);
+  const unavailableCounts = shadowDiagnostics?.v3Summary?.unavailableBucketCounts || {};
+  const bucketAvailability = Object.fromEntries(Object.keys(DISCOVERY_BUCKET_DEFINITIONS).map((bucketId) => [
+    bucketId,
+    v3SummaryAvailable && recordCount > 0 && diagnosticNumber(unavailableCounts[bucketId]) !== null
+      ? Number(unavailableCounts[bucketId]) < recordCount
+      : null,
+  ]));
+  const explicitV3Requested = selectorDiagnostics?.requestedEngine === "v3-evidence-buckets";
+  const selectorAttempted = selectorDiagnostics?.v3ExecutionAttempted === true;
+  const shadowExpected = config.discoverySettings?.discoveryShadowComparisonEnabled === true;
+  const shadowAvailable = shadowExpected &&
+    shadowDiagnostics?.shadowEnabled === true &&
+    !shadowDiagnostics?.errorState;
+  const v3ExecutionAttempted = selectorAttempted || shadowExpected;
+  const v3ExecutionSucceeded = selectorAttempted
+    ? selectorDiagnostics?.v3ExecutionSucceeded === true
+    : shadowExpected
+      ? shadowAvailable
+      : null;
+  const qualifiedCount = diagnosticNumber(shadowDiagnostics?.v3Summary?.qualifiedCandidateCount);
+  const explanationCount = diagnosticNumber(shadowDiagnostics?.explanationCoverage?.explanationCount);
+  const explanationErrors = diagnosticNumber(shadowDiagnostics?.explanationCoverage?.errorCount);
+  const deepAnalysisCandidateCount = diagnosticNumber(shadowDiagnostics?.v3Summary?.deepAnalysisCandidateCount);
+  const minimumViableCandidateCount = config.discoverySettings?.discoveryMinimumViableCandidateCount;
+  return {
+    source: "production-scan",
+    completedScan: true,
+    observedAt: evaluatedAt,
+    scanIdentifier,
+    activeEngine: selectorDiagnostics?.activeEngine,
+    requestedEngine: selectorDiagnostics?.requestedEngine,
+    resolvedEngine: selectorDiagnostics?.resolvedEngine,
+    shadowEnabled: shadowExpected,
+    v3ExecutionAttempted,
+    v3ExecutionSucceeded,
+    explicitV3Requested,
+    selectorActivatedV3: selectorDiagnostics?.activeEngine === "v3-evidence-buckets",
+    fallbackApplied: selectorDiagnostics?.fallbackApplied,
+    fallbackReason: selectorDiagnostics?.fallbackReason,
+    fallbackRequired: explicitV3Requested && selectorDiagnostics?.fallbackApplied === true,
+    fallbackSucceeded: explicitV3Requested && selectorDiagnostics?.fallbackApplied === true
+      ? selectorDiagnostics?.activeEngine === "legacy"
+      : null,
+    hybridPoolUsed: false,
+    scanInterrupted: false,
+    fatalErrorCount: explanationErrors === null
+      ? shadowDiagnostics?.errorState
+        ? 1
+        : null
+      : (shadowDiagnostics?.errorState ? 1 : 0) + explanationErrors,
+    durationMs: selectorAttempted ? selectorDiagnostics?.durationMs : null,
+    runtimeLimitMs: config.discoverySettings?.discoverySelectorMaximumDurationMs,
+    eligibleEvaluatedCount: diagnosticNumber(evidenceDiagnostics?.productionEligibleCount),
+    sufficientEvidenceCount: diagnosticNumber(evidenceDiagnostics?.productionUsableCount),
+    bucketAvailability,
+    availableBucketCount: Object.values(bucketAvailability).some((available) => available !== null)
+      ? Object.values(bucketAvailability).filter((available) => available === true).length
+      : null,
+    qualifiedCandidateCount: qualifiedCount,
+    deepAnalysisCandidateCount,
+    minimumViableCandidateCount,
+    selectedCandidateCount: deepAnalysisCandidateCount,
+    ineligibleSelectedCount: null,
+    unqualifiedSelectedCount: null,
+    explanationRequiredCount: qualifiedCount,
+    explanationCompleteCount: qualifiedCount === null || explanationCount === null
+      ? null
+      : Math.min(qualifiedCount, explanationCount),
+    explanationErrorCount: explanationErrors,
+    deterministicPassed: null,
+    duplicateTickerCount: null,
+    shadowExpected,
+    shadowAvailable,
+    apiCompatible: null,
+    persistenceCompatible: null,
+    predictionBoundaryCompatible: null,
+    selectorAmbiguous: ["UNKNOWN_ENGINE", "MALFORMED_CONFIGURATION"].includes(selectorDiagnostics?.fallbackReason),
+    unresolvedCriticalDiagnostics: [{
+      reasonCode: "UNRESOLVED_DATA_PROVENANCE_FAILURE",
+      message: "Known pre-existing frontend label and data-provenance contract mismatch remains unresolved.",
+      preExisting: true,
+    }],
+    knownDataProvenanceBlocker: true,
+  };
+}
+
+async function buildDiscoveryReadinessDiagnostics({
+  config,
+  evidenceDiagnostics,
+  shadowDiagnostics,
+  selectorDiagnostics,
+  evaluatedAt,
+  scanIdentifier,
+  historyFile = DISCOVERY_READINESS_HISTORY_FILE,
+}) {
   try {
-    const recordCount = Number(evidenceDiagnostics?.recordCount) || 0;
-    const unavailableCounts = shadowDiagnostics?.v3Summary?.unavailableBucketCounts || {};
-    const bucketAvailability = Object.fromEntries(Object.keys(DISCOVERY_BUCKET_DEFINITIONS).map((bucketId) => [
-      bucketId,
-      recordCount > 0 && Number(unavailableCounts[bucketId]) < recordCount,
-    ]));
-    const explicitV3Requested = selectorDiagnostics?.requestedEngine === "v3-evidence-buckets";
-    const selectorAttempted = selectorDiagnostics?.v3ExecutionAttempted === true;
-    const shadowExpected = config.discoverySettings?.discoveryShadowComparisonEnabled === true;
-    const shadowAvailable = shadowExpected &&
-      shadowDiagnostics?.shadowEnabled === true &&
-      !shadowDiagnostics?.errorState;
-    const v3ExecutionAttempted = selectorAttempted || shadowExpected;
-    const v3ExecutionSucceeded = selectorAttempted
-      ? selectorDiagnostics?.v3ExecutionSucceeded === true
-      : shadowAvailable;
-    const qualifiedCount = Number(shadowDiagnostics?.v3Summary?.qualifiedCandidateCount) || 0;
-    const explanationCount = Number(shadowDiagnostics?.explanationCoverage?.explanationCount) || 0;
-    const explanationErrors = Number(shadowDiagnostics?.explanationCoverage?.errorCount) || 0;
-    return evaluateReadiness({
-      evaluatedAt,
-      observationSource: "current-scan-only; no persisted readiness history",
-      observations: [{
-        observedAt: evaluatedAt,
-        v3ExecutionAttempted,
-        v3ExecutionSucceeded,
-        explicitV3Requested,
-        selectorActivatedV3: selectorDiagnostics?.activeEngine === "v3-evidence-buckets",
-        fallbackRequired: explicitV3Requested && selectorDiagnostics?.fallbackApplied === true,
-        fallbackSucceeded: explicitV3Requested &&
-          selectorDiagnostics?.fallbackApplied === true &&
-          selectorDiagnostics?.activeEngine === "legacy",
-        hybridPoolUsed: false,
-        scanInterrupted: false,
-        fatalErrorCount: (shadowDiagnostics?.errorState ? 1 : 0) + explanationErrors,
-        durationMs: selectorAttempted ? selectorDiagnostics?.durationMs : null,
-        runtimeLimitMs: config.discoverySettings?.discoverySelectorMaximumDurationMs,
-        eligibleEvaluatedCount: Number(evidenceDiagnostics?.productionEligibleCount) || 0,
-        sufficientEvidenceCount: Number(evidenceDiagnostics?.productionUsableCount) || 0,
-        bucketAvailability,
-        deepAnalysisCandidateCount: Number(shadowDiagnostics?.v3Summary?.deepAnalysisCandidateCount) || 0,
-        minimumViableCandidateCount: config.discoverySettings?.discoveryMinimumViableCandidateCount,
-        ineligibleSelectedCount: 0,
-        unqualifiedSelectedCount: 0,
-        explanationRequiredCount: qualifiedCount,
-        explanationCompleteCount: Math.min(qualifiedCount, explanationCount),
-        explanationErrorCount: explanationErrors,
-        deterministicPassed: false,
-        duplicateTickerCount: 0,
-        shadowExpected,
-        shadowAvailable,
-        apiCompatible: true,
-        persistenceCompatible: true,
-        predictionBoundaryCompatible: true,
-        selectorAmbiguous: ["UNKNOWN_ENGINE", "MALFORMED_CONFIGURATION"].includes(selectorDiagnostics?.fallbackReason),
-        unresolvedCriticalDiagnostics: [{
-          reasonCode: "UNRESOLVED_DATA_PROVENANCE_FAILURE",
-          message: "Known pre-existing frontend label and data-provenance contract mismatch remains unresolved.",
-          preExisting: true,
-        }],
-      }],
+    const recorded = await recordReadinessObservation({
+      file: historyFile,
+      observation: buildDiscoveryReadinessObservation({
+        config,
+        evidenceDiagnostics,
+        shadowDiagnostics,
+        selectorDiagnostics,
+        evaluatedAt,
+        scanIdentifier,
+      }),
     });
+    return {
+      readiness: evaluateReadiness({
+        evaluatedAt,
+        observationSource: "bounded production-scan readiness history",
+        observations: recorded.history.observations,
+      }),
+      history: readinessHistoryDiagnostics(recorded.history, recorded.status),
+    };
   } catch (error) {
-    return evaluateReadiness({
-      evaluatedAt,
-      observations: "readiness-calculation-failed",
-    });
+    return {
+      readiness: evaluateReadiness({
+        evaluatedAt,
+        observations: "readiness-calculation-failed",
+      }),
+      history: readinessHistoryDiagnostics(
+        { observations: [] },
+        {
+          storageAvailable: false,
+          observationRecorded: false,
+          readError: "Readiness history integration failed safely.",
+          writeError: null,
+        },
+      ),
+    };
   }
 }
 
@@ -5178,13 +5258,6 @@ async function refreshPredictions(options = {}) {
     generatedAt: new Date().toISOString(),
     prebuiltV3Output: selectedV3Output,
   });
-  const discoveryReadinessDiagnostics = buildDiscoveryReadinessDiagnostics({
-    config,
-    evidenceDiagnostics: discoveryEvidenceDiagnostics,
-    shadowDiagnostics: discoveryShadowDiagnostics,
-    selectorDiagnostics: discoverySelectorDiagnostics,
-    evaluatedAt: new Date().toISOString(),
-  });
   stageDurations.deepAnalysisDuration = elapsedMs(deepStartedAt);
   const rankingStartedAt = Date.now();
   const updatedAt = new Date().toISOString();
@@ -5200,6 +5273,17 @@ async function refreshPredictions(options = {}) {
   stageDurations.rankingDuration = elapsedMs(rankingStartedAt);
   const durationMs = Date.parse(updatedAt) - Date.parse(scanStartedAt);
   const scanId = `scan-${Date.parse(updatedAt) || Date.now()}`;
+  const {
+    readiness: discoveryReadinessDiagnostics,
+    history: discoveryReadinessHistoryDiagnostics,
+  } = await buildDiscoveryReadinessDiagnostics({
+    config,
+    evidenceDiagnostics: discoveryEvidenceDiagnostics,
+    shadowDiagnostics: discoveryShadowDiagnostics,
+    selectorDiagnostics: discoverySelectorDiagnostics,
+    evaluatedAt: updatedAt,
+    scanIdentifier: scanId,
+  });
   const latestUnderlyingQuoteAt = predictions.map((item) => item.latestUnderlyingQuoteAt || item.quoteTimestamp).filter(Boolean).sort().reverse()[0] || broadStats.marketSession?.lastRegularSessionClose || null;
   const representativeUnderlyingQuoteAt = marketDataAnalysis.timestampStats.representativeUnderlyingTimestamp || latestUnderlyingQuoteAt;
   const providerFetchedAt = predictions.map((item) => item.providerFetchedAt || item.scanTimestamp).filter(Boolean).sort().reverse()[0] || updatedAt;
@@ -5309,6 +5393,7 @@ async function refreshPredictions(options = {}) {
     discoveryShadowComparison: discoveryShadowDiagnostics,
     discoverySelector: discoverySelectorDiagnostics,
     discoveryReadiness: discoveryReadinessDiagnostics,
+    discoveryReadinessHistory: discoveryReadinessHistoryDiagnostics,
     symbolUniverseMetadata: broadStats.symbolUniverseMetadata,
     sectorAllocation: sectorAllocationSummary(selectedScanUniverse),
     stages: [

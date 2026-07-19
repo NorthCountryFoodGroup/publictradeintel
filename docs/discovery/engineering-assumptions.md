@@ -24,7 +24,7 @@ Congressional and policy buckets can qualify candidates when real saved evidence
 
 ## Current readiness blockers
 
-- No persisted real-world readiness observation history
+- Fewer than the required 20 validated real-world observations may be retained initially
 - Minimum 20 observations not met
 - Limited real-evidence and bucket coverage
 - Limited candidate-pool viability
@@ -38,7 +38,7 @@ The known `smoke:data-provenance` assertion expects `Cached public listing snaps
 - New historical, fundamental, sector, macro, and earnings providers
 - Prediction-engine replacement or recalibration
 - Outcome-based performance claims
-- Persistent readiness observation history
+- Readiness-history performance and operational monitoring beyond the bounded JSON store
 - Canary deployment automation
 - Automatic promotion
 - Frontend/admin controls for v3 promotion

@@ -20,6 +20,7 @@
 1. Accumulate at least 20 reliable real-world observations through a separately approved bounded history mechanism.
 2. Resolve the known data-provenance mismatch.
 3. Meet every readiness threshold, including evidence, bucket, pool, runtime, explanation, determinism, compatibility, and fallback reliability.
+4. Accumulate at least 20 valid completed production-scan observations. Test fixtures and read-only requests do not count.
 4. Confirm zero selected ineligible, unqualified, generated, unsupported, inactive, fallback-only, or duplicate securities.
 5. Run `npm run validate:discovery:phase1`.
 6. Review current shadow comparison and selector diagnostics.

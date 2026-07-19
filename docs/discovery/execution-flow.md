@@ -10,7 +10,9 @@ Build legacy discovery
   -> call unchanged buildPrediction() once per candidate
   -> sort, persist, and return predictions
   -> optionally run isolated v3 shadow diagnostics
-  -> calculate readiness diagnostic
+  -> complete prediction generation
+  -> record one bounded production-scan readiness observation
+  -> calculate readiness diagnostic from the newest 100 valid observations
 ```
 
 ## Explicit v3 mode
