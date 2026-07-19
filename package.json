@@ -11,6 +11,7 @@
     "smoke:discovery:config": "node scripts/smoke-test-discovery-config.js",
     "smoke:discovery:evidence": "node scripts/smoke-test-discovery-evidence.js",
     "smoke:discovery:explanations": "node scripts/smoke-test-discovery-explanations.js",
+    "smoke:discovery:phase1-docs": "node scripts/smoke-test-discovery-phase1-docs.js",
     "smoke:discovery:prediction-boundary": "node scripts/smoke-test-prediction-engine-boundary.js",
     "smoke:discovery:persistence-contract": "node scripts/smoke-test-discovery-persistence-contract.js",
     "smoke:discovery:regime": "node scripts/smoke-test-discovery-regime.js",
@@ -79,6 +80,7 @@
     "smoke:investment-access-v2": "node scripts/smoke-test-investment-access-v2.js",
     "smoke:stocks-to-buy-consistency": "node scripts/smoke-test-stocks-to-buy-consistency.js",
     "smoke:stocks-to-buy-atomic-publish": "node scripts/smoke-test-stocks-to-buy-atomic-publish.js",
-    "diagnose:quotes": "node scripts/diagnose-market-quotes.js"
+    "diagnose:quotes": "node scripts/diagnose-market-quotes.js",
+    "validate:discovery:phase1": "node scripts/validate-discovery-phase1.js"
   }
 }
