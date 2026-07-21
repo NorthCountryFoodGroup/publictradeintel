@@ -278,6 +278,7 @@ let predictionView = "top25OneDay";
 let predictionLayout = "cards";
 let portfolio = [];
 let selectedBriefTicker = "";
+const securityProfileRequests = new Map();
 let selectedMarketSector = "All sectors";
 let stocksToBuyComparison = [];
 let watchlists = [];
@@ -3365,6 +3366,20 @@ function securityProfileForTradeBrief(item) {
   );
   const profileSource = firstText(item.profileSource, item.profile?.source);
   const profileFetchedAt = firstText(item.profileFetchedAt, item.profile?.fetchedAt);
+  const profileStatus = firstText(item.profileStatus, item.profile?.status).toLowerCase();
+  const profileError = firstText(item.profileError, item.profile?.error);
+  const domicile = firstText(item.domicile, item.profile?.domicile);
+  const website = firstText(item.website, item.profile?.website);
+  const loading = Boolean(item.profileLoading);
+  const statusLabel = loading
+    ? "Checking verified profile"
+    : {
+        verified: "Verified",
+        partially_verified: "Partially verified",
+        unresolved: "Unresolved",
+        stale: "Stale profile",
+        unsupported_type: "Unsupported security type",
+      }[profileStatus] || "Profile unavailable";
   const normalizedType = securityType.toLowerCase();
   const isEtf = Boolean(item.isEtf || item.isETF || /\betf\b|exchange[- ]traded fund/.test(normalizedType));
   const isFund = Boolean(!isEtf && /fund|closed[- ]end/.test(normalizedType));
@@ -3374,24 +3389,22 @@ function securityProfileForTradeBrief(item) {
     industry ? `Industry: ${industry}` : "",
     sector ? `Sector: ${sector}` : "",
     headquarters ? `Headquarters/domicile: ${headquarters}` : "",
+    !headquarters && domicile ? `Domicile: ${domicile}` : "",
     exchange ? `Exchange: ${exchange}` : "",
     securityType ? `Security type: ${securityType}` : "",
+    /^https?:\/\//i.test(website) ? `Website: ${website}` : "",
   ].filter(Boolean);
   const identityIsUseful = Boolean(securityName && normalizeTicker(securityName) !== normalizeTicker(item.ticker));
   let description = companyDescription;
-  if (!description && (identityIsUseful || listingDetails.length)) {
-    const identity = identityIsUseful ? securityName : `This ${securityType || "security"}`;
-    const classification = [industry, sector].filter(Boolean).join(" / ");
-    const identitySentence = exchange && classification
-      ? `${identity} trades on ${exchange} and is classified in ${classification}.`
-      : exchange
-      ? `${identity} trades on ${exchange}.`
-      : classification
-      ? `${identity} is classified in ${classification}.`
-      : `${identity}.`;
-    description = `${identitySentence} Verified information about its business activities, strategy, or holdings is not currently available.`;
+  if (!description && ["unresolved", "unsupported_type"].includes(profileStatus)) {
+    description = "This symbol could not be matched to a verified current security profile. Confirm the ticker and listing status before relying on this analysis.";
+  } else if (!description && securityType) {
+    description = `This security is identified as a ${securityType}, but a verified business or holdings description is not currently available.`;
+  } else if (!description && (identityIsUseful || listingDetails.length || ["verified", "partially_verified", "stale"].includes(profileStatus))) {
+    description = "Detailed company profile information is not currently available from the configured data sources.";
+  } else if (!description) {
+    description = "This symbol could not be matched to a verified current security profile. Confirm the ticker and listing status before relying on this analysis.";
   }
-  if (!description) description = "Company profile information is not currently available for this security.";
   return {
     label,
     securityName,
@@ -3399,6 +3412,10 @@ function securityProfileForTradeBrief(item) {
     listingDetails,
     profileSource,
     profileFetchedAt,
+    profileStatus,
+    profileError,
+    loading,
+    statusLabel,
   };
 }
 
@@ -3454,7 +3471,7 @@ function renderTradeBrief() {
       <header class="trade-brief-card brief-report-hero">
         <div>
           <span class="eyebrow">AI Trade Brief&trade;</span>
-          <h2>${escapeHtml(item.ticker)} | ${escapeHtml(item.name || item.company || item.ticker)}</h2>
+          <h2>${escapeHtml(item.ticker)} | ${escapeHtml(securityProfile.securityName || item.ticker)}</h2>
           <div class="brief-badge-row">
             <span class="brief-badge ${badgeTone(item.label)}">${escapeHtml(item.label || item.recommendation || "Research candidate")}</span>
             <span class="brief-badge ${badgeTone(item.unifiedDirection)}">${escapeHtml(item.unifiedDirection || "neutral")}</span>
@@ -3472,7 +3489,7 @@ function renderTradeBrief() {
         <div><span>Current Price</span><strong>${moneyOrCalculating(item.currentPrice)}</strong></div>
         <div><span>Prediction Timeframe</span><strong>${escapeHtml(item.bestTimeframe || item.timeframe || predictionModelTitle(model))}</strong></div>
         <div><span>Market Trend</span><strong>${escapeHtml(technical.trendDirection || item.marketRegime?.primary || "Calculating")}</strong></div>
-        <div><span>Company</span><strong>${escapeHtml(item.name || item.company || item.ticker)}</strong></div>
+        <div><span>Security</span><strong>${escapeHtml(securityProfile.securityName || item.ticker)}</strong></div>
         <div><span>Market Data</span><strong>${escapeHtml(item.marketDataQuality?.label || item.dataQualityStatus || "Calculating")}</strong><small>${escapeHtml(marketDataSourceNote)}</small></div>
         ${rankMetrics}
       </div>
@@ -3660,7 +3677,7 @@ function renderTradeBrief() {
       <header class="trade-brief-card brief-report-hero institutional-brief-header">
         <div>
           <span class="eyebrow">AI Trade Brief 2.0</span>
-          <h2>${escapeHtml(item.ticker)} | ${escapeHtml(item.name || item.company || item.ticker)}</h2>
+          <h2>${escapeHtml(item.ticker)} | ${escapeHtml(securityProfile.securityName || item.ticker)}</h2>
           <div class="brief-badge-row">
             <span class="brief-badge ${badgeTone(recommendation)}">${escapeHtml(recommendation)}</span>
             <span class="brief-badge ${badgeTone(item.unifiedDirection)}">${escapeHtml(item.unifiedDirection || "neutral")}</span>
@@ -3686,12 +3703,13 @@ function renderTradeBrief() {
         <div><span>Data Freshness</span><strong>${escapeHtml(reliability.freshness)}</strong></div>
         <div><span>Model Version</span><strong>${escapeHtml(item.modelVersion || predictionEngine.modelVersion || "Unavailable")}</strong></div>
         <div><span>Last Updated</span><strong>${lastUpdated ? exactEt(lastUpdated) : "Not available"}</strong></div>
-        <div><span>Company</span><strong>${escapeHtml(item.name || item.company || item.ticker)}</strong></div>
+        <div><span>Security</span><strong>${escapeHtml(securityProfile.securityName || item.ticker)}</strong></div>
         <div><span>Consistency Audit</span><strong>${escapeHtml(consistency.status)}</strong></div>
       </div>
 
       <section class="brief-section brief-wide security-profile-section">
-        <div class="brief-section-heading"><span>${escapeHtml(securityProfile.label)}</span><strong>Security profile</strong></div>
+        <div class="brief-section-heading"><span>${escapeHtml(securityProfile.label)}</span><strong>${escapeHtml(securityProfile.statusLabel)}</strong></div>
+        ${securityProfile.loading ? `<small class="security-profile-source">Loading verified security details&hellip;</small>` : ""}
         <h3>${escapeHtml(securityProfile.securityName)}</h3>
         <p>${escapeHtml(securityProfile.description)}</p>
         ${
@@ -5157,10 +5175,43 @@ function runGlobalSearch() {
   if (output.predictionScanMessage) output.predictionScanMessage.textContent = `Showing prediction matches for "${query}". Clear the search box to reset.`;
 }
 
+async function loadSecurityProfile(ticker) {
+  const normalized = normalizeTicker(ticker);
+  if (!normalized) return null;
+  const existing = findPredictionByTicker(normalized);
+  if (["verified", "partially_verified"].includes(String(existing?.profileStatus || "").toLowerCase())) return existing;
+  if (securityProfileRequests.has(normalized)) return securityProfileRequests.get(normalized);
+  (predictionEngine.predictions || [])
+    .filter((item) => normalizeTicker(item.ticker) === normalized)
+    .forEach((item) => { item.profileLoading = true; });
+  if (normalizeTicker(selectedBriefTicker) === normalized) renderTradeBrief();
+  const request = fetch(`api/security-profile/${encodeURIComponent(normalized)}`, { cache: "no-store" })
+    .then(async (response) => {
+      if (!response.ok) throw new Error("Security profile unavailable");
+      const profile = await response.json();
+      (predictionEngine.predictions || [])
+        .filter((item) => normalizeTicker(item.ticker) === normalized)
+        .forEach((item) => Object.assign(item, profile));
+      return profile;
+    })
+    .catch(() => null)
+    .finally(() => {
+      (predictionEngine.predictions || [])
+        .filter((item) => normalizeTicker(item.ticker) === normalized)
+        .forEach((item) => { item.profileLoading = false; });
+      securityProfileRequests.delete(normalized);
+    });
+  securityProfileRequests.set(normalized, request);
+  return request;
+}
+
 function openTradeBrief(ticker) {
   selectedBriefTicker = String(ticker || "").toUpperCase();
   renderTradeBrief();
   setPage("briefs");
+  loadSecurityProfile(selectedBriefTicker).then(() => {
+    if (normalizeTicker(selectedBriefTicker) === normalizeTicker(ticker)) renderTradeBrief();
+  });
 }
 
 function initDashboardDisclosures() {

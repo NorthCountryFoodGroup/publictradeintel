@@ -91,9 +91,11 @@ assert.match(etf.description, /exchange-traded fund/);
 
 const unavailable = context.securityProfileForTradeBrief({ ticker: "UNKNOWN" });
 assert.equal(unavailable.label, "About this security");
-assert.equal(unavailable.description, "Company profile information is not currently available for this security.");
+assert.equal(unavailable.description, "This symbol could not be matched to a verified current security profile. Confirm the ticker and listing status before relying on this analysis.");
 
 assert.match(app, /security-profile-section/, "every rendered Trade Brief should include a profile section");
 assert.match(app, /Missing profile details are not inferred/, "profile fallback should forbid inference");
+assert.match(app, /Detailed company profile information is not currently available from the configured data sources/, "valid securities need a truthful unavailable fallback");
+assert.match(app, /could not be matched to a verified current security profile/, "unresolved tickers need a visible warning");
 
 console.log("Frontend readability and security-profile contract passed.");

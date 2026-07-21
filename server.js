@@ -41,6 +41,7 @@ const {
   readinessHistoryDiagnostics,
   recordReadinessObservation,
 } = require("./discovery/readiness-history");
+const { createSecurityProfileService } = require("./security-profile");
 
 const PORT = Number(process.env.PORT || 3000);
 const PRODUCTION = process.env.NODE_ENV === "production";
@@ -74,6 +75,7 @@ const PUBLIC_SYMBOL_SNAPSHOT_FILE = path.join(DATA_DIR, "publicSymbolSnapshot.js
 const PACKAGED_PUBLIC_SYMBOL_SNAPSHOT_FILE = path.join(ROOT, "data", "publicSymbolSnapshot.json");
 const PREDICTION_HISTORY_FILE = path.join(DATA_DIR, "predictionHistory.json");
 const OUTCOME_STATUS_FILE = path.join(DATA_DIR, "outcomeStatus.json");
+const SECURITY_PROFILE_CACHE_FILE = path.join(DATA_DIR, "securityProfiles.json");
 const MARKET_API_KEY = String(process.env.ALPHA_VANTAGE_API_KEY || "").trim();
 const POLICY_REFRESH_MS = Number(process.env.POLICY_REFRESH_MS || 60 * 60 * 1000);
 const CONGRESS_TRADES_FEED_URL = process.env.CONGRESS_TRADES_FEED_URL || "";
@@ -91,6 +93,13 @@ const loginLimiter = new SlidingWindowLimiter({
   windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
   maximumAttempts: LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
   lockoutMs: LOGIN_RATE_LIMIT_LOCKOUT_MS,
+});
+const securityProfileService = createSecurityProfileService({
+  cacheFile: SECURITY_PROFILE_CACHE_FILE,
+  apiKey: MARKET_API_KEY,
+  universeLoader: () => loadSymbolUniverse(),
+  timeoutMs: 6000,
+  concurrency: 2,
 });
 const BROAD_SCREEN_TARGET = 2500;
 const DEEP_ANALYSIS_MARKET_HOURS_TARGET = 300;
@@ -6222,6 +6231,13 @@ async function handleApi(request, response, pathname) {
     sendJson(response, 200, saved && Array.isArray(saved.predictions)
       ? saved
       : { updatedAt: null, predictions: [], sections: {}, status: "not_generated" });
+    return;
+  }
+
+  if (request.method === "GET" && pathname.startsWith("/api/security-profile/")) {
+    const ticker = decodeURIComponent(pathname.slice("/api/security-profile/".length));
+    const profile = await securityProfileService.getProfile(ticker);
+    sendJson(response, profile.profileError === "invalid_symbol" ? 400 : 200, profile);
     return;
   }
 
