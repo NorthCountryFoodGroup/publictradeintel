@@ -5048,3 +5048,38 @@ button:disabled,
     grid-template-columns: 1fr;
   }
 }
+
+/* Dense prediction cards: preserve complete metadata instead of clipping it. */
+.prediction-grid,
+.stocks-to-buy-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+}
+
+.prediction-metadata-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+}
+
+.prediction-metadata-grid > div {
+  min-width: min(140px, 100%);
+  overflow: visible;
+}
+
+.prediction-metadata-grid span,
+.prediction-metadata-grid strong {
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.prediction-metadata-grid strong {
+  line-height: 1.35;
+}
+
+@media (max-width: 380px) {
+  .prediction-metadata-grid {
+    grid-template-columns: 1fr;
+  }
+}
