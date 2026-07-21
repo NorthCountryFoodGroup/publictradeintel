@@ -3343,6 +3343,65 @@ function tradeBriefConsistencyAudit(item, model, rankMeta) {
   return { checks, status: checks.every((check) => check.pass) ? "Consistent" : "Review" };
 }
 
+function securityProfileForTradeBrief(item) {
+  const configured = (settings.stockIdeas || []).find((stock) => normalizeTicker(stock.ticker) === normalizeTicker(item.ticker)) || {};
+  const firstText = (...values) => values.map((value) => String(value || "").trim()).find(Boolean) || "";
+  const securityName = firstText(item.securityName, item.companyName, item.longName, item.name, item.company, configured.name, item.ticker);
+  const securityType = firstText(item.securityType, item.quoteType, item.type, configured.securityType, configured.type);
+  const companyDescription = firstText(
+    item.companyDescription,
+    item.securityDescription,
+    item.businessDescription,
+    item.longBusinessSummary,
+    item.profile?.description,
+  );
+  const industry = firstText(item.industry, item.profile?.industry);
+  const sector = firstText(item.sector, item.assetGroup, item.profile?.sector);
+  const exchange = firstText(item.exchange, item.fullExchangeName, item.listingExchange, item.profile?.exchange);
+  const headquarters = firstText(
+    item.headquarters,
+    [item.city, item.country].filter(Boolean).join(", "),
+    item.profile?.headquarters,
+  );
+  const profileSource = firstText(item.profileSource, item.profile?.source);
+  const profileFetchedAt = firstText(item.profileFetchedAt, item.profile?.fetchedAt);
+  const normalizedType = securityType.toLowerCase();
+  const isEtf = Boolean(item.isEtf || item.isETF || /\betf\b|exchange[- ]traded fund/.test(normalizedType));
+  const isFund = Boolean(!isEtf && /fund|closed[- ]end/.test(normalizedType));
+  const isOperatingCompany = Boolean(/\bstock\b|equity|common share|ordinary share|operating company|corporation/.test(normalizedType));
+  const label = isEtf ? "About this ETF" : isFund ? "About this fund" : isOperatingCompany ? "About this company" : "About this security";
+  const listingDetails = [
+    industry ? `Industry: ${industry}` : "",
+    sector ? `Sector: ${sector}` : "",
+    headquarters ? `Headquarters/domicile: ${headquarters}` : "",
+    exchange ? `Exchange: ${exchange}` : "",
+    securityType ? `Security type: ${securityType}` : "",
+  ].filter(Boolean);
+  const identityIsUseful = Boolean(securityName && normalizeTicker(securityName) !== normalizeTicker(item.ticker));
+  let description = companyDescription;
+  if (!description && (identityIsUseful || listingDetails.length)) {
+    const identity = identityIsUseful ? securityName : `This ${securityType || "security"}`;
+    const classification = [industry, sector].filter(Boolean).join(" / ");
+    const identitySentence = exchange && classification
+      ? `${identity} trades on ${exchange} and is classified in ${classification}.`
+      : exchange
+      ? `${identity} trades on ${exchange}.`
+      : classification
+      ? `${identity} is classified in ${classification}.`
+      : `${identity}.`;
+    description = `${identitySentence} Verified information about its business activities, strategy, or holdings is not currently available.`;
+  }
+  if (!description) description = "Company profile information is not currently available for this security.";
+  return {
+    label,
+    securityName,
+    description,
+    listingDetails,
+    profileSource,
+    profileFetchedAt,
+  };
+}
+
 function renderTradeBrief() {
   if (!output.tradeBriefPanel) return;
   const firstPick = firstFromSection("top25OneDay") || firstFromSection("top25SevenDay") || (predictionEngine.predictions || [])[0];
@@ -3586,6 +3645,7 @@ function renderTradeBrief() {
   const trend = confidenceTrend(item);
   const reliability = dataReliability(item);
   const consistency = tradeBriefConsistencyAudit(item, model, rankMeta);
+  const securityProfile = securityProfileForTradeBrief(item);
   const rows = currentRows.length ? currentRows : predictionEngine.predictions || [];
   const rowIndex = rows.findIndex((row) => normalizeTicker(row.ticker) === normalizeTicker(item.ticker));
   const previousTicker = rowIndex > 0 ? rows[rowIndex - 1]?.ticker : rows[rows.length - 1]?.ticker;
@@ -3629,6 +3689,22 @@ function renderTradeBrief() {
         <div><span>Company</span><strong>${escapeHtml(item.name || item.company || item.ticker)}</strong></div>
         <div><span>Consistency Audit</span><strong>${escapeHtml(consistency.status)}</strong></div>
       </div>
+
+      <section class="brief-section brief-wide security-profile-section">
+        <div class="brief-section-heading"><span>${escapeHtml(securityProfile.label)}</span><strong>Security profile</strong></div>
+        <h3>${escapeHtml(securityProfile.securityName)}</h3>
+        <p>${escapeHtml(securityProfile.description)}</p>
+        ${
+          securityProfile.listingDetails.length
+            ? `<div class="security-profile-facts">${securityProfile.listingDetails.map((detail) => `<span>${escapeHtml(detail)}</span>`).join("")}</div>`
+            : ""
+        }
+        ${
+          securityProfile.profileSource
+            ? `<small class="security-profile-source">Source: ${escapeHtml(securityProfile.profileSource)}${securityProfile.profileFetchedAt ? ` | Updated ${escapeHtml(exactEt(securityProfile.profileFetchedAt))}` : ""}</small>`
+            : `<small class="security-profile-source">Uses verified fields stored with the selected security when available. Missing profile details are not inferred.</small>`
+        }
+      </section>
 
       <nav class="brief-actions brief-navigation" aria-label="Trade Brief navigation">
         <button type="button" data-page-target="predictions">Back to Opportunities</button>

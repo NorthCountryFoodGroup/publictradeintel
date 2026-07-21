@@ -4065,6 +4065,75 @@ button,
   }
 }
 
+/* Trade Brief security-profile presentation. Readability overrides live at EOF. */
+.trade-brief-v2 .brief-top-metrics > div,
+.trade-brief-v2 .brief-plan-grid > div,
+.trade-brief-v2 .brief-fact-list > div,
+.trade-brief-v2 .brief-badge-panel > div,
+.signal-agreement-grid > div {
+  min-width: 0;
+}
+
+.brief-section-heading {
+  flex-wrap: wrap;
+}
+
+.brief-section-heading > strong,
+.brief-top-metrics > div > strong,
+.brief-plan-grid > div > strong {
+  max-width: 100%;
+}
+
+.security-profile-section {
+  margin: 16px 0;
+}
+
+.security-profile-section h3,
+.security-profile-section p {
+  margin: 0;
+}
+
+.security-profile-section p {
+  max-width: 86ch;
+  line-height: 1.65;
+}
+
+.security-profile-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.security-profile-facts span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(69, 209, 154, 0.08);
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.security-profile-source {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+  .brief-section-heading {
+    display: grid;
+    gap: 5px;
+  }
+
+  .brief-score strong,
+  .prediction-score-block strong,
+  .stock-score strong,
+  .score-value {
+    font-size: clamp(1.2rem, 8vw, 1.8rem);
+  }
+}
+
 /* Public Trade Intel UX Reset - Hybrid C
    Recovery layer: default light theme, compact SaaS shell, functional topbar menus,
    and responsive grids that prevent overlap without changing app logic. */
@@ -4877,5 +4946,105 @@ button:disabled,
 
   .alerts-button {
     width: 38px;
+  }
+}
+
+/* Final frontend readability cascade: keep this after theme recovery layers. */
+.summary-tile,
+.dashboard-card,
+.trade-brief-card,
+.brief-section,
+.prediction-screener-card,
+.market-metric-card,
+.performance-metric-card,
+.watchlist-card,
+.watchlist-stock-card,
+.watchlist-alert-card,
+.alert-feed-card,
+.alert-rule-card,
+.alert-history-card,
+.delivery-card {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.summary-tile p,
+.dashboard-card p,
+.trade-brief-card p,
+.brief-section p,
+.prediction-screener-card p,
+.market-metric-card p,
+.performance-metric-card p,
+.watchlist-card p,
+.watchlist-stock-card p,
+.alert-feed-card p,
+.alert-rule-card p,
+.alert-history-card p {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.brief-score strong,
+.prediction-score-block strong,
+.stock-score strong,
+.score-value {
+  min-width: max-content;
+  white-space: nowrap;
+  flex-shrink: 0;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.executive-section .summary-tile strong,
+.summary-tile strong,
+.market-metric-card strong,
+.performance-metric-card strong,
+.watchlist-stock-card strong,
+.watchlist-alert-card strong,
+.alert-feed-card strong,
+.alert-rule-card strong,
+.prediction-card strong,
+.stock-card strong,
+.brief-top-metrics strong,
+.brief-plan-grid strong,
+.brief-fact-list strong,
+.brief-badge-panel strong,
+.signal-agreement-grid strong,
+.brief-section-heading strong {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.trade-brief-v2 .brief-top-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+}
+
+.trade-brief-v2 .brief-plan-grid,
+.trade-brief-v2 .brief-fact-list,
+.trade-brief-v2 .brief-badge-panel {
+  grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
+}
+
+.trade-brief-v2 .brief-report-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+}
+
+@media (max-width: 900px) {
+  .trade-brief-v2 .brief-top-metrics,
+  .trade-brief-v2 .brief-plan-grid,
+  .trade-brief-v2 .brief-fact-list,
+  .trade-brief-v2 .brief-badge-panel {
+    grid-template-columns: repeat(2, minmax(min(200px, 100%), 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .trade-brief-v2 .brief-top-metrics,
+  .trade-brief-v2 .brief-plan-grid,
+  .trade-brief-v2 .brief-fact-list,
+  .trade-brief-v2 .brief-badge-panel,
+  .outlook-grid,
+  .signal-agreement-grid {
+    grid-template-columns: 1fr;
   }
 }

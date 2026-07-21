@@ -71,6 +71,7 @@
     "smoke:price-bands": "node scripts/smoke-test-price-band-rankings.js",
     "smoke:investment-access": "node scripts/smoke-test-investment-access-preview.js",
     "smoke:trade-brief-v2": "node scripts/smoke-test-trade-brief-v2.js",
+    "smoke:frontend-readability": "node scripts/smoke-test-frontend-readability.js",
     "smoke:bull-bear-case": "node scripts/smoke-test-bull-bear-case.js",
     "smoke:signal-agreement": "node scripts/smoke-test-signal-agreement.js",
     "smoke:ranking-explanation": "node scripts/smoke-test-ranking-explanation.js",
