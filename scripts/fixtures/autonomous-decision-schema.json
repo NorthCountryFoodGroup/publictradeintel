@@ -1,0 +1,1700 @@
+﻿{
+    "investmentMandate":  {
+                              "investmentMandateId":  "mandate-fictional-001",
+                              "schemaVersion":  "investment-mandate-v1",
+                              "createdAt":  "2026-01-05T13:00:00.000Z",
+                              "createdBy":  "fictional-reviewer",
+                              "experimental":  true,
+                              "shadowOnly":  true,
+                              "productionApproved":  false,
+                              "reviewRequired":  true,
+                              "mandateStatus":  "READY_FOR_SHADOW_RUN",
+                              "availableCapital":  1000,
+                              "investmentObjective":  "BALANCED_GROWTH",
+                              "customInvestmentObjective":  null,
+                              "primaryHorizon":  "1m",
+                              "secondaryHorizons":  [
+                                                        "7d",
+                                                        "3m"
+                                                    ],
+                              "riskTolerance":  55,
+                              "maximumAcceptableLossAmount":  120,
+                              "maximumAcceptableLossPercent":  12,
+                              "desiredCashReserveAmount":  200,
+                              "desiredCashReservePercent":  20,
+                              "maximumPositions":  4,
+                              "minimumPositionAmount":  100,
+                              "maximumPositionPercent":  40,
+                              "sectorConcentrationLimit":  50,
+                              "industryConcentrationLimit":  40,
+                              "volatilityTolerance":  60,
+                              "liquidityRequirement":  50,
+                              "shareMode":  "fractional",
+                              "existingHoldingsSnapshotId":  "fictional-holdings-001",
+                              "existingCashPosition":  1000,
+                              "excludedSymbols":  [
+                                                      "ZZZX"
+                                                  ],
+                              "excludedSectors":  [
+                                                      "fictional mining"
+                                                  ],
+                              "requiredSymbols":  [
+
+                                                  ],
+                              "dividendPreference":  20,
+                              "incomePreference":  20,
+                              "growthPreference":  60,
+                              "valuePreference":  40,
+                              "capitalPreservationPreference":  45,
+                              "taxContext":  "unspecified",
+                              "transactionCostAssumptions":  {
+                                                                 "commissionPerTrade":  0,
+                                                                 "slippagePercent":  0.1,
+                                                                 "minimumFee":  0
+                                                             },
+                              "rebalancePreference":  "review-only",
+                              "sellAuthorityMode":  "ANALYZE_ONLY",
+                              "userConstraints":  [
+                                                      "No fictional mining exposure."
+                                                  ],
+                              "userPriorities":  [
+                                                     "Preserve a cash reserve."
+                                                 ],
+                              "userQuestions":  [
+                                                    "Which fictional candidate best uses the next dollar?"
+                                                ],
+                              "mandateWarnings":  [
+                                                      "Experimental shadow mandate only."
+                                                  ],
+                              "validationStatus":  "VALID"
+                          },
+    "operatingSession":  {
+                             "operatingSessionId":  "session-fictional-001",
+                             "schemaVersion":  "investment-operating-session-v1",
+                             "investmentMandateId":  "mandate-fictional-001",
+                             "parameterSetId":  "fictional-parameters-001",
+                             "inputSnapshotId":  "input-snapshot-001",
+                             "startedAt":  "2026-01-05T13:05:00.000Z",
+                             "completedAt":  null,
+                             "status":  "PARTIALLY_COMPLETED",
+                             "currentStage":  "CANDIDATE_COLLECTION",
+                             "stageRecords":  [
+                                                  {
+                                                      "stage":  "MANDATE_VALIDATION",
+                                                      "state":  "COMPLETED",
+                                                      "startedAt":  "2026-01-05T13:05:00.000Z",
+                                                      "completedAt":  "2026-01-05T13:06:00.000Z",
+                                                      "attemptCount":  1,
+                                                      "inputReferenceIds":  [
+                                                                                "mandate-fictional-001"
+                                                                            ],
+                                                      "outputReferenceIds":  [
+                                                                                 "mandate-validation-001"
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "VALID",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "INPUT_SNAPSHOT",
+                                                      "state":  "COMPLETED",
+                                                      "startedAt":  "2026-01-05T13:06:00.000Z",
+                                                      "completedAt":  "2026-01-05T13:07:00.000Z",
+                                                      "attemptCount":  1,
+                                                      "inputReferenceIds":  [
+                                                                                "mandate-validation-001"
+                                                                            ],
+                                                      "outputReferenceIds":  [
+                                                                                 "input-snapshot-001"
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "VALID",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "CANDIDATE_COLLECTION",
+                                                      "state":  "DEFERRED",
+                                                      "startedAt":  "2026-01-05T13:07:00.000Z",
+                                                      "completedAt":  null,
+                                                      "attemptCount":  1,
+                                                      "inputReferenceIds":  [
+                                                                                "input-snapshot-001"
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+                                                                           "LIMITED-FICTIONAL-EVIDENCE"
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+                                                                                  "MORE-EVIDENCE-REQUIRED"
+                                                                              ],
+                                                      "validationStatus":  "VALID_WITH_WARNINGS",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "EVIDENCE_NORMALIZATION",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "OPPORTUNITY_ASSESSMENT",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "THESIS_GENERATION",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "INVESTMENT_COMMITTEE",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "CANDIDATE_COMPARISON",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "OPPORTUNITY_COST_REVIEW",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "CAPITAL_ALLOCATION",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "DECISION_CHALLENGE",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "FINAL_SHADOW_DECISION",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "DECISION_JOURNALING",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "OUTCOME_TRACKING",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "DECISION_REPLAY",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  },
+                                                  {
+                                                      "stage":  "LEARNING_EVALUATION",
+                                                      "state":  "NOT_STARTED",
+                                                      "startedAt":  null,
+                                                      "completedAt":  null,
+                                                      "attemptCount":  0,
+                                                      "inputReferenceIds":  [
+
+                                                                            ],
+                                                      "outputReferenceIds":  [
+
+                                                                             ],
+                                                      "warningCodes":  [
+
+                                                                       ],
+                                                      "errorCodes":  [
+
+                                                                     ],
+                                                      "deferredReasonCodes":  [
+
+                                                                              ],
+                                                      "validationStatus":  "INCOMPLETE",
+                                                      "schemaVersion":  "operating-stage-record-v1"
+                                                  }
+                                              ],
+                             "completedStages":  [
+                                                     "INPUT_SNAPSHOT",
+                                                     "MANDATE_VALIDATION"
+                                                 ],
+                             "failedStages":  [
+
+                                              ],
+                             "deferredStages":  [
+                                                    "CANDIDATE_COLLECTION"
+                                                ],
+                             "candidateUniverseSummary":  {
+                                                              "status":  "fictional-only",
+                                                              "selectedPositionCount":  0
+                                                          },
+                             "committeeRunIds":  [
+                                                     "run-001"
+                                                 ],
+                             "comparisonRunIds":  [
+                                                      "cmp-1",
+                                                      "cmp-2",
+                                                      "cmp-cash"
+                                                  ],
+                             "opportunityCostIds":  [
+                                                        "oc-001"
+                                                    ],
+                             "portfolioDecisionId":  "run-001",
+                             "challengerResultId":  "challenger-001",
+                             "decisionJournalEntryId":  "journal-fictional-001",
+                             "outcomeTrackingIds":  [
+                                                        "outcome-unresolved"
+                                                    ],
+                             "decisionReplayId":  "replay-001",
+                             "mistakeMemoryIds":  [
+                                                      "mistake-001"
+                                                  ],
+                             "learningProposalIds":  [
+                                                         "learning-001"
+                                                     ],
+                             "capitalAvailable":  1000,
+                             "capitalAllocated":  600,
+                             "retainedCash":  400,
+                             "finalActionSummary":  {
+                                                        "action":  "DEFER",
+                                                        "reason":  "Fictional session remains incomplete."
+                                                    },
+                             "warnings":  [
+                                              "Experimental shadow orchestration record."
+                                          ],
+                             "errors":  [
+
+                                        ],
+                             "experimental":  true,
+                             "shadowOnly":  true,
+                             "productionApproved":  false,
+                             "reviewRequired":  true,
+                             "validationStatus":  "VALID_WITH_WARNINGS"
+                         },
+    "operatingSystemDecisionSummary":  {
+                                           "operatingSessionId":  "session-fictional-001",
+                                           "investmentMandateId":  "mandate-fictional-001",
+                                           "schemaVersion":  "operating-system-decision-summary-v1",
+                                           "generatedAt":  "2026-01-05T14:01:00.000Z",
+                                           "mandateSummary":  "Experimental balanced-growth mandate using fictional evidence.",
+                                           "capitalAvailable":  1000,
+                                           "capitalAllocated":  600,
+                                           "retainedCash":  400,
+                                           "retainedCashPercent":  40,
+                                           "primaryHorizon":  "1m",
+                                           "secondaryHorizons":  [
+                                                                     "7d",
+                                                                     "3m"
+                                                                 ],
+                                           "recommendedActions":  [
+                                                                      "Simulated shadow recommendation: consider two fictional positions."
+                                                                  ],
+                                           "existingHoldingActions":  [
+                                                                          "Holding recommendation: review fictional exposure."
+                                                                      ],
+                                           "selectedPositions":  [
+                                                                     "AAAQ",
+                                                                     "BBBQ"
+                                                                 ],
+                                           "rejectedCandidates":  [
+                                                                      "CCCQ"
+                                                                  ],
+                                           "deferredCandidates":  [
+
+                                                                  ],
+                                           "noTradeDecision":  false,
+                                           "noTradeReason":  null,
+                                           "primaryReasons":  [
+                                                                  "Referenced fictional evidence has bounded positive utility."
+                                                              ],
+                                           "principalRisks":  [
+                                                                  "Evidence remains fictional and incomplete."
+                                                              ],
+                                           "strongestCounterarguments":  [
+                                                                             "Retained cash may be preferable."
+                                                                         ],
+                                           "whatWouldChangeTheDecision":  [
+                                                                              "New validated opposing evidence."
+                                                                          ],
+                                           "opportunityCosts":  [
+                                                                    "Cash and BBBQ were compared."
+                                                                ],
+                                           "portfolioExpectedReturnRange":  {
+                                                                                "minimum":  1,
+                                                                                "maximum":  6
+                                                                            },
+                                           "portfolioExpectedDownsideRange":  {
+                                                                                  "minimum":  -5,
+                                                                                  "maximum":  -1
+                                                                              },
+                                           "confidence":  "MEDIUM",
+                                           "confidenceReliability":  "MEDIUM",
+                                           "conviction":  58,
+                                           "uncertainty":  42,
+                                           "committeeSummary":  "Recommendation synthesis only; no unrestricted debate transcript.",
+                                           "challengerSummary":  "The challenger reduced the simulated allocation.",
+                                           "dataFreshnessSummary":  "Decision-time fictional evidence was current.",
+                                           "provenanceSummary":  "All facts reference fictional fixture provenance.",
+                                           "nextEvaluationDates":  [
+                                                                       "2026-02-05T14:00:00.000Z"
+                                                                   ],
+                                           "experimentalLabel":  "Experimental prediction and recommendation.",
+                                           "shadowOnlyLabel":  "Simulated shadow decision and simulated shadow portfolio only.",
+                                           "validationStatus":  "VALID"
+                                       },
+    "investmentMandateV2": {
+      "id":"mandate-v2-fictional-001","schemaVersion":"investment-mandate-v2","status":"active",
+      "createdAt":"2026-01-05T12:00:00.000Z","updatedAt":"2026-01-05T12:30:00.000Z",
+      "name":"Fictional balanced-growth mandate","description":"Synthetic contract fixture only.",
+      "availableCapital":1000,"existingCash":1000,"investmentObjective":"balanced_growth","customObjective":null,
+      "primaryHorizon":"1m","secondaryHorizons":["7d","3m"],"riskTolerance":55,
+      "maximumAcceptableLossPercent":12,"desiredCashReservePercent":40,"maximumPositions":4,
+      "minimumPositionPercent":10,"maximumPositionPercent":40,"maximumSectorPercent":50,"maximumSingleThemePercent":35,
+      "existingHoldings":[{"id":"holding-fictional-001","symbol":"AAAQ","shares":2,"marketValue":50}],
+      "requiredSymbols":[],"excludedSymbols":["ZZZX"],"excludedSectors":["fictional mining"],"preferredSectors":["fictional technology"],
+      "preferences":["Retain meaningful cash."],"constraints":["Shadow recommendations only."],
+      "sellAnalysisAuthority":"existing_positions_only","notes":["No execution authority."],"metadata":{"synthetic":true}
+    },
+    "operatingStageRecordV2": {
+      "id":"stage-v2-fictional-001","schemaVersion":"operating-stage-record-v2","operatingSessionId":"session-v2-fictional-001",
+      "stage":"mandate_validation","state":"completed","startedAt":"2026-01-05T13:00:00.000Z","completedAt":"2026-01-05T13:01:00.000Z",
+      "blockedReason":null,"error":null,"inputReferences":["mandate-v2-fictional-001"],"outputReferences":["mandate-check-v2-001"],
+      "metrics":{"durationMs":60000},"notes":["Synthetic completed stage."],"metadata":{"synthetic":true}
+    },
+    "investmentOperatingSessionV2": {
+      "id":"session-v2-fictional-001","schemaVersion":"investment-operating-session-v2","investmentMandateId":"mandate-v2-fictional-001",
+      "status":"queued","mode":"shadow","createdAt":"2026-01-05T12:55:00.000Z","startedAt":null,"completedAt":null,
+      "asOf":"2026-01-05T12:55:00.000Z","currentStage":"mandate_validation",
+      "stageRecords":[{"id":"stage-v2-fictional-001","schemaVersion":"operating-stage-record-v2","operatingSessionId":"session-v2-fictional-001","stage":"mandate_validation","state":"completed","startedAt":"2026-01-05T13:00:00.000Z","completedAt":"2026-01-05T13:01:00.000Z","blockedReason":null,"error":null,"inputReferences":["mandate-v2-fictional-001"],"outputReferences":["mandate-check-v2-001"],"metrics":{"durationMs":60000},"notes":["Synthetic completed stage."],"metadata":{"synthetic":true}}],
+      "discoveryRunId":null,"predictionRunIds":[],"inputSnapshotId":"input-snapshot-001","evidenceGraphId":"evidence-graph-fictional-001",
+      "candidateAssessmentIds":[],"committeeDecisionId":null,"comparisonSetId":null,"allocationDecisionId":null,
+      "challengerReviewId":null,"operatingSystemDecisionSummaryId":"summary-v2-fictional-001","decisionJournalId":null,
+      "outcomeTrackingId":null,"replayIds":[],"learningProposalIds":[],"warnings":[],"errors":[],
+      "metrics":{"stageCount":1},"metadata":{"synthetic":true}
+    },
+    "operatingSystemDecisionSummaryV2": {
+      "id":"summary-v2-fictional-001","schemaVersion":"operating-system-decision-summary-v2",
+      "investmentMandateId":"mandate-v2-fictional-001","operatingSessionId":"session-v2-fictional-001",
+      "createdAt":"2026-01-05T14:00:00.000Z","asOf":"2026-01-05T13:59:00.000Z",
+      "decisionType":"allocate","status":"shadow_complete",
+      "selectedPositions":[{"symbol":"AAAQ","amount":300,"percent":30},{"symbol":"BBBQ","amount":300,"percent":30}],
+      "retainedCashAmount":400,"retainedCashPercent":40,"rejectedCandidates":["CCCQ"],"noTradeReason":null,
+      "committeeSummary":"Synthetic committee recommendation.","challengerSummary":"Synthetic challenger reduced allocation.",
+      "confidence":"MEDIUM","confidenceReliability":"MEDIUM","conviction":58,"uncertainty":42,
+      "strongestSupportingEvidenceIds":["ev-price-AAAQ"],"strongestOpposingEvidenceIds":["ev-policy-AAAQ"],
+      "missingInformation":["Future catalyst result."],"primaryRisks":["Synthetic downside risk."],
+      "opportunityCostSummary":"Cash was retained.","constraintChecks":["Capital totals pass."],
+      "whatWouldChangeTheDecision":["New opposing evidence."],"warnings":["Shadow-only synthetic summary."],"metadata":{"synthetic":true}
+    },
+    "parameters":  {
+                       "schemaVersion":  "autonomous-parameter-v1",
+                       "parameterSetId":  "fictional-parameters-001",
+                       "createdAt":  "2026-01-05T14:00:00.000Z",
+                       "availableCapital":  1000,
+                       "maximumPositions":  4,
+                       "minimumPositionAmount":  100,
+                       "shareMode":  "fractional",
+                       "horizon":  "1m",
+                       "riskTolerance":  55,
+                       "maximumAcceptableLoss":  120,
+                       "desiredCashReserve":  200,
+                       "maximumPositionPercent":  40,
+                       "sectorConcentrationLimit":  50,
+                       "industryConcentrationLimit":  40,
+                       "volatilityTolerance":  60,
+                       "excludedSymbols":  [
+                                               "ZZZX"
+                                           ],
+                       "excludedSectors":  [
+                                               "fictional mining"
+                                           ],
+                       "dividendPreference":  20,
+                       "stylePreference":  "balanced",
+                       "minimumLiquidity":  50,
+                       "taxContext":  "unspecified",
+                       "transactionCostAssumptions":  {
+                                                          "commissionPerTrade":  0,
+                                                          "slippagePercent":  0.1,
+                                                          "minimumFee":  0
+                                                      },
+                       "currentHoldingsSnapshotId":  "fictional-holdings-001",
+                       "customConstraints":  [
+                                                 "Do not allocate to fictional mining."
+                                             ],
+                       "investmentMandateId":  "mandate-fictional-001"
+                   },
+    "evidenceSummary":  {
+                            "operatingSessionId":  "session-fictional-001",
+                            "evidenceSummaryId":  "evidence-summary-AAAQ",
+                            "schemaVersion":  "autonomous-evidence-summary-v1",
+                            "symbol":  "AAAQ",
+                            "decisionTimestamp":  "2026-01-05T14:00:00.000Z",
+                            "horizon":  "1m",
+                            "evidenceIds":  [
+                                                "ev-price-AAAQ",
+                                                "ev-policy-AAAQ"
+                                            ],
+                            "provenanceIds":  [
+                                                  "prov-market-fictional",
+                                                  "prov-policy-fictional"
+                                              ],
+                            "supportingEvidence":  [
+                                                       {
+                                                           "evidenceId":  "ev-price-AAAQ",
+                                                           "category":  "market",
+                                                           "summary":  "Fictional price trend is positive.",
+                                                           "sourceType":  "fictional-test-market",
+                                                           "provenanceId":  "prov-market-fictional",
+                                                           "observedAt":  "2026-01-05T13:55:00.000Z",
+                                                           "availableAt":  "2026-01-05T13:56:00.000Z",
+                                                           "freshness":  "fresh",
+                                                           "certaintyCategory":  "KNOWN",
+                                                           "quality":  90,
+                                                           "supportsOrOpposes":  "SUPPORTS",
+                                                           "numericFactReference":  "ev-price-AAAQ"
+                                                       }
+                                                   ],
+                            "opposingEvidence":  [
+                                                     {
+                                                         "evidenceId":  "ev-policy-AAAQ",
+                                                         "category":  "policy",
+                                                         "summary":  "A fictional policy uncertainty remains.",
+                                                         "sourceType":  "fictional-test-policy",
+                                                         "provenanceId":  "prov-policy-fictional",
+                                                         "observedAt":  "2026-01-05T12:00:00.000Z",
+                                                         "availableAt":  "2026-01-05T12:30:00.000Z",
+                                                         "freshness":  "fresh",
+                                                         "certaintyCategory":  "CONFLICTING",
+                                                         "quality":  70,
+                                                         "supportsOrOpposes":  "OPPOSES",
+                                                         "numericFactReference":  null
+                                                     }
+                                                 ],
+                            "missingEvidence":  [
+
+                                                ],
+                            "conflictingEvidence":  [
+
+                                                    ],
+                            "evidenceQuality":  82,
+                            "evidenceFreshness":  "fresh",
+                            "confidence":  "MEDIUM",
+                            "confidenceReliability":  "MEDIUM",
+                            "knownFacts":  [
+
+                                           ],
+                            "derivedMetrics":  [
+
+                                               ],
+                            "estimates":  [
+
+                                          ],
+                            "unresolvedQuestions":  [
+                                                        "Will the fictional catalyst occur?"
+                                                    ],
+                            "staleSourceWarnings":  [
+
+                                                    ],
+                            "fallbackSourceWarnings":  [
+
+                                                       ],
+                            "validationStatus":  "VALID"
+                        },
+    "thesis":  {
+                   "operatingSessionId":  "session-fictional-001",
+                   "investmentMandateId":  "mandate-fictional-001",
+                   "thesisId":  "thesis-AAAQ-001",
+                   "schemaVersion":  "autonomous-thesis-v1",
+                   "experimental":  true,
+                   "shadowOnly":  true,
+                   "productionApproved":  false,
+                   "reviewRequired":  true,
+                   "inputSnapshotId":  "input-snapshot-001",
+                   "decisionTimestamp":  "2026-01-05T14:00:00.000Z",
+                   "symbol":  "AAAQ",
+                   "horizon":  "1m",
+                   "proposedAction":  "BUY",
+                   "thesisSummary":  "Fictional test thesis supported by two referenced evidence records.",
+                   "whyNow":  "The fictional catalyst window is approaching.",
+                   "supportingEvidenceIds":  [
+                                                 "ev-price-AAAQ"
+                                             ],
+                   "opposingEvidenceIds":  [
+                                               "ev-policy-AAAQ"
+                                           ],
+                   "assumptions":  [
+                                       "The fictional price source remains representative."
+                                   ],
+                   "unresolvedQuestions":  [
+                                               "Whether the fictional catalyst occurs."
+                                           ],
+                   "catalyst":  "Fictional product event",
+                   "catalystWindow":  {
+                                          "start":  "2026-01-10T00:00:00.000Z",
+                                          "end":  "2026-01-20T00:00:00.000Z"
+                                      },
+                   "bullCase":  "The fictional catalyst is positively received.",
+                   "baseCase":  "Evidence remains mixed but positive.",
+                   "bearCase":  "The opposing policy signal dominates.",
+                   "expectedReturnRange":  {
+                                               "minimum":  2,
+                                               "maximum":  8
+                                           },
+                   "expectedDownsideRange":  {
+                                                 "minimum":  -7,
+                                                 "maximum":  -2
+                                             },
+                   "confidence":  "MEDIUM",
+                   "confidenceReliability":  "MEDIUM",
+                   "conviction":  62,
+                   "uncertainty":  38,
+                   "entryLogic":  "Use the decision-time fictional reference price.",
+                   "exitLogic":  "Exit at the horizon or invalidation.",
+                   "invalidationConditions":  [
+                                                  "Referenced price evidence reverses."
+                                              ],
+                   "maximumIntendedHoldingPeriod":  "1m",
+                   "allocationRationale":  "Bounded test allocation relative to alternatives.",
+                   "strongestCounterargument":  "Policy uncertainty may dominate.",
+                   "whyNotBuy":  "Do not buy if evidence becomes stale.",
+                   "whatWouldChangeMyMind":  "A sourced negative catalyst.",
+                   "alternativesConsidered":  [
+                                                  "BBBQ",
+                                                  "CCCQ",
+                                                  "CASH"
+                                              ],
+                   "cashComparison":  "Expected utility is modestly above fictional cash.",
+                   "provenanceIds":  [
+                                         "prov-market-fictional",
+                                         "prov-policy-fictional"
+                                     ],
+                   "dataTimestamp":  "2026-01-05T13:56:00.000Z",
+                   "dataFreshness":  "fresh",
+                   "modelVersion":  "fictional-model-v1",
+                   "ruleVersion":  "fictional-rule-v1",
+                   "evidenceVersion":  "fictional-evidence-v1",
+                   "learningWeightVersion":  "baseline-v1",
+                   "generationMode":  "DETERMINISTIC",
+                   "validationStatus":  "VALID",
+                   "warnings":  [
+                                    "Experimental fictional record."
+                                ]
+               },
+    "committeeOpinions":  [
+                              {
+                                  "committeeOpinionId":  "op-fund",
+                                  "schemaVersion":  "autonomous-committee-opinion-v1",
+                                  "decisionRunId":  "run-001",
+                                  "symbol":  "AAAQ",
+                                  "horizon":  "1m",
+                                  "role":  "FUNDAMENTAL_ANALYST",
+                                  "disposition":  "SUPPORT",
+                                  "confidence":  "MEDIUM",
+                                  "confidenceReliability":  "MEDIUM",
+                                  "conviction":  60,
+                                  "evidenceIds":  [
+                                                      "ev-price-AAAQ"
+                                                  ],
+                                  "supportingPoints":  [
+                                                           "Fictional quality supports."
+                                                       ],
+                                  "opposingPoints":  [
+
+                                                     ],
+                                  "missingInformation":  [
+
+                                                         ],
+                                  "keyAssumptions":  [
+                                                         "Fictional assumption."
+                                                     ],
+                                  "principalRisk":  "Fictional valuation risk.",
+                                  "preferredAction":  "BUY",
+                                  "allocationView":  "Bounded.",
+                                  "whatWouldChangeOpinion":  "Negative sourced evidence.",
+                                  "validationStatus":  "VALID",
+                                  "generationMode":  "DETERMINISTIC",
+                                  "operatingSessionId":  "session-fictional-001"
+                              },
+                              {
+                                  "committeeOpinionId":  "op-tech",
+                                  "schemaVersion":  "autonomous-committee-opinion-v1",
+                                  "decisionRunId":  "run-001",
+                                  "symbol":  "AAAQ",
+                                  "horizon":  "1m",
+                                  "role":  "TECHNICAL_ANALYST",
+                                  "disposition":  "SUPPORT",
+                                  "confidence":  "HIGH",
+                                  "confidenceReliability":  "MEDIUM",
+                                  "conviction":  65,
+                                  "evidenceIds":  [
+                                                      "ev-price-AAAQ"
+                                                  ],
+                                  "supportingPoints":  [
+                                                           "Fictional trend supports."
+                                                       ],
+                                  "opposingPoints":  [
+
+                                                     ],
+                                  "missingInformation":  [
+
+                                                         ],
+                                  "keyAssumptions":  [
+
+                                                     ],
+                                  "principalRisk":  "Reversal.",
+                                  "preferredAction":  "BUY",
+                                  "allocationView":  "Moderate.",
+                                  "whatWouldChangeOpinion":  "Trend reversal.",
+                                  "validationStatus":  "VALID",
+                                  "generationMode":  "DETERMINISTIC",
+                                  "operatingSessionId":  "session-fictional-001"
+                              },
+                              {
+                                  "committeeOpinionId":  "op-event",
+                                  "schemaVersion":  "autonomous-committee-opinion-v1",
+                                  "decisionRunId":  "run-001",
+                                  "symbol":  "AAAQ",
+                                  "horizon":  "1m",
+                                  "role":  "EVENT_ANALYST",
+                                  "disposition":  "NEUTRAL",
+                                  "confidence":  "LOW",
+                                  "confidenceReliability":  "LOW",
+                                  "conviction":  40,
+                                  "evidenceIds":  [
+                                                      "ev-policy-AAAQ"
+                                                  ],
+                                  "supportingPoints":  [
+
+                                                       ],
+                                  "opposingPoints":  [
+                                                         "Fictional policy uncertainty."
+                                                     ],
+                                  "missingInformation":  [
+                                                             "Catalyst confirmation."
+                                                         ],
+                                  "keyAssumptions":  [
+
+                                                     ],
+                                  "principalRisk":  "Catalyst failure.",
+                                  "preferredAction":  "WATCH",
+                                  "allocationView":  "Small.",
+                                  "whatWouldChangeOpinion":  "Confirmed catalyst.",
+                                  "validationStatus":  "VALID_WITH_WARNINGS",
+                                  "generationMode":  "DETERMINISTIC",
+                                  "operatingSessionId":  "session-fictional-001"
+                              },
+                              {
+                                  "committeeOpinionId":  "op-risk",
+                                  "schemaVersion":  "autonomous-committee-opinion-v1",
+                                  "decisionRunId":  "run-001",
+                                  "symbol":  "AAAQ",
+                                  "horizon":  "1m",
+                                  "role":  "RISK_MANAGER",
+                                  "disposition":  "OPPOSE",
+                                  "confidence":  "MEDIUM",
+                                  "confidenceReliability":  "MEDIUM",
+                                  "conviction":  55,
+                                  "evidenceIds":  [
+                                                      "ev-policy-AAAQ"
+                                                  ],
+                                  "supportingPoints":  [
+
+                                                       ],
+                                  "opposingPoints":  [
+                                                         "Downside range is material."
+                                                     ],
+                                  "missingInformation":  [
+
+                                                         ],
+                                  "keyAssumptions":  [
+
+                                                     ],
+                                  "principalRisk":  "Downside.",
+                                  "preferredAction":  "DEFER",
+                                  "allocationView":  "Reduce.",
+                                  "whatWouldChangeOpinion":  "Lower downside.",
+                                  "validationStatus":  "VALID",
+                                  "generationMode":  "DETERMINISTIC",
+                                  "operatingSessionId":  "session-fictional-001"
+                              },
+                              {
+                                  "committeeOpinionId":  "op-portfolio",
+                                  "schemaVersion":  "autonomous-committee-opinion-v1",
+                                  "decisionRunId":  "run-001",
+                                  "symbol":  "AAAQ",
+                                  "horizon":  "1m",
+                                  "role":  "PORTFOLIO_MANAGER",
+                                  "disposition":  "SUPPORT",
+                                  "confidence":  "MEDIUM",
+                                  "confidenceReliability":  "MEDIUM",
+                                  "conviction":  58,
+                                  "evidenceIds":  [
+                                                      "ev-price-AAAQ"
+                                                  ],
+                                  "supportingPoints":  [
+                                                           "Diversification benefit."
+                                                       ],
+                                  "opposingPoints":  [
+                                                         "Cash remains competitive."
+                                                     ],
+                                  "missingInformation":  [
+
+                                                         ],
+                                  "keyAssumptions":  [
+
+                                                     ],
+                                  "principalRisk":  "Opportunity cost.",
+                                  "preferredAction":  "BUY",
+                                  "allocationView":  "Do not fully deploy.",
+                                  "whatWouldChangeOpinion":  "Stronger alternative.",
+                                  "validationStatus":  "VALID",
+                                  "generationMode":  "DETERMINISTIC",
+                                  "operatingSessionId":  "session-fictional-001"
+                              },
+                              {
+                                  "committeeOpinionId":  "op-chair",
+                                  "schemaVersion":  "autonomous-committee-opinion-v1",
+                                  "decisionRunId":  "run-001",
+                                  "symbol":  "AAAQ",
+                                  "horizon":  "1m",
+                                  "role":  "COMMITTEE_CHAIR",
+                                  "disposition":  "SUPPORT",
+                                  "confidence":  "MEDIUM",
+                                  "confidenceReliability":  "MEDIUM",
+                                  "conviction":  57,
+                                  "evidenceIds":  [
+                                                      "ev-price-AAAQ",
+                                                      "ev-policy-AAAQ"
+                                                  ],
+                                  "supportingPoints":  [
+                                                           "Support outweighs opposition."
+                                                       ],
+                                  "opposingPoints":  [
+                                                         "Risk manager opposes."
+                                                     ],
+                                  "missingInformation":  [
+
+                                                         ],
+                                  "keyAssumptions":  [
+
+                                                     ],
+                                  "principalRisk":  "Unresolved disagreement.",
+                                  "preferredAction":  "BUY",
+                                  "allocationView":  "Reduced allocation.",
+                                  "whatWouldChangeOpinion":  "New negative evidence.",
+                                  "validationStatus":  "VALID_WITH_WARNINGS",
+                                  "generationMode":  "DETERMINISTIC",
+                                  "operatingSessionId":  "session-fictional-001"
+                              }
+                          ],
+    "committeeDecision":  {
+                              "operatingSessionId":  "session-fictional-001",
+                              "committeeDecisionId":  "committee-decision-001",
+                              "schemaVersion":  "autonomous-committee-decision-v1",
+                              "decisionRunId":  "run-001",
+                              "symbol":  "AAAQ",
+                              "horizon":  "1m",
+                              "memberOpinionIds":  [
+                                                       "op-fund",
+                                                       "op-tech",
+                                                       "op-event",
+                                                       "op-risk",
+                                                       "op-portfolio",
+                                                       "op-chair"
+                                                   ],
+                              "agreementSummary":  "Fictional evidence supports a bounded position.",
+                              "disagreementSummary":  "Risk manager opposes.",
+                              "strongestSupportingView":  "Technical trend.",
+                              "strongestOpposingView":  "Downside concern.",
+                              "unresolvedDisputes":  [
+                                                         "Catalyst certainty."
+                                                     ],
+                              "chairDisposition":  "SUPPORT",
+                              "chairConfidence":  "MEDIUM",
+                              "chairConfidenceReliability":  "MEDIUM",
+                              "chairConviction":  57,
+                              "preferredAction":  "BUY",
+                              "proposedAllocationRange":  {
+                                                              "minimum":  200,
+                                                              "maximum":  350
+                                                          },
+                              "cashPreference":  "Retain cash reserve.",
+                              "rationaleSummary":  "Bounded synthesis.",
+                              "whatWouldReverseDecision":  "New sourced negative evidence.",
+                              "validationStatus":  "VALID_WITH_WARNINGS",
+                              "experimental":  true,
+                              "shadowOnly":  true,
+                              "productionApproved":  false,
+                              "reviewRequired":  true
+                          },
+    "candidateComparisons":  [
+                                 {
+                                     "comparisonId":  "cmp-1",
+                                     "schemaVersion":  "autonomous-candidate-comparison-v1",
+                                     "decisionRunId":  "run-001",
+                                     "horizon":  "1m",
+                                     "candidateSymbol":  "AAAQ",
+                                     "alternativeSymbol":  "BBBQ",
+                                     "cashIncluded":  false,
+                                     "candidateExpectedReturnRange":  {
+                                                                          "minimum":  2,
+                                                                          "maximum":  8
+                                                                      },
+                                     "alternativeExpectedReturnRange":  {
+                                                                            "minimum":  1,
+                                                                            "maximum":  6
+                                                                        },
+                                     "candidateExpectedDownsideRange":  {
+                                                                            "minimum":  -7,
+                                                                            "maximum":  -2
+                                                                        },
+                                     "alternativeExpectedDownsideRange":  {
+                                                                              "minimum":  -6,
+                                                                              "maximum":  -1
+                                                                          },
+                                     "candidateEvidenceQuality":  82,
+                                     "alternativeEvidenceQuality":  76,
+                                     "candidateConfidence":  "MEDIUM",
+                                     "alternativeConfidence":  "MEDIUM",
+                                     "candidateConfidenceReliability":  "MEDIUM",
+                                     "alternativeConfidenceReliability":  "LOW",
+                                     "candidateConviction":  62,
+                                     "alternativeConviction":  50,
+                                     "candidateLiquidity":  80,
+                                     "alternativeLiquidity":  70,
+                                     "candidateVolatility":  55,
+                                     "alternativeVolatility":  45,
+                                     "candidateRegimeFit":  60,
+                                     "alternativeRegimeFit":  58,
+                                     "candidatePortfolioFit":  70,
+                                     "alternativePortfolioFit":  62,
+                                     "candidateRiskAdjustedUtility":  1.2,
+                                     "alternativeRiskAdjustedUtility":  0.8,
+                                     "preferredOption":  "AAAQ",
+                                     "preferenceReasonCodes":  [
+                                                                   "BETTER_EVIDENCE"
+                                                               ],
+                                     "strongestReasonAgainstPreference":  "Higher volatility.",
+                                     "whatWouldReversePreference":  "Improved BBBQ evidence.",
+                                     "validationStatus":  "VALID",
+                                     "operatingSessionId":  "session-fictional-001"
+                                 },
+                                 {
+                                     "comparisonId":  "cmp-2",
+                                     "schemaVersion":  "autonomous-candidate-comparison-v1",
+                                     "decisionRunId":  "run-001",
+                                     "horizon":  "1m",
+                                     "candidateSymbol":  "AAAQ",
+                                     "alternativeSymbol":  "CCCQ",
+                                     "cashIncluded":  false,
+                                     "candidateExpectedReturnRange":  {
+                                                                          "minimum":  2,
+                                                                          "maximum":  8
+                                                                      },
+                                     "alternativeExpectedReturnRange":  {
+                                                                            "minimum":  0,
+                                                                            "maximum":  5
+                                                                        },
+                                     "candidateExpectedDownsideRange":  {
+                                                                            "minimum":  -7,
+                                                                            "maximum":  -2
+                                                                        },
+                                     "alternativeExpectedDownsideRange":  {
+                                                                              "minimum":  -4,
+                                                                              "maximum":  -1
+                                                                          },
+                                     "candidateEvidenceQuality":  82,
+                                     "alternativeEvidenceQuality":  65,
+                                     "candidateConfidence":  "MEDIUM",
+                                     "alternativeConfidence":  "LOW",
+                                     "candidateConfidenceReliability":  "MEDIUM",
+                                     "alternativeConfidenceReliability":  "LOW",
+                                     "candidateConviction":  62,
+                                     "alternativeConviction":  40,
+                                     "candidateLiquidity":  80,
+                                     "alternativeLiquidity":  75,
+                                     "candidateVolatility":  55,
+                                     "alternativeVolatility":  40,
+                                     "candidateRegimeFit":  60,
+                                     "alternativeRegimeFit":  55,
+                                     "candidatePortfolioFit":  70,
+                                     "alternativePortfolioFit":  65,
+                                     "candidateRiskAdjustedUtility":  1.2,
+                                     "alternativeRiskAdjustedUtility":  0.6,
+                                     "preferredOption":  "AAAQ",
+                                     "preferenceReasonCodes":  [
+                                                                   "BETTER_UTILITY"
+                                                               ],
+                                     "strongestReasonAgainstPreference":  "CCCQ downside is smaller.",
+                                     "whatWouldReversePreference":  "AAAQ catalyst failure.",
+                                     "validationStatus":  "VALID",
+                                     "operatingSessionId":  "session-fictional-001"
+                                 },
+                                 {
+                                     "comparisonId":  "cmp-cash",
+                                     "schemaVersion":  "autonomous-candidate-comparison-v1",
+                                     "decisionRunId":  "run-001",
+                                     "horizon":  "1m",
+                                     "candidateSymbol":  "AAAQ",
+                                     "alternativeSymbol":  "CASH",
+                                     "cashIncluded":  true,
+                                     "candidateExpectedReturnRange":  {
+                                                                          "minimum":  2,
+                                                                          "maximum":  8
+                                                                      },
+                                     "alternativeExpectedReturnRange":  {
+                                                                            "minimum":  0,
+                                                                            "maximum":  0
+                                                                        },
+                                     "candidateExpectedDownsideRange":  {
+                                                                            "minimum":  -7,
+                                                                            "maximum":  -2
+                                                                        },
+                                     "alternativeExpectedDownsideRange":  {
+                                                                              "minimum":  0,
+                                                                              "maximum":  0
+                                                                          },
+                                     "candidateEvidenceQuality":  82,
+                                     "alternativeEvidenceQuality":  100,
+                                     "candidateConfidence":  "MEDIUM",
+                                     "alternativeConfidence":  "HIGH",
+                                     "candidateConfidenceReliability":  "MEDIUM",
+                                     "alternativeConfidenceReliability":  "HIGH",
+                                     "candidateConviction":  62,
+                                     "alternativeConviction":  55,
+                                     "candidateLiquidity":  80,
+                                     "alternativeLiquidity":  100,
+                                     "candidateVolatility":  55,
+                                     "alternativeVolatility":  0,
+                                     "candidateRegimeFit":  60,
+                                     "alternativeRegimeFit":  100,
+                                     "candidatePortfolioFit":  70,
+                                     "alternativePortfolioFit":  100,
+                                     "candidateRiskAdjustedUtility":  1.2,
+                                     "alternativeRiskAdjustedUtility":  0.5,
+                                     "preferredOption":  "AAAQ",
+                                     "preferenceReasonCodes":  [
+                                                                   "POSITIVE_EXPECTED_UTILITY"
+                                                               ],
+                                     "strongestReasonAgainstPreference":  "Cash has no modeled downside.",
+                                     "whatWouldReversePreference":  "Lower evidence quality.",
+                                     "validationStatus":  "VALID",
+                                     "operatingSessionId":  "session-fictional-001"
+                                 }
+                             ],
+    "opportunityCost":  {
+                            "operatingSessionId":  "session-fictional-001",
+                            "opportunityCostId":  "oc-001",
+                            "schemaVersion":  "autonomous-opportunity-cost-v1",
+                            "selectedSymbol":  "AAAQ",
+                            "rejectedAlternative":  "BBBQ",
+                            "cashAlternative":  true,
+                            "capitalAmount":  1000,
+                            "selectedAllocation":  300,
+                            "estimatedForegoneReturnRange":  {
+                                                                 "minimum":  0,
+                                                                 "maximum":  3
+                                                             },
+                            "estimatedAvoidedDownsideRange":  {
+                                                                  "minimum":  0,
+                                                                  "maximum":  2
+                                                              },
+                            "diversificationEffect":  "Improves fictional diversification.",
+                            "concentrationEffect":  "Within limit.",
+                            "liquidityEffect":  "Acceptable.",
+                            "transactionCostDifference":  0,
+                            "reasonSelected":  "Higher referenced utility.",
+                            "uncertainty":  38,
+                            "validationStatus":  "VALID"
+                        },
+    "portfolioDecision":  {
+                              "operatingSessionId":  "session-fictional-001",
+                              "investmentMandateId":  "mandate-fictional-001",
+                              "decisionRunId":  "run-001",
+                              "schemaVersion":  "autonomous-portfolio-decision-v1",
+                              "experimental":  true,
+                              "shadowOnly":  true,
+                              "productionApproved":  false,
+                              "reviewRequired":  true,
+                              "parameterSetId":  "fictional-parameters-001",
+                              "inputSnapshotId":  "input-snapshot-001",
+                              "createdAt":  "2026-01-05T14:00:00.000Z",
+                              "horizon":  "1m",
+                              "status":  "BUY",
+                              "positions":  [
+                                                {
+                                                    "symbol":  "AAAQ",
+                                                    "action":  "BUY",
+                                                    "existingPositionAction":  "HOLD",
+                                                    "price":  25,
+                                                    "priceTimestamp":  "2026-01-05T13:56:00.000Z",
+                                                    "shares":  12,
+                                                    "shareMode":  "fractional",
+                                                    "dollarAllocation":  300,
+                                                    "portfolioPercent":  30,
+                                                    "maximumLossAmount":  30,
+                                                    "thesisId":  "thesis-AAAQ-001",
+                                                    "committeeDecisionId":  "committee-decision-001",
+                                                    "challengerDisposition":  "REDUCE_ALLOCATION",
+                                                    "opportunityCostId":  "oc-001",
+                                                    "warnings":  [
+
+                                                                 ]
+                                                },
+                                                {
+                                                    "symbol":  "BBBQ",
+                                                    "action":  "BUY",
+                                                    "existingPositionAction":  "HOLD",
+                                                    "price":  20,
+                                                    "priceTimestamp":  "2026-01-05T13:56:00.000Z",
+                                                    "shares":  15,
+                                                    "shareMode":  "fractional",
+                                                    "dollarAllocation":  300,
+                                                    "portfolioPercent":  30,
+                                                    "maximumLossAmount":  25,
+                                                    "thesisId":  "thesis-BBBQ-001",
+                                                    "committeeDecisionId":  "committee-decision-BBBQ",
+                                                    "challengerDisposition":  "APPROVE",
+                                                    "opportunityCostId":  "oc-BBBQ",
+                                                    "warnings":  [
+
+                                                                 ]
+                                                }
+                                            ],
+                              "retainedCash":  400,
+                              "retainedCashPercent":  40,
+                              "rejectedCandidates":  [
+                                                         "CCCQ"
+                                                     ],
+                              "deferredCandidates":  [
+
+                                                     ],
+                              "noTradeReason":  null,
+                              "portfolioConstraints":  {
+                                                           "maximumPositions":  4
+                                                       },
+                              "concentrationDiagnostics":  [
+
+                                                           ],
+                              "opportunityCosts":  [
+                                                       "oc-001"
+                                                   ],
+                              "expectedPortfolioReturnRange":  {
+                                                                   "minimum":  1,
+                                                                   "maximum":  6
+                                                               },
+                              "expectedPortfolioDownsideRange":  {
+                                                                     "minimum":  -5,
+                                                                     "maximum":  -1
+                                                                 },
+                              "confidence":  "MEDIUM",
+                              "confidenceReliability":  "MEDIUM",
+                              "conviction":  58,
+                              "uncertainty":  42,
+                              "transactionCostEstimate":  0.6,
+                              "warnings":  [
+                                               "Experimental fictional portfolio."
+                                           ],
+                              "validationStatus":  "VALID"
+                          },
+    "challenger":  {
+                       "operatingSessionId":  "session-fictional-001",
+                       "challengerResultId":  "challenger-001",
+                       "schemaVersion":  "autonomous-challenger-v1",
+                       "decisionRunId":  "run-001",
+                       "reviewedThesisIds":  [
+                                                 "thesis-AAAQ-001"
+                                             ],
+                       "reviewedCommitteeDecisionIds":  [
+                                                            "committee-decision-001"
+                                                        ],
+                       "reviewedPortfolioDecisionId":  "run-001",
+                       "disposition":  "REDUCE_ALLOCATION",
+                       "reasonCodes":  [
+                                           "POLICY_UNCERTAINTY"
+                                       ],
+                       "unsupportedAssumptions":  [
+
+                                                  ],
+                       "omittedContradictions":  [
+
+                                                 ],
+                       "confidenceConcerns":  [
+                                                  "Moderate calibration."
+                                              ],
+                       "confidenceReliabilityConcerns":  [
+
+                                                         ],
+                       "convictionConcerns":  [
+
+                                              ],
+                       "singleSignalDependencies":  [
+
+                                                    ],
+                       "plausibilityConcerns":  [
+
+                                                ],
+                       "liquidityConcerns":  [
+
+                                             ],
+                       "concentrationConcerns":  [
+
+                                                 ],
+                       "regimeConcerns":  [
+
+                                          ],
+                       "staleEvidenceConcerns":  [
+
+                                                 ],
+                       "fallbackEvidenceConcerns":  [
+
+                                                    ],
+                       "priorFailureSimilarities":  [
+
+                                                    ],
+                       "cashAlternativeAssessment":  "Retain more cash.",
+                       "strongerRejectedAlternative":  null,
+                       "beforeState":  {
+                                           "confidence":  60,
+                                           "confidenceReliabilityScore":  60,
+                                           "conviction":  62,
+                                           "allocation":  350
+                                       },
+                       "afterState":  {
+                                          "confidence":  55,
+                                          "confidenceReliabilityScore":  60,
+                                          "conviction":  57,
+                                          "allocation":  300
+                                      },
+                       "unresolvedConcerns":  [
+                                                  "Catalyst uncertainty."
+                                              ],
+                       "validationStatus":  "VALID_WITH_WARNINGS"
+                   },
+    "outcomes":  [
+                     {
+                         "outcomeId":  "outcome-unresolved",
+                         "schemaVersion":  "autonomous-outcome-v1",
+                         "decisionRunId":  "run-001",
+                         "thesisId":  "thesis-AAAQ-001",
+                         "symbol":  "AAAQ",
+                         "horizon":  "1m",
+                         "decisionTimestamp":  "2026-01-05T14:00:00.000Z",
+                         "evaluationDeadline":  "2026-02-05T14:00:00.000Z",
+                         "evaluationTimestamp":  null,
+                         "state":  "UNRESOLVED",
+                         "entryPrice":  25,
+                         "exitPrice":  null,
+                         "benchmarkSymbol":  "FIDX",
+                         "benchmarkEntryPrice":  100,
+                         "benchmarkExitPrice":  null,
+                         "rawReturn":  null,
+                         "netReturn":  null,
+                         "benchmarkReturn":  null,
+                         "benchmarkRelativeReturn":  null,
+                         "maximumFavorableExcursion":  null,
+                         "maximumAdverseExcursion":  null,
+                         "volatility":  null,
+                         "drawdown":  null,
+                         "slippageEstimate":  0.1,
+                         "transactionCostEstimate":  0.3,
+                         "expectedReturnRange":  {
+                                                     "minimum":  2,
+                                                     "maximum":  8
+                                                 },
+                         "expectedDownsideRange":  {
+                                                       "minimum":  -7,
+                                                       "maximum":  -2
+                                                   },
+                         "catalystOccurred":  null,
+                         "invalidationOccurred":  null,
+                         "thesisAssessment":  null,
+                         "timingAssessment":  null,
+                         "allocationAssessment":  null,
+                         "confidenceCalibrationAssessment":  null,
+                         "confidenceReliabilityAssessment":  null,
+                         "unresolvedMetrics":  [
+                                                   "all outcome metrics"
+                                               ],
+                         "sourceTimestamps":  [
+
+                                              ],
+                         "validationStatus":  "INCOMPLETE",
+                         "operatingSessionId":  "session-fictional-001"
+                     },
+                     {
+                         "outcomeId":  "outcome-resolved",
+                         "schemaVersion":  "autonomous-outcome-v1",
+                         "decisionRunId":  "run-old",
+                         "thesisId":  "thesis-old",
+                         "symbol":  "DDDQ",
+                         "horizon":  "7d",
+                         "decisionTimestamp":  "2025-12-01T14:00:00.000Z",
+                         "evaluationDeadline":  "2025-12-10T14:00:00.000Z",
+                         "evaluationTimestamp":  "2025-12-10T14:00:00.000Z",
+                         "state":  "RESOLVED",
+                         "entryPrice":  10,
+                         "exitPrice":  10.5,
+                         "benchmarkSymbol":  "FIDX",
+                         "benchmarkEntryPrice":  100,
+                         "benchmarkExitPrice":  101,
+                         "rawReturn":  5,
+                         "netReturn":  4.8,
+                         "benchmarkReturn":  1,
+                         "benchmarkRelativeReturn":  3.8,
+                         "maximumFavorableExcursion":  7,
+                         "maximumAdverseExcursion":  -2,
+                         "volatility":  1.5,
+                         "drawdown":  -2,
+                         "slippageEstimate":  0.1,
+                         "transactionCostEstimate":  0.1,
+                         "expectedReturnRange":  {
+                                                     "minimum":  2,
+                                                     "maximum":  6
+                                                 },
+                         "expectedDownsideRange":  {
+                                                       "minimum":  -4,
+                                                       "maximum":  -1
+                                                   },
+                         "catalystOccurred":  true,
+                         "invalidationOccurred":  false,
+                         "thesisAssessment":  "SUPPORTED",
+                         "timingAssessment":  "GOOD",
+                         "allocationAssessment":  "APPROPRIATE",
+                         "confidenceCalibrationAssessment":  "CALIBRATED",
+                         "confidenceReliabilityAssessment":  "LIMITED_SAMPLE",
+                         "unresolvedMetrics":  [
+
+                                               ],
+                         "sourceTimestamps":  [
+                                                  "2025-12-10T14:00:00.000Z"
+                                              ],
+                         "validationStatus":  "VALID",
+                         "operatingSessionId":  "session-fictional-001"
+                     }
+                 ],
+    "replay":  {
+                   "operatingSessionId":  "session-fictional-001",
+                   "investmentMandateId":  "mandate-fictional-001",
+                   "replayId":  "replay-001",
+                   "schemaVersion":  "autonomous-decision-replay-v1",
+                   "decisionRunId":  "run-001",
+                   "originalDecisionTimestamp":  "2026-01-05T14:00:00.000Z",
+                   "replayGeneratedAt":  "2026-02-06T14:00:00.000Z",
+                   "originalParameters":  {
+                                              "parameterSetId":  "fictional-parameters-001"
+                                          },
+                   "originalEvidenceSummary":  {
+                                                   "evidenceSummaryId":  "evidence-summary-AAAQ",
+                                                   "decisionTimestamp":  "2026-01-05T14:00:00.000Z"
+                                               },
+                   "originalThesis":  {
+                                          "thesisId":  "thesis-AAAQ-001"
+                                      },
+                   "originalCommitteeOpinions":  [
+                                                     "op-fund",
+                                                     "op-tech",
+                                                     "op-event",
+                                                     "op-risk",
+                                                     "op-portfolio",
+                                                     "op-chair"
+                                                 ],
+                   "originalCommitteeDecision":  {
+                                                     "committeeDecisionId":  "committee-decision-001"
+                                                 },
+                   "originalCandidateComparisons":  [
+                                                        "cmp-1",
+                                                        "cmp-2",
+                                                        "cmp-cash"
+                                                    ],
+                   "originalOpportunityCosts":  [
+                                                    "oc-001"
+                                                ],
+                   "originalPortfolioDecision":  {
+                                                     "decisionRunId":  "run-001"
+                                                 },
+                   "originalChallengerResult":  {
+                                                    "challengerResultId":  "challenger-001"
+                                                },
+                   "observedOutcomeIds":  [
+                                              "outcome-unresolved"
+                                          ],
+                   "assumptionsConfirmed":  [
+
+                                            ],
+                   "assumptionsRejected":  [
+
+                                           ],
+                   "evidenceThatChanged":  [
+
+                                           ],
+                   "mistakesIdentified":  [
+
+                                          ],
+                   "strengthsIdentified":  [
+                                               "Cash retained."
+                                           ],
+                   "hindsightWarning":  "Later information must not be inserted into the original record.",
+                   "decisionUsingOriginalInformation":  "Original experimental decision retained.",
+                   "decisionUsingCurrentInformation":  "Current reassessment is separate.",
+                   "whatTheEngineWouldDoDifferently":  "Await outcome.",
+                   "boundedLearningReferences":  [
+
+                                                 ],
+                   "validationStatus":  "VALID"
+               },
+    "mistakeMemory":  {
+                          "operatingSessionIds":  [
+                                                      "session-fictional-001"
+                                                  ],
+                          "mistakeMemoryId":  "mistake-001",
+                          "schemaVersion":  "autonomous-mistake-memory-v1",
+                          "createdAt":  "2026-02-01T14:00:00.000Z",
+                          "updatedAt":  "2026-02-05T14:00:00.000Z",
+                          "status":  "OBSERVING",
+                          "mistakeCategory":  "OVERWEIGHTED_MOMENTUM",
+                          "affectedHorizons":  [
+                                                   "7d"
+                                               ],
+                          "affectedSectors":  [
+                                                  "fictional technology"
+                                              ],
+                          "affectedRegimes":  [
+                                                  "mixed"
+                                              ],
+                          "affectedEvidenceTypes":  [
+                                                        "market"
+                                                    ],
+                          "affectedSignals":  [
+                                                  "momentum"
+                                              ],
+                          "associatedDecisionRunIds":  [
+                                                           "run-old-1",
+                                                           "run-old-2"
+                                                       ],
+                          "independentObservationCount":  2,
+                          "recurringPattern":  "Fictional momentum weakened twice.",
+                          "exampleSummaries":  [
+                                                   "Fictional example one.",
+                                                   "Fictional example two."
+                                               ],
+                          "suspectedCause":  "Momentum dominated downside.",
+                          "measuredImpact":  {
+                                                 "averageReturnDifference":  -1
+                                             },
+                          "confidence":  "LOW",
+                          "confidenceReliability":  "LOW",
+                          "correctiveProposal":  "Observe additional independent outcomes.",
+                          "productionAction":  "NONE",
+                          "reviewRequired":  true,
+                          "validationWarnings":  [
+                                                     "Insufficient for production action."
+                                                 ]
+                      },
+    "learningProposal":  {
+                             "operatingSessionIds":  [
+                                                         "session-fictional-001"
+                                                     ],
+                             "proposalId":  "learning-001",
+                             "schemaVersion":  "autonomous-learning-proposal-v1",
+                             "createdAt":  "2026-06-01T14:00:00.000Z",
+                             "recommendation":  "CONTINUE_OBSERVING",
+                             "baselineVersion":  "baseline-v1",
+                             "proposedVersion":  "proposal-v1",
+                             "trainingWindow":  {
+                                                    "start":  "2025-01-01T00:00:00.000Z",
+                                                    "end":  "2025-09-30T23:59:59.000Z"
+                                                },
+                             "evaluationWindow":  {
+                                                      "start":  "2025-11-01T00:00:00.000Z",
+                                                      "end":  "2026-03-31T23:59:59.000Z"
+                                                  },
+                             "embargoWindow":  {
+                                                   "start":  "2025-10-01T00:00:00.000Z",
+                                                   "end":  "2025-10-31T23:59:59.000Z"
+                                               },
+                             "independentSampleCount":  120,
+                             "affectedParameters":  [
+                                                        "momentumWeight"
+                                                    ],
+                             "boundedAdjustments":  {
+                                                        "momentumWeight":  -0.02
+                                                    },
+                             "maximumAdjustmentPerParameter":  0.05,
+                             "totalAdjustmentBudget":  0.2,
+                             "baselineMetrics":  {
+                                                     "riskAdjustedReturn":  1
+                                                 },
+                             "proposalMetrics":  {
+                                                     "riskAdjustedReturn":  1.02
+                                                 },
+                             "riskAdjustedComparison":  "Marginal fictional improvement.",
+                             "drawdownComparison":  "No material change.",
+                             "turnoverComparison":  "No material change.",
+                             "stabilityAcrossWindows":  "Not yet sufficient.",
+                             "concentrationWarnings":  [
+
+                                                       ],
+                             "mistakeMemoryIds":  [
+                                                      "mistake-001"
+                                                  ],
+                             "validationWarnings":  [
+                                                        "Forward evidence remains limited."
+                                                    ],
+                             "rollbackTarget":  "baseline-v1",
+                             "productionEligible":  false,
+                             "reviewRequired":  true,
+                             "automaticActivationAllowed":  false,
+                             "validationStatus":  "VALID_WITH_WARNINGS"
+                         }
+}

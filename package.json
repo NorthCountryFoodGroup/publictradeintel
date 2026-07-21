@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "PublicTradeIntel market, congressional trade, and policy catalyst intelligence app.",
+  "engines": {
+    "node": ">=24.18.0 <25"
+  },
   "scripts": {
     "start": "node server.js",
     "smoke:discovery:api-contract": "node scripts/smoke-test-discovery-api-contract.js",
@@ -43,6 +46,9 @@
     "smoke:symbol-snapshot-loading": "node scripts/smoke-test-symbol-snapshot-loading.js",
     "smoke:symbol-source-resolution": "node scripts/smoke-test-symbol-universe-source-resolution.js",
     "smoke:packaged-symbol-first-run": "node scripts/smoke-test-packaged-symbol-first-run.js",
+    "smoke:autonomous-decision-schema": "node scripts/smoke-test-autonomous-decision-schema.js",
+    "smoke:autonomous-decision-compatibility": "node scripts/smoke-test-autonomous-decision-compatibility.js",
+    "smoke:production-beta": "node scripts/smoke-test-production-beta.js",
     "smoke:production-universe-count": "node scripts/smoke-test-production-universe-count.js",
     "smoke:market-closed-mode": "node scripts/smoke-test-market-closed-mode.js",
     "smoke:universe-reload": "node scripts/smoke-test-universe-reload.js",

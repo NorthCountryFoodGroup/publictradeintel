@@ -2,6 +2,16 @@ const http = require("http");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { loadFeatureFlags } = require("./config/feature-flags");
+const {
+  SlidingWindowLimiter,
+  boundedInteger,
+  clientIp,
+  constantTimeEqual,
+} = require("./lib/security");
+const {
+  validateDataDirectory,
+} = require("./lib/json-store");
 const {
   DEFAULT_BUCKET_SETTINGS,
   DEFAULT_V3_DISCOVERY_SETTINGS,
@@ -33,6 +43,8 @@ const {
 } = require("./discovery/readiness-history");
 
 const PORT = Number(process.env.PORT || 3000);
+const PRODUCTION = process.env.NODE_ENV === "production";
+const FEATURE_FLAGS = loadFeatureFlags(process.env);
 const ADMIN_PIN = process.env.ADMIN_PIN || "";
 const LOGIN_PIN = process.env.LOGIN_PIN || ADMIN_PIN;
 const PORTFOLIO_PIN = process.env.PORTFOLIO_PIN || ADMIN_PIN;
@@ -41,6 +53,15 @@ const CONFIGURED_DATA_DIR = String(process.env.DATA_DIR || "").trim();
 const DATA_DIR = CONFIGURED_DATA_DIR
   ? path.resolve(CONFIGURED_DATA_DIR)
   : path.join(__dirname, "data");
+const storageStatus = PRODUCTION
+  ? validateDataDirectory(DATA_DIR, { production: true, configured: Boolean(CONFIGURED_DATA_DIR) })
+  : { healthy: true };
+if (PRODUCTION) {
+  const configuredPins = [LOGIN_PIN, ADMIN_PIN, PORTFOLIO_PIN];
+  if (configuredPins.some((pin) => String(pin).length < 12) || new Set(configuredPins).size !== configuredPins.length) {
+    throw new Error("Production LOGIN_PIN, ADMIN_PIN, and PORTFOLIO_PIN must be strong and distinct.");
+  }
+}
 const DISCOVERY_READINESS_HISTORY_FILE = path.join(DATA_DIR, DISCOVERY_READINESS_HISTORY_FILENAME);
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");
@@ -61,6 +82,16 @@ const CONGRESS_REFRESH_MS = Number(process.env.CONGRESS_REFRESH_MS || 60 * 60 * 
 const PREDICTION_REFRESH_MS = Number(process.env.PREDICTION_REFRESH_MS || 60 * 60 * 1000);
 const SESSION_COOKIE = "pti_session";
 const sessions = new Map();
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const LOGIN_RATE_LIMIT_WINDOW_MS = boundedInteger(process.env.LOGIN_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = boundedInteger(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS, 5, 1, 100);
+const LOGIN_RATE_LIMIT_LOCKOUT_MS = boundedInteger(process.env.LOGIN_RATE_LIMIT_LOCKOUT_MS, 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
+const REQUEST_BODY_MAX_BYTES = boundedInteger(process.env.REQUEST_BODY_MAX_BYTES, 256 * 1024, 1024, 1024 * 1024);
+const loginLimiter = new SlidingWindowLimiter({
+  windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+  maximumAttempts: LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+  lockoutMs: LOGIN_RATE_LIMIT_LOCKOUT_MS,
+});
 const BROAD_SCREEN_TARGET = 2500;
 const DEEP_ANALYSIS_MARKET_HOURS_TARGET = 300;
 const DEEP_ANALYSIS_AFTER_HOURS_TARGET = 600;
@@ -245,7 +276,10 @@ function sendJson(response, status, body) {
 
 function publicErrorMessage(error, fallback = "Request failed.") {
   const message = String(error?.message || fallback);
-  const redacted = MARKET_API_KEY ? message.replaceAll(MARKET_API_KEY, "[redacted]") : message;
+  const redacted = [MARKET_API_KEY, CONGRESS_TRADES_API_KEY, LOGIN_PIN, ADMIN_PIN, PORTFOLIO_PIN]
+    .filter(Boolean)
+    .reduce((value, secret) => value.replaceAll(secret, "[redacted]"), message)
+    .replace(/[A-Za-z]:\\[^\s]+|\/(?:[^/\s]+\/)+[^/\s]+/g, "[path]");
   if (/apikey|api key|premium endpoint|rate limit|frequency|alpha vantage/i.test(redacted)) {
     return fallback;
   }
@@ -265,7 +299,7 @@ function collectBody(request) {
     let body = "";
     request.on("data", (chunk) => {
       body += chunk;
-      if (body.length > 1_000_000) {
+      if (Buffer.byteLength(body, "utf8") > REQUEST_BODY_MAX_BYTES) {
         reject(new Error("Request body too large"));
         request.destroy();
       }
@@ -276,11 +310,11 @@ function collectBody(request) {
 }
 
 function isAdmin(request) {
-  return Boolean(ADMIN_PIN && request.headers["x-admin-pin"] === ADMIN_PIN);
+  return Boolean(ADMIN_PIN && constantTimeEqual(request.headers["x-admin-pin"], ADMIN_PIN));
 }
 
 function isPortfolioOwner(request) {
-  return Boolean(PORTFOLIO_PIN && request.headers["x-portfolio-pin"] === PORTFOLIO_PIN);
+  return Boolean(PORTFOLIO_PIN && constantTimeEqual(request.headers["x-portfolio-pin"], PORTFOLIO_PIN));
 }
 
 function parseCookies(request) {
@@ -298,13 +332,34 @@ function parseCookies(request) {
 
 function isLoggedIn(request) {
   const token = parseCookies(request)[SESSION_COOKIE];
-  return Boolean(token && sessions.has(token));
+  const session = token ? sessions.get(token) : null;
+  if (!session) return false;
+  if (session.expiresAt <= Date.now()) {
+    sessions.delete(token);
+    return false;
+  }
+  return true;
 }
 
-function createSession(response) {
+function cleanupSessions(maximumChecks = 100) {
+  const now = Date.now();
+  let checked = 0;
+  for (const [token, session] of sessions) {
+    if (checked >= maximumChecks) break;
+    if (session.expiresAt <= now) sessions.delete(token);
+    checked += 1;
+  }
+}
+
+function createSession(request, response) {
+  cleanupSessions();
+  const previous = parseCookies(request)[SESSION_COOKIE];
+  if (previous) sessions.delete(previous);
   const token = crypto.randomBytes(32).toString("hex");
-  sessions.set(token, { createdAt: Date.now() });
-  response.setHeader("Set-Cookie", `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`);
+  const issuedAt = Date.now();
+  sessions.set(token, { issuedAt, expiresAt: issuedAt + SESSION_DURATION_MS });
+  const secure = PRODUCTION ? "; Secure" : "";
+  response.setHeader("Set-Cookie", `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800${secure}`);
 }
 
 function clearSession(request, response) {
@@ -5055,7 +5110,6 @@ function buildPredictionEngineHealth({ predictions, sections, warnings, updatedA
   const engineFailureReasons = [
     !updatedAt ? "Scan aborted before completion." : "",
     !predictions.length ? "Prediction generation failed." : "",
-    predictions.length > 0 && predictions.length < 25 ? "Less than 25 predictions generated." : "",
     structuralFailedTickers.length ? "One or more predictions is missing required generated fields." : "",
     !rankingChecks.noDuplicateTickerInSameTop25 ? "Duplicate ticker found in a Top 25 timeframe." : "",
     !rankingChecks.noVeryHighConfidenceMixedDirection ? "Very-high confidence pick has mixed direction." : "",
@@ -5497,6 +5551,9 @@ async function refreshPredictions(options = {}) {
   await ensureSymbolUniverseForScan();
   const rawConfig = options.config || readJson(CONFIG_FILE, {});
   const config = sanitizeConfig(rawConfig);
+  if (!FEATURE_FLAGS.v3ShadowEnabled) {
+    config.discoverySettings.discoveryShadowComparisonEnabled = false;
+  }
   const policySignals = options.policySignals || readJson(POLICY_FILE, { updatedAt: null, signals: [], errors: [] });
   const warnings = Array.isArray(options.warnings) ? [...options.warnings] : [];
   const scanStartedAt = options.scanStartedAt || new Date().toISOString();
@@ -5822,6 +5879,9 @@ async function runPredictionScanInternal() {
   const stageDurations = {};
   const warnings = [];
   let config = sanitizeConfig(readJson(CONFIG_FILE, {}));
+  if (!FEATURE_FLAGS.v3ShadowEnabled) {
+    config.discoverySettings.discoveryShadowComparisonEnabled = false;
+  }
   const universeLoadStartedAt = Date.now();
   const tickers = uniqueTickers(config);
   stageDurations.universeLoadDuration = elapsedMs(universeLoadStartedAt);
@@ -6092,17 +6152,31 @@ function summarizeEvents() {
 }
 
 async function handleApi(request, response, pathname) {
+  if (pathname.startsWith("/api/decision-lab")) {
+    sendJson(response, 404, { error: FEATURE_FLAGS.decisionLabEnabled ? "Not found" : "Feature unavailable" });
+    return;
+  }
+
   if (request.method === "POST" && pathname === "/api/login") {
+    const limiterKey = clientIp(request);
+    const limit = loginLimiter.check(limiterKey);
+    if (!limit.allowed) {
+      response.setHeader("Retry-After", String(Math.max(1, Math.ceil(limit.retryAfterMs / 1000))));
+      sendJson(response, 429, { error: "Login temporarily unavailable. Try again later." });
+      return;
+    }
     const body = await collectBody(request);
     if (!LOGIN_PIN) {
       sendJson(response, 503, { error: "Login is not configured." });
       return;
     }
-    if (String(body.pin || "") !== LOGIN_PIN) {
+    if (!constantTimeEqual(body.pin, LOGIN_PIN)) {
+      loginLimiter.recordFailure(limiterKey);
       sendJson(response, 401, { error: "Invalid login" });
       return;
     }
-    createSession(response);
+    loginLimiter.reset(limiterKey);
+    createSession(request, response);
     sendJson(response, 200, { ok: true });
     return;
   }
@@ -6144,19 +6218,18 @@ async function handleApi(request, response, pathname) {
   }
 
   if (request.method === "GET" && pathname === "/api/predictions") {
-    try {
-      const saved = readJson(PREDICTIONS_FILE, null);
-      sendJson(response, 200, saved && Array.isArray(saved.predictions) && saved.predictions.length ? saved : await runPredictionScan());
-    } catch (error) {
-      sendJson(response, 500, {
-        error: error.code === "NO_WATCHLIST_TICKERS" ? "No watchlist tickers found" : error.code === "DATABASE_WRITE_FAILED" ? "Database write failed" : "Prediction scan failed",
-        detail: publicErrorMessage(error, "Prediction scan failed."),
-      });
-    }
+    const saved = readJson(PREDICTIONS_FILE, null);
+    sendJson(response, 200, saved && Array.isArray(saved.predictions)
+      ? saved
+      : { updatedAt: null, predictions: [], sections: {}, status: "not_generated" });
     return;
   }
 
   if (request.method === "POST" && pathname === "/api/predictions/scan") {
+    if (activePredictionScan) {
+      sendJson(response, 429, { error: "Prediction scan already in progress", status: "busy" });
+      return;
+    }
     try {
       sendJson(response, 200, await runPredictionScan());
     } catch (error) {
@@ -6358,10 +6431,10 @@ async function handleApi(request, response, pathname) {
         imported: 0,
         totalTrades: (readJson(CONFIG_FILE, {}).congressTrades || []).length,
         source: CONGRESS_TRADES_FEED_URL || null,
-        error: error.message,
+        error: publicErrorMessage(error, "Congressional feed refresh failed."),
       };
       writeJson(CONGRESS_FEED_STATUS_FILE, status);
-      sendJson(response, 400, { status, error: error.message });
+      sendJson(response, 400, { status, error: publicErrorMessage(error, "Congressional feed refresh failed.") });
     }
     return;
   }
@@ -6396,6 +6469,22 @@ function serveFile(response, pathname) {
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
   const publicFiles = new Set(["/login.html", "/styles.css", "/icon.svg"]);
+
+  if (request.method === "GET" && url.pathname === "/healthz") {
+    sendJson(response, 200, {
+      status: "healthy",
+      serverTime: new Date().toISOString(),
+      uptime: Math.floor(process.uptime()),
+      persistence: storageStatus.healthy ? "healthy" : "unhealthy",
+    });
+    return;
+  }
+
+  if (url.pathname === "/decision-lab" || url.pathname.startsWith("/decision-lab/")) {
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Not found");
+    return;
+  }
 
   if (url.pathname.startsWith("/api/")) {
     handleApi(request, response, url.pathname).catch((error) => {

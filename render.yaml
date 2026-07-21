@@ -5,7 +5,23 @@ services:
     plan: starter
     buildCommand: "npm install"
     startCommand: "node server.js"
+    healthCheckPath: /healthz
+    numInstances: 1
+    disk:
+      name: publictradeintel-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
+      - key: NODE_ENV
+        value: "production"
+      - key: DATA_DIR
+        value: "/var/data"
+      - key: DECISION_LAB_ENABLED
+        value: "false"
+      - key: V3_SHADOW_ENABLED
+        value: "false"
+      - key: PRODUCTION_ORDER_EXECUTION_ENABLED
+        value: "false"
       - key: ADMIN_PIN
         sync: false
       - key: LOGIN_PIN

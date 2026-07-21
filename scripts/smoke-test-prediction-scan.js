@@ -1,10 +1,11 @@
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const dataDir = path.join(root, "data");
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "pti-prediction-smoke-"));
 const configFile = path.join(dataDir, "config.json");
 const predictionsFile = path.join(dataDir, "predictions.json");
 const port = Number(process.env.SMOKE_PORT || 3219);
@@ -117,7 +118,15 @@ function testConfig() {
 
 function assertPredictionShape(result) {
   assert.ok(Array.isArray(result.predictions), "scan returns predictions array");
-  assert.ok(result.predictions.length >= 25, "scan returns enough predictions for Top 25 lists");
+  assert.ok(result.predictions.length > 0, "scan returns at least one qualified prediction");
+  result.predictions.forEach((prediction) => {
+    assert.ok(prediction.ticker, "every prediction has a ticker");
+    assert.ok(Number.isFinite(Number(prediction.oneDayScore)), `${prediction.ticker} has a valid 1-day score`);
+    assert.ok(Number.isFinite(Number(prediction.sevenDayScore)), `${prediction.ticker} has a valid 7-day score`);
+    assert.ok(Number.isFinite(Number(prediction.thirtyDayScore)), `${prediction.ticker} has a valid 1-month score`);
+    assert.ok(Number.isFinite(Number(prediction.oneYearScore)), `${prediction.ticker} has a valid 1-year score`);
+    assert.ok(["good", "partial", "stale", "failed"].includes(prediction.dataQualityStatus), `${prediction.ticker} has a recognized data-quality status`);
+  });
   const first = result.predictions[0];
   assert.ok(first.ticker, "prediction has ticker");
   assert.ok(Number.isFinite(Number(first.oneDayScore)), "prediction has 1-day score");
@@ -141,13 +150,23 @@ function assertPredictionShape(result) {
   assert.ok(Array.isArray(result.sections?.top25SevenDay), "has Top 25 7-day section");
   assert.ok(Array.isArray(result.sections?.top25OneMonth), "has Top 25 1-month section");
   assert.ok(Array.isArray(result.sections?.top25OneYear), "has Top 25 1-year section");
-  assert.equal(result.sections.top25OneDay.length, 25, "1-day Top 25 has 25 records");
-  assert.equal(result.sections.top25SevenDay.length, 25, "7-day Top 25 has 25 records");
-  assert.equal(result.sections.top25OneMonth.length, 25, "1-month Top 25 has 25 records");
-  assert.equal(result.sections.top25OneYear.length, 25, "1-year Top 25 has 25 records");
+  for (const [key, rows] of Object.entries({
+    top25OneDay: result.sections.top25OneDay,
+    top25SevenDay: result.sections.top25SevenDay,
+    top25OneMonth: result.sections.top25OneMonth,
+    top25OneYear: result.sections.top25OneYear,
+  })) {
+    assert.ok(rows.length >= 0 && rows.length <= 25, `${key} contains at most 25 qualified records`);
+    assert.equal(new Set(rows.map((item) => item.ticker)).size, rows.length, `${key} contains no duplicate symbols`);
+    rows.forEach((item) => {
+      assert.ok(item.ticker, `${key} item has a ticker`);
+      assert.ok(Number.isFinite(Number(item.aiScore)), `${key} item has a valid ranking score`);
+      assert.ok(item.reasonForRecommendation, `${key} item has a recommendation reason`);
+    });
+  }
   assert.ok(result.scanUniverse, "scan universe metadata exists");
   assert.equal(result.scanUniverse.mode, "combined", "scan universe mode is returned");
-  assert.ok(result.scanUniverse.candidateCount >= 25, "scan universe has enough candidates");
+  assert.ok(result.scanUniverse.candidateCount > 0, "scan universe processed candidates");
   assert.ok(result.scanHealth, "scan health metadata exists");
   assert.ok(result.scanHealth.providerFetchedAt, "scan health includes provider fetch timestamp");
   assert.ok(result.scanHealth.latestUnderlyingQuoteAt || result.scanHealth.marketDataAsOfTimestamp, "scan health includes underlying market data timestamp");
@@ -286,8 +305,6 @@ function assertTechnicalShape(technical, message) {
 }
 
 async function main() {
-  const originalConfig = fs.existsSync(configFile) ? fs.readFileSync(configFile, "utf8") : null;
-  const originalPredictions = fs.existsSync(predictionsFile) ? fs.readFileSync(predictionsFile, "utf8") : null;
   let child = null;
 
   try {
@@ -298,6 +315,7 @@ async function main() {
       cwd: root,
       env: {
         ...process.env,
+        DATA_DIR: dataDir,
         PORT: String(port),
         LOGIN_PIN: pin,
         ADMIN_PIN: pin,
@@ -351,10 +369,39 @@ async function main() {
     const saved = readJson(predictionsFile, null);
     assertPredictionShape(saved);
 
+    const undersized = {
+      ...scan.body,
+      predictions: scan.body.predictions.slice(0, 5),
+      sections: Object.fromEntries(Object.entries(scan.body.sections).map(([key, rows]) => [key, Array.isArray(rows) ? rows.slice(0, 5) : rows])),
+      scanUniverse: { ...scan.body.scanUniverse, candidateCount: 5 },
+    };
+    assertPredictionShape(undersized);
+    assert.throws(
+      () => assertPredictionShape({ predictions: [], sections: {}, scanUniverse: {} }),
+      /at least one qualified prediction/,
+      "a real empty-processing result still fails validation",
+    );
+
     writeJson(predictionsFile, { updatedAt: new Date().toISOString(), predictions: [], sections: {} });
-    const autoScan = await request("/api/predictions", {}, cookie);
-    assert.equal(autoScan.response.status, 200, "empty predictions.json triggers new scan");
-    assertPredictionShape(autoScan.body);
+    const storedRead = await request("/api/predictions", {}, cookie);
+    assert.equal(storedRead.response.status, 200, "empty stored predictions remain a successful read");
+    assert.deepEqual(storedRead.body.predictions, [], "stored prediction reads do not trigger a scan");
+    const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
+    assert.match(appSource, /recommendation slots currently meet the qualification standard/);
+    assert.match(appSource, /active\.length/);
+
+    const counts = Object.fromEntries(
+      ["top25OneDay", "top25SevenDay", "top25OneMonth", "top25OneYear"]
+        .map((key) => [key, scan.body.sections[key].length]),
+    );
+    console.log(JSON.stringify({
+      candidateUniverseSize: scan.body.scanUniverse?.candidateCount || 0,
+      symbolsEvaluated: scan.body.scanHealth?.deepAnalysisCandidatesSelected || scan.body.scanHealth?.candidatesSuccessfullyAnalyzed || 0,
+      predictionsCreated: scan.body.predictions.length,
+      rejected: Math.max(0, Number(scan.body.scanUniverse?.candidateCount || 0) - scan.body.predictions.length),
+      failedTickers: scan.body.predictionEngineHealth?.failedTickers || [],
+      top25Counts: counts,
+    }));
 
     const dashboard = await fetch(`${baseUrl}/index.html`, { headers: { Cookie: cookie } });
     const html = await dashboard.text();
@@ -373,10 +420,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (child) child.kill();
-    if (originalConfig === null) fs.rmSync(configFile, { force: true });
-    else fs.writeFileSync(configFile, originalConfig);
-    if (originalPredictions === null) fs.rmSync(predictionsFile, { force: true });
-    else fs.writeFileSync(predictionsFile, originalPredictions);
+    fs.rmSync(dataDir, { recursive: true, force: true });
   }
 }
 

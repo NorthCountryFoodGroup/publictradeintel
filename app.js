@@ -2726,6 +2726,10 @@ function renderPredictions() {
   if (!output.predictionGrid || !output.predictionSummary) return;
   const predictions = predictionEngine.predictions || [];
   const active = predictionEngine.sections?.[predictionView] || predictions.slice(0, 25);
+  const horizonViews = new Set(["top25OneDay", "top25SevenDay", "top25OneMonth", "top25OneYear"]);
+  const recommendationAvailability = horizonViews.has(predictionView)
+    ? `<p class="muted-copy recommendation-availability">${active.length} of 25 recommendation slots currently meet the qualification standard.</p>`
+    : "";
   const health = predictionEngine.predictionEngineHealth || {};
   const top25Counts = health.top25Counts || {};
   const qualityCounts = health.dataQualityStatusCounts || {};
@@ -2856,7 +2860,7 @@ function renderPredictions() {
     return;
   }
 
-  output.predictionGrid.innerHTML = healthCard + sortedPredictionRows(active)
+  output.predictionGrid.innerHTML = healthCard + recommendationAvailability + sortedPredictionRows(active)
     .map((item) => {
       const model = predictionModelForView(item);
       const alignment = item.signalAlignment || fallbackAlignment(item);

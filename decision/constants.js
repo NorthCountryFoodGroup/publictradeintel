@@ -1,0 +1,162 @@
+"use strict";
+
+function frozen(values) {
+  return Object.freeze([...values]);
+}
+
+const DECISION_SCHEMA_VERSIONS = Object.freeze({
+  PARAMETER: "autonomous-parameter-v1",
+  INPUT_SNAPSHOT: "autonomous-input-snapshot-v1",
+  EVIDENCE_SUMMARY: "autonomous-evidence-summary-v1",
+  THESIS: "autonomous-thesis-v1",
+  COMMITTEE_OPINION: "autonomous-committee-opinion-v1",
+  COMMITTEE_DECISION: "autonomous-committee-decision-v1",
+  CANDIDATE_COMPARISON: "autonomous-candidate-comparison-v1",
+  OPPORTUNITY_COST: "autonomous-opportunity-cost-v1",
+  PORTFOLIO_DECISION: "autonomous-portfolio-decision-v1",
+  CHALLENGER: "autonomous-challenger-v1",
+  OUTCOME: "autonomous-outcome-v1",
+  REPLAY: "autonomous-decision-replay-v1",
+  MISTAKE_MEMORY: "autonomous-mistake-memory-v1",
+  LEARNING_PROPOSAL: "autonomous-learning-proposal-v1",
+  INVESTMENT_MANDATE: "investment-mandate-v1",
+  OPERATING_STAGE_RECORD: "operating-stage-record-v1",
+  INVESTMENT_OPERATING_SESSION: "investment-operating-session-v1",
+  OPERATING_SYSTEM_DECISION_SUMMARY: "operating-system-decision-summary-v1",
+  INVESTMENT_MANDATE_V2: "investment-mandate-v2",
+  OPERATING_STAGE_RECORD_V2: "operating-stage-record-v2",
+  INVESTMENT_OPERATING_SESSION_V2: "investment-operating-session-v2",
+  OPERATING_SYSTEM_DECISION_SUMMARY_V2: "operating-system-decision-summary-v2",
+});
+
+const EXPERIMENTAL_STATES = Object.freeze({
+  SHADOW: "SHADOW",
+  EXPERIMENTAL: "EXPERIMENTAL",
+  NOT_PRODUCTION_APPROVED: "NOT_PRODUCTION_APPROVED",
+  REVIEW_REQUIRED: "REVIEW_REQUIRED",
+});
+
+const DECISION_ACTIONS = frozen([
+  "BUY", "WATCH", "HOLD", "REDUCE", "SELL", "AVOID", "DEFER", "NO_TRADE",
+  "RETAIN_CASH", "INSUFFICIENT_EVIDENCE",
+]);
+const INVESTMENT_HORIZONS = frozen(["1d", "7d", "1m", "3m", "1y"]);
+const SHARE_MODES = frozen(["whole", "fractional"]);
+const COMMITTEE_ROLES = frozen([
+  "FUNDAMENTAL_ANALYST", "TECHNICAL_ANALYST", "EVENT_ANALYST", "RISK_MANAGER",
+  "PORTFOLIO_MANAGER", "COMMITTEE_CHAIR",
+]);
+const COMMITTEE_DISPOSITIONS = frozen(["SUPPORT", "OPPOSE", "NEUTRAL", "DEFER", "INSUFFICIENT_EVIDENCE"]);
+const CHALLENGER_DISPOSITIONS = frozen([
+  "APPROVE", "REDUCE_CONFIDENCE", "REDUCE_CONVICTION", "REDUCE_ALLOCATION",
+  "REPLACE", "DEFER", "NO_TRADE",
+]);
+const LEARNING_RECOMMENDATIONS = frozen([
+  "INSUFFICIENT_DATA", "CONTINUE_OBSERVING", "RETAIN_BASELINE",
+  "PROPOSE_WEIGHT_UPDATE", "REJECT_WEIGHT_UPDATE", "ERROR",
+]);
+const CONFIDENCE_TIERS = frozen(["VERY_LOW", "LOW", "MEDIUM", "HIGH", "VERY_HIGH"]);
+const CONFIDENCE_RELIABILITY_TIERS = frozen(["UNAVAILABLE", "LOW", "MEDIUM", "HIGH"]);
+const EVIDENCE_CERTAINTY_CATEGORIES = frozen(["KNOWN", "DERIVED", "ESTIMATED", "MISSING", "CONFLICTING"]);
+const VALIDATION_STATES = frozen(["VALID", "VALID_WITH_WARNINGS", "INVALID", "INCOMPLETE"]);
+const OUTCOME_STATES = frozen(["UNRESOLVED", "PARTIALLY_RESOLVED", "RESOLVED", "UNAVAILABLE", "ERROR"]);
+const INVESTMENT_OBJECTIVES = frozen([
+  "CAPITAL_GROWTH", "CAPITAL_PRESERVATION", "INCOME", "BALANCED_GROWTH",
+  "SHORT_TERM_OPPORTUNITY", "LONG_TERM_COMPOUNDING", "SPECULATIVE", "CUSTOM",
+]);
+const MANDATE_STATUSES = frozen([
+  "DRAFT", "VALIDATED", "READY_FOR_SHADOW_RUN", "RUNNING", "COMPLETED",
+  "DEFERRED", "INSUFFICIENT_DATA", "INVALID", "ERROR",
+]);
+const SELL_AUTHORITY_MODES = frozen([
+  "ANALYZE_ONLY", "RECOMMEND_HOLDINGS_ACTIONS", "RECOMMEND_FULL_PORTFOLIO_ACTIONS",
+]);
+const OPERATING_SESSION_STATUSES = frozen([
+  "CREATED", "VALIDATING", "READY", "RUNNING", "PARTIALLY_COMPLETED",
+  "COMPLETED", "DEFERRED", "FAILED", "CANCELLED", "INSUFFICIENT_DATA",
+]);
+const OPERATING_STAGES = frozen([
+  "MANDATE_VALIDATION", "INPUT_SNAPSHOT", "CANDIDATE_COLLECTION",
+  "EVIDENCE_NORMALIZATION", "OPPORTUNITY_ASSESSMENT", "THESIS_GENERATION",
+  "INVESTMENT_COMMITTEE", "CANDIDATE_COMPARISON", "OPPORTUNITY_COST_REVIEW",
+  "CAPITAL_ALLOCATION", "DECISION_CHALLENGE", "FINAL_SHADOW_DECISION",
+  "DECISION_JOURNALING", "OUTCOME_TRACKING", "DECISION_REPLAY", "LEARNING_EVALUATION",
+]);
+const OPERATING_STAGE_STATES = frozen([
+  "NOT_STARTED", "READY", "RUNNING", "COMPLETED", "DEFERRED", "FAILED", "SKIPPED",
+]);
+const INVESTMENT_OBJECTIVES_V2 = frozen([
+  "capital_preservation", "income", "balanced_growth", "growth",
+  "aggressive_growth", "tactical_opportunity", "custom",
+]);
+const MANDATE_STATUSES_V2 = frozen(["draft", "active", "suspended", "archived"]);
+const SELL_ANALYSIS_AUTHORITIES = frozen(["disabled", "existing_positions_only", "enabled"]);
+const OPERATING_SESSION_STATUSES_V2 = frozen([
+  "draft", "queued", "running", "completed", "completed_no_trade",
+  "blocked", "failed", "cancelled", "archived",
+]);
+const OPERATING_STAGES_V2 = frozen([
+  "mandate_validation", "session_initialization", "market_context",
+  "universe_discovery", "evidence_collection", "evidence_normalization",
+  "candidate_assessment", "committee_review", "candidate_comparison",
+  "capital_allocation", "challenger_review", "final_decision",
+  "decision_journal", "outcome_tracking", "replay", "learning_review",
+]);
+const OPERATING_STAGE_STATES_V2 = frozen([
+  "pending", "running", "completed", "skipped", "blocked", "failed", "cancelled",
+]);
+const OPERATING_SESSION_MODES = frozen(["shadow"]);
+const OPERATING_DECISION_TYPES = frozen([
+  "allocate", "rebalance", "hold_existing", "retain_cash", "no_trade",
+]);
+const MISTAKE_CATEGORIES = frozen([
+  "OVERWEIGHTED_MOMENTUM", "UNDERWEIGHTED_DOWNSIDE", "OVERESTIMATED_CATALYST",
+  "MISREAD_MARKET_REGIME", "OVERCONFIDENT_WITH_MISSING_EVIDENCE", "IGNORED_LIQUIDITY_RISK",
+  "EXCESSIVE_SECTOR_CONCENTRATION", "POOR_ENTRY_TIMING", "POOR_EXIT_TIMING",
+  "CONGRESSIONAL_SIGNAL_UNRELIABLE", "FALLBACK_DATA_OVERCONFIDENCE",
+  "DUPLICATE_EVENT_OVERCOUNTING", "UNKNOWN",
+]);
+const STANDARD_CAPITAL_PRESETS = frozen([100, 250, 500, 1000, 2500, 5000, 10000, 25000]);
+const MAXIMUM_POSITIONS = 100;
+const MAXIMUM_ARRAY_ITEMS = 250;
+const MAXIMUM_TEXT_LENGTH = 2000;
+const DEFAULT_MAXIMUM_LEARNING_ADJUSTMENT = 0.05;
+const DEFAULT_TOTAL_ADJUSTMENT_BUDGET = 0.20;
+
+module.exports = Object.freeze({
+  DECISION_SCHEMA_VERSIONS,
+  EXPERIMENTAL_STATES,
+  DECISION_ACTIONS,
+  INVESTMENT_HORIZONS,
+  SHARE_MODES,
+  COMMITTEE_ROLES,
+  COMMITTEE_DISPOSITIONS,
+  CHALLENGER_DISPOSITIONS,
+  LEARNING_RECOMMENDATIONS,
+  CONFIDENCE_TIERS,
+  CONFIDENCE_RELIABILITY_TIERS,
+  EVIDENCE_CERTAINTY_CATEGORIES,
+  VALIDATION_STATES,
+  OUTCOME_STATES,
+  INVESTMENT_OBJECTIVES,
+  MANDATE_STATUSES,
+  SELL_AUTHORITY_MODES,
+  OPERATING_SESSION_STATUSES,
+  OPERATING_STAGES,
+  OPERATING_STAGE_STATES,
+  INVESTMENT_OBJECTIVES_V2,
+  MANDATE_STATUSES_V2,
+  SELL_ANALYSIS_AUTHORITIES,
+  OPERATING_SESSION_STATUSES_V2,
+  OPERATING_STAGES_V2,
+  OPERATING_STAGE_STATES_V2,
+  OPERATING_SESSION_MODES,
+  OPERATING_DECISION_TYPES,
+  MISTAKE_CATEGORIES,
+  STANDARD_CAPITAL_PRESETS,
+  MAXIMUM_POSITIONS,
+  MAXIMUM_ARRAY_ITEMS,
+  MAXIMUM_TEXT_LENGTH,
+  DEFAULT_MAXIMUM_LEARNING_ADJUSTMENT,
+  DEFAULT_TOTAL_ADJUSTMENT_BUDGET,
+});

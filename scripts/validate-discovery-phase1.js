@@ -22,6 +22,9 @@ const contracts = [
   "smoke:scan-summary-display",
   "smoke:prediction-data-usability",
   "smoke:packaged-symbol-first-run",
+  "smoke:autonomous-decision-schema",
+  "smoke:autonomous-decision-compatibility",
+  "smoke:production-beta",
 ];
 
 function run(script, options = {}) {
