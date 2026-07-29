@@ -7,10 +7,36 @@ const crypto = require("crypto");
 const SUCCESS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PARTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const UNRESOLVED_TTL_MS = 6 * 60 * 60 * 1000;
+const RATE_LIMIT_TTL_MS = 60 * 60 * 1000;
+const TIMEOUT_TTL_MS = 30 * 60 * 1000;
+const UNAVAILABLE_TTL_MS = 2 * 60 * 60 * 1000;
+const CONFIGURATION_TTL_MS = 24 * 60 * 60 * 1000;
+const UNSUPPORTED_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 6000;
 const DEFAULT_CONCURRENCY = 2;
 const MAX_CACHE_ENTRIES = 5000;
 const UNSUPPORTED_PROFILE_TYPES = new Set(["warrant", "unit", "index", "cryptocurrency"]);
+const RATE_LIMIT_CLASSIFICATIONS = new Set([
+  "application_daily_cap",
+  "provider_http_429",
+  "provider_note_rate_limit",
+  "provider_information_rate_limit",
+  "provider_error_rate_limit",
+]);
+const TRANSIENT_CLASSIFICATIONS = new Set([
+  ...RATE_LIMIT_CLASSIFICATIONS,
+  "provider_timeout",
+  "provider_unavailable",
+  "empty_valid_response",
+]);
+const VERIFIED_DETAIL_FIELDS = [
+  "companyDescription",
+  "industry",
+  "sector",
+  "headquarters",
+  "domicile",
+  "website",
+];
 
 function boundedText(value, maximum = 4000) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
@@ -91,12 +117,48 @@ function pruneCache(cache) {
   return { version: 1, profiles: Object.fromEntries(retained) };
 }
 
-function sanitizedError(error) {
+function classifiedError(classification, message = classification) {
+  const error = new Error(message);
+  error.profileClassification = classification;
+  return error;
+}
+
+function errorClassification(error) {
+  if (error?.profileClassification) return error.profileClassification;
   const message = String(error?.message || error || "").toLowerCase();
-  if (/abort|timeout|timed out/.test(message)) return "timeout";
-  if (/429|rate|limit|frequency/.test(message)) return "rate_limited";
-  if (/not found|no profile|unresolved|404/.test(message)) return "not_found";
+  if (/abort|timeout|timed out/.test(message)) return "provider_timeout";
+  if (/429/.test(message)) return "provider_http_429";
+  if (/invalid api|invalid key|api key.*invalid|unauthorized|restricted key/.test(message)) return "provider_invalid_or_restricted_key";
+  if (/premium endpoint|not entitled|subscription|upgrade.*plan/.test(message)) return "endpoint_not_entitled";
+  if (/not found|no profile|unresolved|404/.test(message)) return "unresolved_symbol";
+  if (/rate|limit|frequency/.test(message)) return "provider_information_rate_limit";
   return "provider_unavailable";
+}
+
+function publicError(classification) {
+  if (RATE_LIMIT_CLASSIFICATIONS.has(classification)) return "rate_limited";
+  if (classification === "provider_timeout") return "timeout";
+  if (classification === "unresolved_symbol") return "not_found";
+  if (classification === "unsupported_type") return null;
+  if (classification === "ordinary_partial_profile") return null;
+  return classification ? "provider_unavailable" : null;
+}
+
+function alphaResponseClassification(data) {
+  const entries = [
+    ["Note", data?.Note, "provider_note_rate_limit"],
+    ["Information", data?.Information, "provider_information_rate_limit"],
+    ["Error Message", data?.["Error Message"], "provider_error_rate_limit"],
+  ];
+  for (const [field, value, rateClassification] of entries) {
+    if (!value) continue;
+    const message = String(value).toLowerCase();
+    if (/invalid api|invalid key|api key.*invalid|unauthorized|restricted key/.test(message)) return "provider_invalid_or_restricted_key";
+    if (/premium endpoint|not entitled|subscription required|upgrade.*plan/.test(message)) return "endpoint_not_entitled";
+    if (/rate|limit|frequency|call volume|requests per day/.test(message)) return rateClassification;
+    return "provider_unavailable";
+  }
+  return null;
 }
 
 async function jsonRequest(fetchImpl, url, timeoutMs) {
@@ -107,8 +169,12 @@ async function jsonRequest(fetchImpl, url, timeoutMs) {
       signal: controller.signal,
       headers: { "User-Agent": "PublicTradeIntelSecurityProfile/1.0", Accept: "application/json,*/*" },
     });
-    if (!response.ok) throw new Error(`Provider response ${response.status}`);
+    if (response.status === 429) throw classifiedError("provider_http_429");
+    if (!response.ok) throw classifiedError("provider_unavailable");
     return await response.json();
+  } catch (error) {
+    if (error?.name === "AbortError") throw classifiedError("provider_timeout");
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -180,6 +246,73 @@ function profileStatus(profile, providerValidated) {
   return "unresolved";
 }
 
+function nextUtcResetCeiling(nowDate) {
+  const ceiling = new Date(nowDate);
+  ceiling.setUTCDate(ceiling.getUTCDate() + 1);
+  ceiling.setUTCHours(0, 15, 0, 0);
+  return ceiling.getTime();
+}
+
+function retryMetadata(classification, fetchedAt, previousProfile = null) {
+  const fetchedMs = Date.parse(fetchedAt);
+  const previousClassification = previousProfile?.profileRefreshClassification || previousProfile?.profileResultClassification;
+  const previousCount = Number(previousProfile?.profileTransientFailureCount) || 0;
+  const repeated = RATE_LIMIT_CLASSIFICATIONS.has(classification) && RATE_LIMIT_CLASSIFICATIONS.has(previousClassification);
+  const failureCount = RATE_LIMIT_CLASSIFICATIONS.has(classification) ? (repeated ? previousCount + 1 : 1) : 0;
+  let ttl = classification === "provider_timeout" ? TIMEOUT_TTL_MS
+    : ["provider_unavailable", "empty_valid_response"].includes(classification) ? UNAVAILABLE_TTL_MS
+    : ["provider_invalid_or_restricted_key", "endpoint_not_entitled"].includes(classification) ? CONFIGURATION_TTL_MS
+    : RATE_LIMIT_CLASSIFICATIONS.has(classification) ? RATE_LIMIT_TTL_MS * (2 ** Math.max(0, failureCount - 1))
+    : null;
+  if (RATE_LIMIT_CLASSIFICATIONS.has(classification)) {
+    ttl = Math.min(ttl, Math.max(0, nextUtcResetCeiling(new Date(fetchedAt)) - fetchedMs));
+  }
+  return ttl === null ? {} : {
+    profileTransientFailureCount: failureCount,
+    profileNextRetryAt: new Date(fetchedMs + ttl).toISOString(),
+  };
+}
+
+function resultClassification(profileStatusValue, providerFailure = null) {
+  if (profileStatusValue === "unsupported_type") return "unsupported_type";
+  if (providerFailure) return providerFailure;
+  if (profileStatusValue === "unresolved") return "unresolved_symbol";
+  if (profileStatusValue === "partially_verified") return "ordinary_partial_profile";
+  return null;
+}
+
+function cacheTtl(profile) {
+  const classification = profile.profileRefreshClassification || profile.profileResultClassification;
+  if (profile.profileNextRetryAt && TRANSIENT_CLASSIFICATIONS.has(classification)) {
+    return Math.max(0, Date.parse(profile.profileNextRetryAt) - Date.parse(profile.profileFetchedAt || profile.profileRefreshAttemptedAt));
+  }
+  if (RATE_LIMIT_CLASSIFICATIONS.has(classification)) return RATE_LIMIT_TTL_MS;
+  if (classification === "provider_timeout") return TIMEOUT_TTL_MS;
+  if (["provider_unavailable", "empty_valid_response"].includes(classification)) return UNAVAILABLE_TTL_MS;
+  if (["provider_invalid_or_restricted_key", "endpoint_not_entitled"].includes(classification)) return CONFIGURATION_TTL_MS;
+  if (classification === "unsupported_type" || profile.profileStatus === "unsupported_type") return UNSUPPORTED_TTL_MS;
+  if (classification === "unresolved_symbol" || profile.profileStatus === "unresolved") return UNRESOLVED_TTL_MS;
+  if (profile.profileStatus === "verified") return SUCCESS_TTL_MS;
+  return PARTIAL_TTL_MS;
+}
+
+function preserveVerifiedDetails(saved, refreshed, failureClassification, attemptedAt) {
+  const retained = { ...refreshed };
+  for (const field of VERIFIED_DETAIL_FIELDS) {
+    if (saved?.[field]) retained[field] = saved[field];
+  }
+  retained.profileStatus = "stale";
+  retained.profileSource = saved.profileSource || refreshed.profileSource;
+  retained.profileFetchedAt = saved.profileFetchedAt;
+  retained.profileSourceFetchedAt = saved.profileSourceFetchedAt || saved.profileFetchedAt;
+  retained.profileRefreshAttemptedAt = attemptedAt;
+  retained.profileRefreshClassification = failureClassification;
+  retained.profileRefreshError = publicError(failureClassification);
+  retained.profileError = publicError(failureClassification);
+  Object.assign(retained, retryMetadata(failureClassification, attemptedAt, saved));
+  return retained;
+}
+
 function createSecurityProfileService(options = {}) {
   const cacheFile = options.cacheFile;
   const fetchImpl = options.fetchImpl || global.fetch;
@@ -225,16 +358,17 @@ function createSecurityProfileService(options = {}) {
     const profile = cacheFile ? readCache(cacheFile).profiles[ticker] : null;
     if (!profile?.profileFetchedAt) return null;
     const age = now().getTime() - Date.parse(profile.profileFetchedAt);
-    const ttl = profile.profileStatus === "verified" ? SUCCESS_TTL_MS
-      : profile.profileStatus === "partially_verified" ? PARTIAL_TTL_MS
-      : UNRESOLVED_TTL_MS;
-    return { profile, fresh: Number.isFinite(age) && age >= 0 && age <= ttl };
+    const retryAt = Date.parse(profile.profileNextRetryAt || "");
+    const fresh = Number.isFinite(retryAt)
+      ? now().getTime() < retryAt
+      : Number.isFinite(age) && age >= 0 && age <= cacheTtl(profile);
+    return { profile, fresh };
   }
 
-  async function retrieve(ticker) {
+  async function retrieve(ticker, previousProfile = null) {
     await acquire();
     const fetchedAt = now().toISOString();
-    const errors = [];
+      const errors = [];
     try {
       const universe = universeLoader() || {};
       const row = (universe.symbols || []).find((item) => canonicalTicker(item.ticker || item.symbol) === ticker) || {};
@@ -263,7 +397,7 @@ function createSecurityProfileService(options = {}) {
           sources.push("Yahoo chart metadata");
         }
       } catch (error) {
-        errors.push(sanitizedError(error));
+        errors.push(errorClassification(error));
       }
 
       if (apiKey) {
@@ -274,15 +408,15 @@ function createSecurityProfileService(options = {}) {
             alphaDay = currentDay;
             alphaRequestsToday = 0;
           }
-          if (alphaRequestsToday >= maximumAuthenticatedRequestsPerDay) throw new Error("Profile provider daily rate limit reached");
+          if (alphaRequestsToday >= maximumAuthenticatedRequestsPerDay) throw classifiedError("application_daily_cap");
           alphaRequestsToday += 1;
           const alphaUrl = new URL("https://www.alphavantage.co/query");
           alphaUrl.searchParams.set("function", functionName);
           alphaUrl.searchParams.set("symbol", ticker);
           alphaUrl.searchParams.set("apikey", apiKey);
           const data = await jsonRequest(fetchImpl, alphaUrl, timeoutMs);
-          const providerMessage = data?.Note || data?.Information || data?.["Error Message"];
-          if (providerMessage) throw new Error(providerMessage);
+          const providerFailure = alphaResponseClassification(data);
+          if (providerFailure) throw classifiedError(providerFailure);
           const alpha = functionName === "ETF_PROFILE" ? alphaFundProfile(data, ticker) : alphaCompanyProfile(data, ticker);
           if (alpha) {
             profile = mergeProfile(profile, alpha);
@@ -298,21 +432,27 @@ function createSecurityProfileService(options = {}) {
                 profile.companyDescription = `${objectiveText}${profile.companyDescription ? ` ${profile.companyDescription}` : ""}`;
               }
             }
+          } else {
+            throw classifiedError("empty_valid_response");
           }
         } catch (error) {
-          errors.push(sanitizedError(error));
+          errors.push(errorClassification(error));
         }
       }
 
       delete profile.providerValidated;
       const status = profileStatus(profile, providerValidated);
+      const providerFailure = errors[0] || null;
+      const classification = resultClassification(status, providerFailure);
       const result = {
         ...profile,
         securityType: publicSecurityType(profile.securityType),
         profileSource: sources.join(" + ") || (row.source ? boundedText(row.source, 160) : null),
         profileFetchedAt: fetchedAt,
         profileStatus: status,
-        profileError: status === "unresolved" ? errors[0] || "not_found" : errors[0] || null,
+        profileError: publicError(classification),
+        profileResultClassification: classification,
+        ...retryMetadata(classification, fetchedAt, previousProfile),
       };
       try {
         await persist(result);
@@ -336,13 +476,24 @@ function createSecurityProfileService(options = {}) {
     const saved = cached(ticker);
     if (saved?.fresh) return { ...saved.profile, profileCacheUsed: true };
     if (inFlight.has(ticker)) return inFlight.get(ticker);
-    const request = retrieve(ticker)
+    const request = retrieve(ticker, saved?.profile)
       .then(async (profile) => {
-        if (profile.profileStatus === "unresolved" && saved?.profile && ["verified", "partially_verified"].includes(saved.profile.profileStatus)) {
+        const refreshClassification = profile.profileResultClassification;
+        const savedHasVerifiedDetails = saved?.profile && VERIFIED_DETAIL_FIELDS.some((field) => saved.profile[field]);
+        if (savedHasVerifiedDetails && TRANSIENT_CLASSIFICATIONS.has(refreshClassification)) {
+          const stale = preserveVerifiedDetails(saved.profile, profile, refreshClassification, profile.profileFetchedAt);
+          try { await persist(stale); } catch {}
+          return stale;
+        }
+        if (profile.profileStatus === "unresolved" && saved?.profile && ["verified", "partially_verified", "stale"].includes(saved.profile.profileStatus)) {
           const stale = {
             ...saved.profile,
             profileStatus: "stale",
             profileError: profile.profileError || "provider_unavailable",
+            profileRefreshClassification: refreshClassification,
+            profileRefreshError: profile.profileError || "provider_unavailable",
+            profileRefreshAttemptedAt: profile.profileFetchedAt,
+            profileSourceFetchedAt: saved.profile.profileSourceFetchedAt || saved.profile.profileFetchedAt,
             profileCacheUsed: true,
           };
           try { await persist(stale); } catch {}
@@ -350,9 +501,13 @@ function createSecurityProfileService(options = {}) {
         }
         return profile;
       })
-      .catch((error) => saved?.profile
-        ? { ...saved.profile, profileStatus: "stale", profileError: sanitizedError(error), profileCacheUsed: true }
-        : { ticker, profileStatus: "unresolved", profileError: sanitizedError(error), profileFetchedAt: now().toISOString() })
+      .catch((error) => {
+        const classification = errorClassification(error);
+        const attemptedAt = now().toISOString();
+        return saved?.profile
+          ? { ...preserveVerifiedDetails(saved.profile, saved.profile, classification, attemptedAt), profileCacheUsed: true }
+          : { ticker, profileStatus: "unresolved", profileError: publicError(classification), profileResultClassification: classification, profileFetchedAt: attemptedAt, ...retryMetadata(classification, attemptedAt) };
+      })
       .finally(() => inFlight.delete(ticker));
     inFlight.set(ticker, request);
     return request;
