@@ -5083,3 +5083,403 @@ button:disabled,
     grid-template-columns: 1fr;
   }
 }
+
+/* PublicTradeIntel institutional brand layer. Keep last in the cascade. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --panel: #171a1f;
+  --panel-strong: #1d2127;
+  --ink: #f7f8fa;
+  --muted: #aeb5bf;
+  --line: #2a2f36;
+  --green: #2f9e6f;
+  --green-soft: rgba(47, 158, 111, 0.15);
+  --accent: #1e88ff;
+  --accent-soft: rgba(30, 136, 255, 0.13);
+  --gold: #d4af37;
+  --gold-hover: #e2c45c;
+  --warning: #c58a2a;
+  --danger: #c94b55;
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  --nav: #0b0d10;
+  --nav-muted: #aeb5bf;
+  --shell-bg: #0b0d10;
+  --shell-surface: #171a1f;
+  --shell-surface-elevated: #1d2127;
+  --shell-text: #f7f8fa;
+  --shell-muted: #aeb5bf;
+  --shell-line: #2a2f36;
+  --color-background: #0b0d10;
+  --color-surface: #171a1f;
+  --color-surface-raised: #1d2127;
+  --color-surface-elevated: #20242b;
+  --color-border: #2a2f36;
+  --color-primary: #d4af37;
+  --color-primary-hover: #e2c45c;
+  --color-secondary: #1e88ff;
+  --color-success: #2f9e6f;
+  --color-warning: #c58a2a;
+  --color-danger: #c94b55;
+  --color-info: #1e88ff;
+  --color-neutral: #aeb5bf;
+  --text-primary: #f7f8fa;
+  --text-secondary: #c7cdd5;
+  --text-muted: #929ba7;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+}
+
+body,
+.dashboard-frame.app-layout {
+  background: #0b0d10;
+  color: var(--ink);
+}
+
+body {
+  background-image:
+    radial-gradient(circle at 78% 0%, rgba(30, 136, 255, 0.055), transparent 28rem),
+    linear-gradient(180deg, #0d1014 0%, #0b0d10 34%);
+}
+
+.side-nav.app-sidebar {
+  background: #0d1014;
+  border-right-color: #2a2f36;
+  color: var(--ink);
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.16);
+}
+
+.brand-block {
+  gap: 11px;
+  min-height: 52px;
+  color: var(--ink);
+}
+
+.brand-block .brand-mark {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.42));
+}
+
+.brand-block .brand-copy {
+  display: grid;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  place-items: initial;
+  gap: 3px;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.brand-copy strong {
+  color: #f7f8fa;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.045em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.brand-copy small {
+  color: #d4af37;
+  font-size: 0.53rem;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  line-height: 1.2;
+}
+
+.nav-section-label {
+  color: #7f8995;
+}
+
+.side-nav .nav-link,
+.side-nav .admin-nav-link,
+.side-nav .admin-link {
+  border-color: transparent;
+  background: transparent;
+  color: #aeb5bf;
+}
+
+.side-nav .nav-link.is-active,
+.side-nav .admin-nav-link.is-active {
+  border-color: rgba(30, 136, 255, 0.5);
+  border-left-color: #d4af37;
+  background: rgba(30, 136, 255, 0.12);
+  color: #ffffff;
+  box-shadow: inset 3px 0 0 #d4af37, 0 0 16px rgba(30, 136, 255, 0.09);
+}
+
+.side-nav .nav-link:hover,
+.side-nav .admin-nav-link:hover,
+.side-nav .admin-link:hover,
+.side-nav .nav-link:focus-visible,
+.side-nav .admin-nav-link:focus-visible,
+.side-nav .admin-link:focus-visible {
+  border-color: rgba(30, 136, 255, 0.45);
+  background: rgba(30, 136, 255, 0.1);
+  color: #ffffff;
+}
+
+.app-topbar,
+.mobile-nav {
+  border-color: #2a2f36;
+  background: rgba(23, 26, 31, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+#pageTitle,
+#adminPageTitle,
+h1,
+h2,
+h3,
+.card-heading strong,
+.brief-section-heading strong,
+.dropdown-heading strong {
+  color: #f7f8fa;
+}
+
+.breadcrumbs,
+.breadcrumbs span,
+.global-search span,
+.eyebrow,
+.hero-copy,
+.muted-copy,
+p,
+small,
+.card-heading span,
+.summary-tile span,
+.summary-tile small {
+  color: var(--muted);
+}
+
+.summary-tile,
+.dashboard-card,
+.trade-brief-card,
+.brief-section,
+.prediction-screener-card,
+.market-metric-card,
+.performance-metric-card,
+.watchlist-card,
+.watchlist-stock-card,
+.watchlist-alert-card,
+.alert-feed-card,
+.alert-rule-card,
+.alert-history-card,
+.delivery-card,
+.dashboard-disclosure,
+.brief-navigation,
+.topbar-dropdown,
+.dropdown-alert-item,
+.signal-agreement-grid div,
+.outlook-grid div,
+.brief-evidence-item,
+.login-card {
+  border-color: #2a2f36;
+  border-radius: 10px;
+  background: #171a1f;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.comfort-note,
+.amount-grid > div,
+.metric-tile,
+.empty-tile,
+.import-panel,
+.editor-row {
+  border-color: #2a2f36;
+  background: #171a1f;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.comfort-note a {
+  color: #d4af37;
+}
+
+.summary-tile:hover,
+.dashboard-card:hover,
+.prediction-card:hover {
+  border-color: #38404a;
+}
+
+input,
+select,
+textarea,
+.global-search input {
+  border-color: #343a43;
+  background: #111419;
+  color: #f7f8fa;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #737d89;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: #4b5562;
+}
+
+button,
+.pti-button,
+.brief-button,
+.inline-scan-button {
+  border-color: #1e88ff;
+  background: #1e88ff;
+  color: #ffffff;
+}
+
+button:hover,
+.pti-button:hover,
+.brief-button:hover,
+.inline-scan-button:hover {
+  border-color: #55a5ff;
+  background: #3896ff;
+}
+
+#runPredictionScan,
+[data-run-prediction-scan],
+#saveConfig,
+#saveScanSettings,
+.login-card button[type="submit"],
+.money-form button[type="submit"],
+.watchlist-create-form button[type="submit"],
+.alert-rule-form button[type="submit"] {
+  border-color: #d4af37;
+  background: #d4af37;
+  color: #0b0d10;
+  box-shadow: 0 5px 16px rgba(212, 175, 55, 0.15);
+}
+
+#runPredictionScan:hover,
+[data-run-prediction-scan]:hover,
+#saveConfig:hover,
+#saveScanSettings:hover,
+.login-card button[type="submit"]:hover,
+.money-form button[type="submit"]:hover,
+.watchlist-create-form button[type="submit"]:hover,
+.alert-rule-form button[type="submit"]:hover {
+  border-color: #e2c45c;
+  background: #e2c45c;
+}
+
+.icon-button,
+.profile-button,
+.pti-button.ghost,
+.prediction-tabs button,
+.view-toggle button,
+.topbar-dropdown button,
+.dropdown-action {
+  border-color: #343a43;
+  background: #171a1f;
+  color: #f7f8fa;
+}
+
+.icon-button:hover,
+.profile-button:hover,
+.topbar-dropdown button:hover,
+.dropdown-action:hover,
+.prediction-tabs button:hover,
+.view-toggle button:hover {
+  border-color: #1e88ff;
+  background: rgba(30, 136, 255, 0.12);
+  color: #ffffff;
+}
+
+button:disabled,
+.pti-button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  border-color: #2a2f36;
+  background: #20242a;
+  color: #737d89;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #1e88ff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(30, 136, 255, 0.16);
+}
+
+.pti-badge.success,
+.brief-badge.success,
+.metric-tile.success,
+.status-chip.success,
+.status-good {
+  border-color: rgba(47, 158, 111, 0.46);
+  background: rgba(47, 158, 111, 0.14);
+  color: #73d5a7;
+}
+
+.pti-badge.warning,
+.brief-badge.warning,
+.metric-tile.warning,
+.status-chip.warning,
+.status-warn,
+.risk-list .brief-evidence-item span {
+  border-color: rgba(197, 138, 42, 0.48);
+  background: rgba(197, 138, 42, 0.14);
+  color: #e4b45f;
+}
+
+.pti-badge.danger,
+.brief-badge.danger,
+.metric-tile.danger,
+.status-chip.danger,
+.status-bad {
+  border-color: rgba(201, 75, 85, 0.48);
+  background: rgba(201, 75, 85, 0.14);
+  color: #ee8991;
+}
+
+.summary-tile strong,
+.performance-metric-card strong,
+.market-metric-card strong,
+.prediction-score-block strong,
+.watchlist-health-pill strong,
+.score-value {
+  color: #f7f8fa;
+}
+
+.mobile-nav .nav-link {
+  color: #aeb5bf;
+}
+
+.mobile-nav .nav-link.is-active {
+  background: rgba(30, 136, 255, 0.13);
+  color: #ffffff;
+}
+
+.login-shell {
+  background:
+    radial-gradient(circle at 50% 12%, rgba(30, 136, 255, 0.12), transparent 25rem),
+    #0b0d10;
+}
+
+.login-card {
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

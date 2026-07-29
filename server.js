@@ -181,6 +181,8 @@ const contentTypes = {
   ".json": "application/json; charset=utf-8",
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".svg": "image/svg+xml; charset=utf-8",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
 };
 
 function readJson(file, fallback) {
@@ -6484,7 +6486,19 @@ function serveFile(response, pathname) {
 
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
-  const publicFiles = new Set(["/login.html", "/styles.css", "/icon.svg"]);
+  const publicFiles = new Set([
+    "/login.html",
+    "/styles.css",
+    "/favicon.ico",
+    "/favicon-16x16.png",
+    "/favicon-32x32.png",
+    "/apple-touch-icon.png",
+    "/android-chrome-192x192.png",
+    "/android-chrome-512x512.png",
+    "/site.webmanifest",
+    "/safari-pinned-tab.svg",
+    "/icon.svg",
+  ]);
 
   if (request.method === "GET" && url.pathname === "/healthz") {
     sendJson(response, 200, {

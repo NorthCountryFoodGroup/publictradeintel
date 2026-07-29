@@ -1,4 +1,4 @@
-const CACHE_NAME = "steady-start-v1";
+const CACHE_NAME = "publictradeintel-brand-v1";
 const ASSETS = [
   "./",
   "./index.html",
@@ -6,8 +6,15 @@ const ASSETS = [
   "./styles.css",
   "./app.js",
   "./admin.js",
-  "./manifest.webmanifest",
+  "./site.webmanifest",
   "./icon.svg",
+  "./favicon.ico",
+  "./favicon-16x16.png",
+  "./favicon-32x32.png",
+  "./apple-touch-icon.png",
+  "./android-chrome-192x192.png",
+  "./android-chrome-512x512.png",
+  "./safari-pinned-tab.svg",
 ];
 
 self.addEventListener("install", (event) => {
