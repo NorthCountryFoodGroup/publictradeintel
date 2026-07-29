@@ -5613,6 +5613,12 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
+window.publicTradeIntelExplorerContext = () => ({
+  predictions: Array.isArray(predictionEngine?.predictions) ? predictionEngine.predictions : [],
+  sections: predictionEngine?.sections || {},
+  watchlists: Array.isArray(watchlists) ? watchlists.map((list) => ({ name: list.name, tickers: [...(list.tickers || [])] })) : [],
+});
+
 initDashboardDisclosures();
 if (output.tradeDate) output.tradeDate.value = new Date().toISOString().slice(0, 10);
 Promise.all([loadSettings(), loadPolicySignals(), loadPredictions(), loadCongressFeedStatus(), loadSymbolUniverseStatus(), loadMarketIndexData(), loadPerformanceSummary(), loadPortfolioFromServer()]).then(calculate);

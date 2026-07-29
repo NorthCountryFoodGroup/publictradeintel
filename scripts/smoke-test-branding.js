@@ -94,6 +94,9 @@ for (const asset of requiredAssets) assert(serviceWorker.includes(`"./${asset}"`
 assert(!/["']\.\/api\//.test(serviceWorker), "the static cache inventory must not add API routes");
 
 const brandAssetText = [text("icon.svg"), text("safari-pinned-tab.svg"), text("site.webmanifest")].join("\n");
+assert(/front-facing bull|shield and bull/i.test(text("icon.svg")), "the icon must identify the bull design accessibly");
+assert((text("icon.svg").match(/D4AF37/gi) || []).length >= 3, "the bull must retain strong metallic-gold geometry");
+assert(!/1E88FF/i.test(text("icon.svg")), "the favicon bull must not use a tiny blue facial accent");
 const brandedPageLinks = pages.map(text).join("\n");
 assert(!/(?:src|href)=["']https?:\/\//i.test(`${brandAssetText}\n${brandedPageLinks}`), "branding must not use external runtime image URLs");
 assert(!/(LOGIN_PIN|ADMIN_PIN|PORTFOLIO_PIN|API_KEY|DATA_DIR|securityProfiles\.json|predictions\.json)/.test(brandAssetText), "branding assets must not reference secrets or runtime data");

@@ -663,6 +663,34 @@
           </div>
         </details>
         <p class="scan-message" id="predictionScanMessage"></p>
+        <section class="dashboard-card performance-explorer" id="performanceExplorer" aria-labelledby="performanceExplorerTitle">
+          <div class="performance-explorer-heading">
+            <div><p class="eyebrow">Historical analysis</p><h3 id="performanceExplorerTitle">Performance Explorer</h3><p id="performanceExplorerBasis">Top 10 currently published qualified recommendations</p></div>
+            <div class="performance-explorer-actions"><button type="button" id="performanceExplorerCollapse" aria-expanded="true">Collapse</button><button type="button" id="performanceExplorerWidth" aria-pressed="false">Full-width</button></div>
+          </div>
+          <div class="performance-explorer-body" id="performanceExplorerBody">
+            <div class="performance-explorer-controls">
+              <label><span>Stock group</span><select id="performanceExplorerGroup"><option value="best10">Best 10 Today</option><option value="watchlist">My Watchlist</option><option value="selected">Top 25 Selection</option><option value="single">Single Stock Focus</option></select></label>
+              <label><span>Horizon</span><select id="performanceExplorerHorizon"><option value="1-Day">1 Day</option><option value="7-Day">7 Days</option><option value="1-Month">1 Month</option><option value="1-Year">1 Year</option></select></label>
+              <label><span>Time range</span><select id="performanceExplorerPeriod"><option>7D</option><option selected>1M</option><option>6M</option><option>1Y</option><option>2Y</option></select></label>
+              <label><span>Chart view</span><select id="performanceExplorerView"><option value="trend">Trend</option><option value="ranking">Return Ranking</option></select></label>
+              <label id="performanceExplorerSortWrap" hidden><span>Sort</span><select id="performanceExplorerSort"><option value="best">Best to worst</option><option value="worst">Worst to best</option><option value="ticker">Ticker</option></select></label>
+              <label class="toggle-label"><input type="checkbox" id="performanceExplorerBenchmark" checked /> Benchmark: SPY</label>
+              <label class="toggle-label"><input type="checkbox" id="performanceExplorerEvents" /> Events</label>
+              <label class="toggle-label"><input type="checkbox" id="performanceExplorerPredictions" /> Prediction History</label>
+              <label class="toggle-label"><input type="checkbox" id="performanceExplorerConfidence" /> AI Confidence</label>
+            </div>
+            <div class="performance-selection-status"><span id="performanceSelectionCount">0 of 10 selected</span><button type="button" id="performanceSelectionClear">Clear all</button><button type="button" id="performanceSelectionCompare">Compare selected</button></div>
+            <div class="performance-explorer-status" id="performanceExplorerStatus" role="status">Historical data loads when this explorer is opened.</div>
+            <div class="performance-explorer-legend" id="performanceExplorerLegend" aria-label="Chart series controls"></div>
+            <div class="performance-explorer-chart" id="performanceExplorerChart" role="img" aria-label="Historical cumulative return chart"></div>
+            <div class="sr-only" id="performanceExplorerSummary" aria-live="polite"></div>
+            <div class="performance-explorer-metrics" id="performanceExplorerMetrics"></div>
+            <details class="performance-explorer-timeline"><summary>Evidence &amp; Signal Timeline</summary><div id="performanceExplorerTimeline"></div></details>
+            <details class="performance-explorer-table"><summary>Accessible analytical table</summary><div class="table-scroll"><table><thead><tr><th>Ticker</th><th>Name</th><th>Start</th><th>End</th><th>Start adjusted</th><th>End adjusted</th><th>Return</th><th>High</th><th>Low</th><th>Max drawdown</th><th>Source</th><th>Data timestamp</th></tr></thead><tbody id="performanceExplorerTableBody"></tbody></table></div></details>
+            <p class="performance-disclosure">Historical market performance, not a forecast. PublicTradeIntel confidence is a model assessment, not a guaranteed outcome.</p>
+          </div>
+        </section>
         <div class="prediction-tabs">
           <button type="button" class="is-active" data-prediction-view="top25OneDay">Top 25 1-day</button>
           <button type="button" data-prediction-view="top25SevenDay">Top 25 7-day</button>
@@ -1096,5 +1124,6 @@
     </nav>
 
     <script src="app.js?v=20260710-ux-acceptance"></script>
+    <script src="performance-explorer.js"></script>
   </body>
 </html>

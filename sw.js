@@ -1,10 +1,11 @@
-const CACHE_NAME = "publictradeintel-brand-v1";
+const CACHE_NAME = "publictradeintel-performance-v1";
 const ASSETS = [
   "./",
   "./index.html",
   "./admin.html",
   "./styles.css",
   "./app.js",
+  "./performance-explorer.js",
   "./admin.js",
   "./site.webmanifest",
   "./icon.svg",

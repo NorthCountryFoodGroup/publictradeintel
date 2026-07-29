@@ -42,6 +42,7 @@ const {
   recordReadinessObservation,
 } = require("./discovery/readiness-history");
 const { createSecurityProfileService } = require("./security-profile");
+const { createHistoricalMarketService, validateRequest: validateHistoricalMarketRequest } = require("./historical-market");
 
 const PORT = Number(process.env.PORT || 3000);
 const PRODUCTION = process.env.NODE_ENV === "production";
@@ -76,6 +77,7 @@ const PACKAGED_PUBLIC_SYMBOL_SNAPSHOT_FILE = path.join(ROOT, "data", "publicSymb
 const PREDICTION_HISTORY_FILE = path.join(DATA_DIR, "predictionHistory.json");
 const OUTCOME_STATUS_FILE = path.join(DATA_DIR, "outcomeStatus.json");
 const SECURITY_PROFILE_CACHE_FILE = path.join(DATA_DIR, "securityProfiles.json");
+const HISTORICAL_MARKET_CACHE_FILE = path.join(DATA_DIR, "historicalMarket.json");
 const MARKET_API_KEY = String(process.env.ALPHA_VANTAGE_API_KEY || "").trim();
 const POLICY_REFRESH_MS = Number(process.env.POLICY_REFRESH_MS || 60 * 60 * 1000);
 const CONGRESS_TRADES_FEED_URL = process.env.CONGRESS_TRADES_FEED_URL || "";
@@ -100,6 +102,18 @@ const securityProfileService = createSecurityProfileService({
   universeLoader: () => loadSymbolUniverse(),
   timeoutMs: 6000,
   concurrency: 2,
+});
+const historicalMarketService = createHistoricalMarketService({
+  cacheFile: HISTORICAL_MARKET_CACHE_FILE,
+  predictionHistoryLoader: () => readJson(PREDICTION_HISTORY_FILE, { records: [] }).records || [],
+  evidenceLoader: () => {
+    const config = readJson(CONFIG_FILE, {});
+    const policy = readJson(POLICY_FILE, { signals: [] });
+    return [
+      ...(config.congressTrades || []).map((record) => ({ ticker: String(record.ticker || "").toUpperCase(), timestamp: record.transactionDate || record.disclosureDate || null, type: "congressional_transaction", title: "Congressional transaction disclosure", source: record.source || "Saved congressional disclosure", sourceTimestamp: record.disclosureDate || null })),
+      ...(policy.signals || []).map((record) => ({ ticker: String(record.ticker || "").toUpperCase(), timestamp: record.updatedAt || record.timestamp || null, type: "policy_event", title: record.title || record.summary || "Ticker-specific policy signal", source: record.source || "Saved policy signal", sourceTimestamp: record.updatedAt || record.timestamp || null })),
+    ].filter((record) => record.ticker && record.timestamp);
+  },
 });
 const BROAD_SCREEN_TARGET = 2500;
 const DEEP_ANALYSIS_MARKET_HOURS_TARGET = 300;
@@ -6233,6 +6247,18 @@ async function handleApi(request, response, pathname) {
     sendJson(response, 200, saved && Array.isArray(saved.predictions)
       ? saved
       : { updatedAt: null, predictions: [], sections: {}, status: "not_generated" });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/market-history") {
+    try {
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const query = validateHistoricalMarketRequest(url.searchParams);
+      sendJson(response, 200, await historicalMarketService.getHistory(query));
+    } catch (error) {
+      const status = ["invalid_request", "invalid_ticker_count", "invalid_symbol", "invalid_period"].includes(error.code) ? 400 : 503;
+      sendJson(response, status, { error: publicErrorMessage(error, "Historical market data is unavailable."), classification: error.code || "unavailable" });
+    }
     return;
   }
 
