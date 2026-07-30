@@ -75,6 +75,7 @@
     "smoke:branding": "node scripts/smoke-test-branding.js",
     "smoke:performance-explorer": "node scripts/smoke-test-performance-explorer.js",
     "smoke:market-history": "node scripts/smoke-test-market-history.js",
+    "smoke:service-worker-api-cache": "node scripts/smoke-test-service-worker-api-cache.js",
     "smoke:security-profile-enrichment": "node scripts/smoke-test-security-profile-enrichment.js",
     "smoke:bull-bear-case": "node scripts/smoke-test-bull-bear-case.js",
     "smoke:signal-agreement": "node scripts/smoke-test-signal-agreement.js",
