@@ -53,6 +53,12 @@ function criterion(id, description, reasonCode, observedValue, threshold, pass, 
   };
 }
 
+function failedCriterionMessage(item) {
+  const observed = item.observedValue === null || item.observedValue === undefined ? "unknown" : JSON.stringify(item.observedValue);
+  const required = item.threshold === null || item.threshold === undefined ? "the configured requirement" : JSON.stringify(item.threshold);
+  return `${item.criterionId} has not met its required threshold. Observed ${observed}; required ${required}.`;
+}
+
 function structuredError(input, message) {
   let evaluatedAt = new Date(0).toISOString();
   try {
@@ -214,7 +220,7 @@ function evaluateReadiness(input = {}) {
       ...failed.map((item) => ({
         reasonCode: item.reasonCode,
         criterionId: item.criterionId,
-        message: item.description,
+        message: failedCriterionMessage(item),
         preExisting: false,
       })),
       ...criticalDiagnostics.map((item) => ({

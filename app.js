@@ -273,6 +273,11 @@ let congressFeedStatus = { updatedAt: null, imported: 0, totalTrades: 0, source:
 let symbolUniverseStatus = { activeSource: "Unknown", eligibleSymbolCount: 0, emergencyFallbackActive: false };
 let marketIndexData = { broadMarketTrend: "Unavailable", rows: [], provider: "Unavailable" };
 let predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
+const predictionSemantics = window.PublicTradeIntelPredictionSemantics;
+
+function qualifiedPredictionRows() {
+  return predictionSemantics.qualifyRows(predictionEngine.predictions || []);
+}
 let performanceSummaryState = { predictionsRecorded: 0, predictionsPending: 0, predictionsEligible: 0, predictionsSettled: 0, byTimeframe: {} };
 let predictionView = "top25OneDay";
 let predictionLayout = "cards";
@@ -1208,13 +1213,17 @@ function renderDashboardBrief({ predictions, marketMood, signals, positiveSignal
     negativeSignals.length ? `${negativeSignals.length} negative policy/news signal(s)` : "",
     health.dataQualityStatus && !["good", "Good"].includes(health.dataQualityStatus) ? `market data quality is ${health.dataQualityStatus}` : "",
   ].filter(Boolean);
-  const biasLabel = /bull market/i.test(String(marketMood || "")) ? "Bullish" : marketMood;
+  const qualified = predictionSemantics.qualifyRows(predictions);
+  const evidenceAdequate = qualified.length > 0;
+  const biasLabel = evidenceAdequate ? (/bull market/i.test(String(marketMood || "")) ? "Bullish" : marketMood) : "Insufficient evidence";
   if (output.aiDashboardBriefStatus) output.aiDashboardBriefStatus.textContent = predictions.length ? "Generated from latest scan" : "Waiting for scan";
   const broadTrend = marketIndexData.broadMarketTrend || "Unavailable";
   const dataLimit = warningCount ? `Market-data quality has ${warningCount} limitation flag(s), so short-term rankings should be interpreted cautiously.` : "Market-data quality has no major warning in the saved scan.";
   const warning = risks[0] || "watch whether the next scan confirms the same leadership and data quality.";
   output.aiDashboardBrief.textContent = predictions.length
-    ? `Broad Market Trend is currently ${broadTrend}, while the analyzed Prediction Universe Bias reads ${biasLabel}. ${sector} in the latest scan, with ${highConfidence} high-confidence candidate(s) among ${predictions.length} analyzed securities. ${dataLimit} The most important warning is to ${warning}. Review the highest-confidence opportunities and open each Trade Brief before taking action.`
+    ? evidenceAdequate
+      ? `Broad Market Trend is currently ${broadTrend}, while the evidence-qualified Prediction Universe Bias reads ${biasLabel}. ${sector} in the latest scan, with ${highConfidence} high-confidence candidate(s) among ${qualified.length} qualified securities. ${dataLimit} The most important warning is to ${warning}. Review each Trade Brief before taking action.`
+      : `${predictions.length} analytical record(s) were stored, but market-data coverage is inadequate and zero records currently qualify for ordinary recommendation use. Directional model output exists but is not sufficiently supported to characterize the prediction universe as bullish or bearish. Observed market conditions remain separate and unavailable where live proxy data was not supplied. ${dataLimit}`
     : "Run a prediction scan to generate a concise market brief from available market, sector, policy, news, congressional, and data-quality signals.";
 }
 
@@ -1250,7 +1259,7 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
     const symbolsAvailable = scan.symbolsAvailable || scan.totalSymbolsAvailable || 0;
     const screened = scan.symbolsScreened || 0;
     const deepSelected = scan.deepCandidatesSelected || scan.deepAnalysisCandidatesSelected || 0;
-    const predictionsGenerated = scan.predictionsGenerated || predictionEngine.predictions?.length || 0;
+    const semantics = predictionEngine.predictionSemantics || predictionSemantics.summarize(predictionEngine);
     const coverageWarning = scanUniverseSourceNote(scan);
     const providerFetchedAt = scan.providerFetchedAt || scan.scanCompletedAt || predictionEngine.updatedAt;
     const underlyingDataAt = scan.latestUnderlyingQuoteAt || scan.marketDataAsOfTimestamp || scan.dataAsOf;
@@ -1279,7 +1288,9 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
       metricCard("Universe Source", universeSource, coverageWarning || `${symbolsAvailable} eligible symbols`, "predictions"),
       metricCard("Broad Screen", `${screened} screened`, `Target: ${broadTarget}`, "predictions"),
       metricCard("Deep Analysis", `${deepSelected} analyzed`, `Target: ${deepTarget || "Not recorded"}`, "predictions"),
-      metricCard("Predictions", `${predictionsGenerated} published`, "Published after validation", "predictions"),
+      metricCard("Analyzed", `${semantics.analyzedCount} records`, "Processed by the prediction engine", "predictions"),
+      metricCard("Stored Research", `${semantics.storedCount} records`, "Persisted analytical records; not automatically recommendations", "predictions"),
+      metricCard("Qualified", `${semantics.qualifiedCount} recommendations`, "Meets current market-evidence requirements", "predictions"),
       metricCard("Total Wall Clock Time", compactDuration(scan.totalWallClockTimeMs || scan.totalDuration || scan.durationMs || scan.scanDurationSeconds), durationBreakdown ? `Parallel Stage Timing: ${durationBreakdown}` : "Parallel stage timing unavailable", "predictions"),
       metricCard("Engine", predictionEngine.predictionEngineHealth?.predictionEngineStatus || predictionEngine.predictionEngineHealth?.status || "Not run", predictionEngine.predictionEngineHealth?.predictionEngineStatusReasons?.join("; ") || "Separate from market data freshness", "predictions"),
       metricCard("Market Data Availability", availabilityLabel, criticalReady, "predictions"),
@@ -1309,6 +1320,7 @@ function renderDashboard() {
   const health = predictionEngine.predictionEngineHealth || {};
   const totals = portfolioTotals();
   const predictions = predictionEngine.predictions || [];
+  const qualifiedPredictions = qualifiedPredictionRows();
   const topToday = firstFromSection("top25OneDay");
   const topWeek = firstFromSection("top25SevenDay");
   const topMonth = firstFromSection("top25OneMonth");
@@ -1325,7 +1337,7 @@ function renderDashboard() {
     congressFeedStatus.lastSuccessfulRefresh ? `Last successful refresh: ${exactEt(congressFeedStatus.lastSuccessfulRefresh)}.` : "",
     congressFeedStatus.savedFallbackActive ? "Saved disclosure fallback active." : "",
   ].filter(Boolean).join(" ");
-  const predictionBias = predictionEngine.marketRegime?.primary || topToday?.marketRegime?.primary || "Neutral";
+  const predictionBias = qualifiedPredictions.length ? (predictionEngine.marketRegime?.primary || topToday?.marketRegime?.primary || "Neutral") : "Insufficient evidence";
   const broadMarketTrend = scan.marketStatus || scan.marketSession?.status || "Unavailable";
   const trades = settings.congressTrades || [];
   const buys = trades.filter((trade) => trade.transaction === "Buy");
@@ -1350,14 +1362,14 @@ function renderDashboard() {
   renderScanProgressSummary(false, predictionEngine.updatedAt ? "Scan complete" : "Idle", predictionEngine.updatedAt ? 100 : 0);
   output.marketOverviewGrid.innerHTML = [
     metricCard("Market Session", broadMarketTrend, scan.scanMode || "Completed scan metadata unavailable", "market"),
-    metricCard("Prediction Universe Bias", predictionBias, `${predictions.length} analyzed prediction candidate(s)`, "market"),
-    metricCard("Prediction Universe Sentiment", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "No scan yet", "Internal estimate based on unified prediction scores only", "market"),
+    metricCard("Qualified Prediction Bias", predictionBias, `${qualifiedPredictions.length} qualified of ${predictions.length} stored research record(s)`, "market"),
+    metricCard("Qualified Prediction Sentiment", qualifiedPredictions.length ? `${averageUnifiedScore(qualifiedPredictions)}/100` : "Insufficient evidence", "Model estimate for evidence-qualified records only", "market"),
     metricCard("S&P 500 Proxy - SPY", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
     metricCard("Nasdaq Proxy - QQQ", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
     metricCard("Dow Proxy - DIA", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
     metricCard("Russell 2000 Proxy - IWM", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
     metricCard("VIX", "Supplemental only", "Displayed separately from the completed prediction scan.", "market"),
-    metricCard("Highest-Scoring Group in Current Scan", sectorStrengthSummary(predictions), `Based on ${predictions.length} final prediction candidate(s)`, "market"),
+    metricCard("Highest-Scoring Qualified Group", qualifiedPredictions.length ? sectorStrengthSummary(qualifiedPredictions) : "Insufficient evidence", `Based on ${qualifiedPredictions.length} qualified recommendation(s)`, "market"),
     metricCard("Scan Universe Source", scanUniverseSourceLabel(scan), scanUniverseSourceNote(scan), "market"),
   ].join("");
 
@@ -1372,17 +1384,17 @@ function renderDashboard() {
   ].join("");
 
   const usedTickers = new Set();
-  const byMomentum = [...predictions].sort((a, b) => Number(b.modelScores?.momentum || 0) - Number(a.modelScores?.momentum || 0));
-  const byRiskReward = [...predictions].sort((a, b) => Number(b.riskRewardRatio || 0) - Number(a.riskRewardRatio || 0));
-  const contrarian = [...predictions].filter((item) => item.unifiedDirection !== "bearish" && Number(item.riskScore) < 65).sort((a, b) => Number(b.scoreChange || 0) - Number(a.scoreChange || 0));
+  const byMomentum = [...qualifiedPredictions].sort((a, b) => Number(b.modelScores?.momentum || 0) - Number(a.modelScores?.momentum || 0));
+  const byRiskReward = [...qualifiedPredictions].sort((a, b) => Number(b.riskRewardRatio || 0) - Number(a.riskRewardRatio || 0));
+  const contrarian = [...qualifiedPredictions].filter((item) => item.unifiedDirection !== "bearish" && Number(item.riskScore) < 65).sort((a, b) => Number(b.scoreChange || 0) - Number(a.scoreChange || 0));
   const opportunities = [
     pickDistinctOpportunity("Top 1-Day Opportunity", predictionEngine.sections?.top25OneDay || topToday, usedTickers, "Highest qualified 1-day ranking."),
     pickDistinctOpportunity("Best 7-Day Opportunity", predictionEngine.sections?.top25SevenDay || topWeek, usedTickers, "Highest qualified 7-day setup."),
     pickDistinctOpportunity("Best 1-Month Opportunity", predictionEngine.sections?.top25OneMonth || topMonth, usedTickers, "Highest qualified 1-month swing candidate."),
     pickDistinctOpportunity("Best 1-Year Opportunity", predictionEngine.sections?.top25OneYear || topYear, usedTickers, "Highest qualified 1-year hold candidate."),
     pickDistinctOpportunity("Highest Momentum", byMomentum, usedTickers, "Highest current momentum contribution."),
-    pickDistinctOpportunity("Most Improved", [...predictions].sort((a, b) => Number(b.scoreChange || 0) - Number(a.scoreChange || 0)), usedTickers, "Largest score improvement versus prior scan."),
-    pickDistinctOpportunity("Highest Confidence", [...predictions].sort((a, b) => Number(b.confidenceScore || b.unifiedPredictionScore || 0) - Number(a.confidenceScore || a.unifiedPredictionScore || 0)), usedTickers, "Highest confidence among analyzed candidates."),
+    pickDistinctOpportunity("Most Improved", [...qualifiedPredictions].sort((a, b) => Number(b.scoreChange || 0) - Number(a.scoreChange || 0)), usedTickers, "Largest score improvement versus prior scan."),
+    pickDistinctOpportunity("Highest Confidence", [...qualifiedPredictions].sort((a, b) => Number(b.confidenceScore || b.unifiedPredictionScore || 0) - Number(a.confidenceScore || a.unifiedPredictionScore || 0)), usedTickers, "Highest confidence among qualified candidates."),
     pickDistinctOpportunity("Contrarian Watch", contrarian, usedTickers, "Qualified lower-risk name with improving score."),
     pickDistinctOpportunity("Best Risk/Reward", byRiskReward, usedTickers, "Strongest available risk/reward ratio."),
   ];
@@ -2059,7 +2071,7 @@ function pennySpeculativeQualification(item) {
 
 function enrichOpportunityRows() {
   const timeframe = output.opportunityTimeframe?.value || "1-Day";
-  const sectionKey = opportunityTimeframeSectionKey(timeframe);
+  const sectionKey = predictionEngine.sections?.[predictionView] ? predictionView : opportunityTimeframeSectionKey(timeframe);
   const baseRows = (predictionEngine.sections?.[sectionKey] || predictionEngine.predictions || []).map((item, index) => ({ ...item, timeframeRank: Number(item.rank) || index + 1 }));
   const allByScore = [...baseRows].sort((a, b) => scoreValue(b.unifiedPredictionScore || b.aiOpportunityScore) - scoreValue(a.unifiedPredictionScore || a.aiOpportunityScore));
   const rankByTicker = new Map(allByScore.map((item, index) => [item.ticker, index + 1]));
@@ -2101,7 +2113,7 @@ function opportunityRowsForHub() {
     if (priceBand !== "all" && item.priceBand.key !== priceBand) return false;
     if (investorView === "beginner" && !item.beginnerQualification.qualifies) return false;
     if (investorView === "penny" && !item.pennySpeculativeQualification.qualifies) return false;
-    return !["failed", "unavailable"].includes(String(item.dataQualityStatus || "").toLowerCase());
+    return predictionSemantics.isQualified(item);
   });
   if (rankingView === "confidence") rows.sort((a, b) => confidenceRank(b.confidenceTier) - confidenceRank(a.confidenceTier) || scoreValue(b.unifiedPredictionScore) - scoreValue(a.unifiedPredictionScore));
   else if (rankingView === "risk") rows.sort((a, b) => Number(a.riskScore || 100) - Number(b.riskScore || 100));
@@ -2238,7 +2250,12 @@ function fallbackStocksToBuyCenter() {
 }
 
 function stocksToBuyCenterData() {
-  return predictionEngine.sections?.stocksToBuyCenter || predictionEngine.stocksToBuyCenter || fallbackStocksToBuyCenter();
+  const center = predictionEngine.sections?.stocksToBuyCenter || predictionEngine.stocksToBuyCenter || fallbackStocksToBuyCenter();
+  const rankingLists = Object.fromEntries(Object.entries(center.rankingLists || {}).map(([key, list]) => {
+    const qualifiedRows = predictionSemantics.qualifyRows(list.qualifiedRows || list.rows);
+    return [key, { ...list, qualifiedRows, rows: qualifiedRows.slice(0, 25), qualifiedCount: qualifiedRows.length }];
+  }));
+  return { ...center, rankingLists, bestIdeas: { ...(center.bestIdeas || {}), current: predictionSemantics.qualifyRows(center.bestIdeas?.current) } };
 }
 
 function stocksToBuyCategorySummary(rows, category, timeframe) {
@@ -2646,6 +2663,7 @@ function renderScreenerPredictions() {
   const top25Counts = health.top25Counts || {};
   const qualityCounts = health.dataQualityStatusCounts || {};
   const scanUniverse = predictionEngine.scanUniverse || {};
+  const semantics = predictionEngine.predictionSemantics || predictionSemantics.summarize(predictionEngine);
   const investorViewLabel = output.opportunityInvestorView?.selectedOptions?.[0]?.textContent || "All Opportunities";
   const priceBandLabel = output.opportunityPriceBand?.selectedOptions?.[0]?.textContent || "All Prices";
   const rankingLabel = output.opportunityRankingView?.selectedOptions?.[0]?.textContent || "Overall Top 25";
@@ -2667,7 +2685,8 @@ function renderScreenerPredictions() {
 
   output.predictionSummary.innerHTML = `
     <div><span>Last scan</span><strong>${predictionEngine.updatedAt ? new Date(predictionEngine.updatedAt).toLocaleString() : "Not scanned yet"}</strong></div>
-    <div><span>Tracked assets</span><strong>${predictions.length}</strong></div>
+    <div><span>Analyzed</span><strong>${semantics.analyzedCount}</strong></div>
+    <div><span>Stored research records</span><strong>${semantics.storedCount}</strong></div>
     <div><span>1-day avg</span><strong>${oneDayAvg}/100</strong></div>
     <div><span>3-day avg</span><strong>${threeDayAvg}/100</strong></div>
     <div><span>7-day avg</span><strong>${sevenDayAvg}/100</strong></div>
@@ -2679,8 +2698,8 @@ function renderScreenerPredictions() {
     <div><span>Investor view</span><strong>${escapeHtml(investorViewLabel)}</strong></div>
     <div><span>Price band</span><strong>${escapeHtml(priceBandLabel)}</strong></div>
     <div><span>Ranking view</span><strong>${escapeHtml(rankingLabel)}</strong></div>
-    <div><span>Qualified results</span><strong>${active.length}</strong></div>
-    <div><span>Top 25 counts</span><strong>${Number(top25Counts.top25OneDay) || 0}/${Number(top25Counts.top25SevenDay) || 0}/${Number(top25Counts.top25OneMonth) || 0}/${Number(top25Counts.top25OneYear) || 0}</strong></div>
+    <div><span>Currently qualified</span><strong>${semantics.qualifiedCount}</strong></div>
+    <div><span>Qualified horizon counts</span><strong>${Number(semantics.horizonCounts.top25OneDay) || 0}/${Number(semantics.horizonCounts.top25SevenDay) || 0}/${Number(semantics.horizonCounts.top25OneMonth) || 0}/${Number(semantics.horizonCounts.top25OneYear) || 0}</strong></div>
     <div><span>Quality counts</span><strong>G ${Number(qualityCounts.good) || 0} / P ${Number(qualityCounts.partial) || 0} / S ${Number(qualityCounts.stale) || 0} / F ${Number(qualityCounts.failed) || 0}</strong></div>
   `;
 
@@ -2689,10 +2708,9 @@ function renderScreenerPredictions() {
   if (!active.length) {
     output.predictionGrid.innerHTML = `
       <article class="stock-card">
-        <span>No predictions yet</span>
-        <strong>Run a prediction scan</strong>
-        <p>The backend will load the active universe, refresh signals, score each ticker, save prediction records, and refresh this dashboard.</p>
-        <button type="button" class="inline-scan-button" data-run-prediction-scan>Run prediction scan</button>
+        <span>No currently qualified recommendations</span>
+        <strong>${predictions.length} stored research record(s) remain available for inspection</strong>
+        <p>The latest records do not meet the required market-evidence standard for this ranking view. Missing or stale evidence is not converted into an actionable recommendation.</p>
       </article>
     `;
     return;
@@ -4227,7 +4245,8 @@ function renderMarketIntelligence() {
   if (!output.marketSummaryGrid) return;
   const scan = completedScanHealth();
   const health = predictionEngine.predictionEngineHealth || {};
-  const predictions = predictionEngine.predictions || [];
+  const researchRecords = predictionEngine.predictions || [];
+  const predictions = qualifiedPredictionRows();
   const stats = sectorStats();
   const strongestSector = [...stats].sort((a, b) => b.avgScore - a.avgScore)[0];
   const weakestSector = [...stats].sort((a, b) => a.avgScore - b.avgScore)[0];
@@ -4246,7 +4265,7 @@ function renderMarketIntelligence() {
 
   output.marketSummaryGrid.innerHTML = [
     marketMetricCard("Market Session", broadMarketTrend, scan.scanMode || "Completed scan metadata unavailable", statusTone(broadMarketTrend)),
-    marketMetricCard("Prediction Universe Bias", predictionBias, `${predictions.length} deeply analyzed candidate(s)`, statusTone(predictionBias)),
+    marketMetricCard("Qualified Prediction Bias", predictions.length ? predictionBias : "Insufficient evidence", `${predictions.length} qualified of ${researchRecords.length} stored research record(s)`, statusTone(predictions.length ? predictionBias : "Unavailable")),
     marketMetricCard("Prediction Universe Sentiment", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "No scan yet", "Internal estimate based on unified prediction scores only"),
     marketMetricCard("S&P 500 Proxy - SPY", "Live quote unavailable", "Displayed separately from the completed prediction scan"),
     marketMetricCard("Nasdaq Proxy - QQQ", "Live quote unavailable", "Displayed separately from the completed prediction scan"),
@@ -4259,8 +4278,9 @@ function renderMarketIntelligence() {
   ].join("");
 
   output.marketBreadthGrid.innerHTML = [
-    marketMetricCard("Advancers", String(bullishCount), "Bullish prediction direction"),
-    marketMetricCard("Decliners", String(bearishCount), "Bearish prediction direction", "warning"),
+    marketMetricCard("Observed Market Breadth", "Unavailable", "Observed advance/decline data is not connected"),
+    marketMetricCard("Bullish Model Classifications", String(bullishCount), "Evidence-qualified prediction directions; not observed market advancers"),
+    marketMetricCard("Bearish Model Classifications", String(bearishCount), "Evidence-qualified prediction directions; not observed market decliners", "warning"),
     marketMetricCard("New Highs", "Unavailable", "Broad-market highs/lows feed not connected"),
     marketMetricCard("New Lows", "Unavailable", "Broad-market highs/lows feed not connected"),
     marketMetricCard("Volume Breadth", "Unavailable", "Volume breadth feed not connected"),
@@ -5072,7 +5092,7 @@ async function loadPredictions() {
   try {
     const response = await fetch("api/predictions", { cache: "no-store" });
     if (!response.ok) throw new Error("Predictions unavailable");
-    predictionEngine = await response.json();
+    predictionEngine = predictionSemantics.normalizePayload(await response.json());
   } catch {
     predictionEngine = { updatedAt: null, predictions: [], sections: {}, modelVersion: "" };
   }

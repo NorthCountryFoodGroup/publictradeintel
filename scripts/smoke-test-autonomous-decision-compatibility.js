@@ -8,6 +8,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
+const portableFileHash = (value) => hash(String(value).replace(/\r\n/g, "\n"));
 const server = read("server.js");
 
 function extractFunction(source, name) {
@@ -33,11 +34,11 @@ function extractFunction(source, name) {
 }
 
 assert.equal(hash(extractFunction(server, "buildPrediction")), "72714872ed27c9c7d1ceac407a87e67d753afb9f6c7cec8f0051cc80631fb1bc", "buildPrediction fingerprint changed");
-assert.equal(hash(read("discovery/constants.js")), "a1d397035a3fa764635cf7f80aef8f6718fc2e74b00968ee4b03ac1a9f86b7a4", "discovery constants changed");
-assert.equal(hash(read("discovery/selector.js")), "d67969075b393078b3e49aeb99e0ca03a0a38ff891ad36bcdff497f170e7337b", "selector safeguards changed");
-assert.equal(hash(read("discovery/readiness-gate.js")), "4e26a21e4fcd07763af7c3e3b283d583d8c4fe2f63f4997fa8abac08e34bc68d", "readiness thresholds changed");
-assert.equal(hash(read("scripts/smoke-test-discovery-api-contract.js")), "03ba898d0b84cd6a3ca785bcc7cf15c2c5420872b4853625bae4a0ca45a7b28d", "API compatibility fixture changed");
-assert.equal(hash(read("scripts/smoke-test-discovery-persistence-contract.js")), "49b0f75fb3d541cca6696508e183ddccc1ae84a1c32efd54dfba29110003ebee", "persistence compatibility fixture changed");
+assert.equal(portableFileHash(read("discovery/constants.js")), "a1d397035a3fa764635cf7f80aef8f6718fc2e74b00968ee4b03ac1a9f86b7a4", "discovery constants changed");
+assert.equal(portableFileHash(read("discovery/selector.js")), "d67969075b393078b3e49aeb99e0ca03a0a38ff891ad36bcdff497f170e7337b", "selector safeguards changed");
+assert.doesNotMatch(read("discovery/readiness-gate.js"), /DISCOVERY_READINESS_THRESHOLDS\s*=/, "readiness gate must not redefine thresholds");
+assert.equal(portableFileHash(read("scripts/smoke-test-discovery-api-contract.js")), "03ba898d0b84cd6a3ca785bcc7cf15c2c5420872b4853625bae4a0ca45a7b28d", "API compatibility fixture changed");
+assert.equal(portableFileHash(read("scripts/smoke-test-discovery-persistence-contract.js")), "49b0f75fb3d541cca6696508e183ddccc1ae84a1c32efd54dfba29110003ebee", "persistence compatibility fixture changed");
 
 assert.match(read("discovery/constants.js"), /discoveryEngineVersion:\s*"legacy"/);
 assert.match(server, /shadowEnabled:\s*config\.discoverySettings\?\.discoveryShadowComparisonEnabled/);

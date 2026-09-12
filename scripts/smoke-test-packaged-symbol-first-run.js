@@ -38,6 +38,8 @@ async function main() {
     packagedDocument.snapshotMetadata?.generatedAt ||
     packagedDocument.symbolUniverseMetadata?.generatedAt;
   assert.ok(originalTimestamp, "checked-in packaged snapshot should carry a source timestamp");
+  const freshEvaluationTime = new Date(Date.parse(originalTimestamp) + 24 * 60 * 60 * 1000).toISOString();
+  const staleEvaluationTime = new Date(Date.parse(originalTimestamp) + 46 * 24 * 60 * 60 * 1000).toISOString();
 
   const writableDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "pti-packaged-first-run-"));
   try {
@@ -48,7 +50,7 @@ async function main() {
       networkCalls += 1;
       throw new Error("network must not be called when the packaged snapshot is valid");
     };
-    const resolved = await resolver.ensureSymbolUniverseForScan().finally(() => {
+    const resolved = await resolver.ensureSymbolUniverseForScan({ evaluatedAt: freshEvaluationTime }).finally(() => {
       global.fetch = previousFetch;
     });
     assert.equal(networkCalls, 0, "valid packaged first-run resolution must avoid live requests");
@@ -80,7 +82,7 @@ async function main() {
       networkCalls += 1;
       throw new Error("network must not be called after packaged in-memory success");
     };
-    const resolved = await resolver.ensureSymbolUniverseForScan().finally(() => {
+    const resolved = await resolver.ensureSymbolUniverseForScan({ evaluatedAt: freshEvaluationTime }).finally(() => {
       global.fetch = previousFetch;
     });
     assert.equal(networkCalls, 0, "seeding failure must not trigger a live refresh");
@@ -109,7 +111,7 @@ async function main() {
         networkCalls += 1;
         throw new Error("network must not be called after packaged in-memory success");
       };
-      const resolved = await resolver.ensureSymbolUniverseForScan().finally(() => {
+      const resolved = await resolver.ensureSymbolUniverseForScan({ evaluatedAt: freshEvaluationTime }).finally(() => {
         global.fetch = previousFetch;
       });
       assert.equal(networkCalls, 0, `${failedFilename} failure must not trigger a live refresh`);
@@ -119,6 +121,25 @@ async function main() {
       fs.renameSync = originalRename;
       fs.rmSync(partialFailureDir, { recursive: true, force: true });
     }
+  }
+
+  const staleDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "pti-packaged-stale-lifecycle-"));
+  try {
+    let networkCalls = 0;
+    const resolver = loadResolver(staleDataDir);
+    const previousFetch = global.fetch;
+    global.fetch = async () => {
+      networkCalls += 1;
+      throw new Error("deterministic live refresh failure after stale packaged snapshot");
+    };
+    const resolved = await resolver.ensureSymbolUniverseForScan({ evaluatedAt: staleEvaluationTime }).finally(() => {
+      global.fetch = previousFetch;
+    });
+    assert.equal(networkCalls, 2, "stale packaged snapshot must continue to the bounded two-source live refresh");
+    assert.equal(resolved.symbolUniverseMetadata.refreshStatus, "emergency-preset-fallback");
+    assert.equal(resolved.symbolUniverseMetadata.emergencyFallbackActive, true);
+  } finally {
+    fs.rmSync(staleDataDir, { recursive: true, force: true });
   }
 
   console.log("Packaged symbol first-run integration contract passed.");

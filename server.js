@@ -43,6 +43,7 @@ const {
 } = require("./discovery/readiness-history");
 const { createSecurityProfileService } = require("./security-profile");
 const { createHistoricalMarketService, validateRequest: validateHistoricalMarketRequest } = require("./historical-market");
+const predictionSemantics = require("./prediction-semantics");
 
 const PORT = Number(process.env.PORT || 3000);
 const PRODUCTION = process.env.NODE_ENV === "production";
@@ -1191,7 +1192,7 @@ function snapshotInitializationBase(sourceAttempted = "packaged-public-snapshot"
   };
 }
 
-function snapshotSymbolUniverse(file, sourceAttempted, refreshStatus) {
+function snapshotSymbolUniverse(file, sourceAttempted, refreshStatus, evaluatedAt = isoNow()) {
   const diagnostics = snapshotInitializationBase(sourceAttempted);
   try {
     const stat = fs.existsSync(file) ? fs.statSync(file) : null;
@@ -1218,7 +1219,7 @@ function snapshotSymbolUniverse(file, sourceAttempted, refreshStatus) {
     const documentStatus = snapshotDocumentStatus(snapshot, {
       minimumSymbolCount: MIN_PUBLIC_SYMBOL_SNAPSHOT_COUNT,
       maximumAgeMs: SNAPSHOT_MAXIMUM_AGE_MS,
-      evaluatedAt: isoNow(),
+      evaluatedAt,
     });
     const rawRows = Array.isArray(snapshot.symbols) ? snapshot.symbols : Array.isArray(snapshot) ? snapshot : [];
     diagnostics.rawRecordCount = rawRows.length;
@@ -1274,12 +1275,12 @@ function snapshotSymbolUniverse(file, sourceAttempted, refreshStatus) {
   }
 }
 
-function packagedSymbolUniverse() {
-  return snapshotSymbolUniverse(PACKAGED_PUBLIC_SYMBOL_SNAPSHOT_FILE, "packaged-public-snapshot", "packaged-snapshot");
+function packagedSymbolUniverse(evaluatedAt) {
+  return snapshotSymbolUniverse(PACKAGED_PUBLIC_SYMBOL_SNAPSHOT_FILE, "packaged-public-snapshot", "packaged-snapshot", evaluatedAt);
 }
 
-function persistedSnapshotUniverse() {
-  return snapshotSymbolUniverse(PUBLIC_SYMBOL_SNAPSHOT_FILE, "saved-public-snapshot", "saved-snapshot");
+function persistedSnapshotUniverse(evaluatedAt) {
+  return snapshotSymbolUniverse(PUBLIC_SYMBOL_SNAPSHOT_FILE, "saved-public-snapshot", "saved-snapshot", evaluatedAt);
 }
 
 function persistSymbolUniverse(universe, { persistSnapshot = true } = {}) {
@@ -1423,12 +1424,13 @@ async function refreshSymbolUniverse() {
 }
 
 function loadSymbolUniverse(options = {}) {
+  const evaluatedAt = options.evaluatedAt || isoNow();
   const allowEmergency = options.allowEmergency !== false;
   const saved = readJson(SYMBOL_UNIVERSE_FILE, null);
   const savedStatus = snapshotDocumentStatus(saved, {
     minimumSymbolCount: MIN_PUBLIC_SYMBOL_SNAPSHOT_COUNT,
     maximumAgeMs: SNAPSHOT_MAXIMUM_AGE_MS,
-    evaluatedAt: isoNow(),
+    evaluatedAt,
   });
   const savedCount = savedStatus.symbolCount;
   const savedIsEmergency = saved?.symbolUniverseMetadata?.emergencyFallbackActive || saved?.symbolUniverseMetadata?.refreshStatus === "emergency-preset-fallback";
@@ -1451,7 +1453,7 @@ function loadSymbolUniverse(options = {}) {
     };
     return saved;
   }
-  const persisted = persistedSnapshotUniverse();
+  const persisted = persistedSnapshotUniverse(evaluatedAt);
   const persistedDiagnostics = lastSymbolUniverseInitialization || {};
   sourceResolutionDiagnostics.push(boundedSourceDiagnostic({
     source: "saved-public-snapshot",
@@ -1476,7 +1478,7 @@ function loadSymbolUniverse(options = {}) {
     }
     return persisted;
   }
-  const packaged = packagedSymbolUniverse();
+  const packaged = packagedSymbolUniverse(evaluatedAt);
   const packagedDiagnostics = lastSymbolUniverseInitialization || {};
   sourceResolutionDiagnostics.push(boundedSourceDiagnostic({
     source: "packaged-public-snapshot",
@@ -1541,8 +1543,8 @@ function loadSymbolUniverse(options = {}) {
   return fallback;
 }
 
-async function ensureSymbolUniverseForScan() {
-  const localUniverse = loadSymbolUniverse({ allowEmergency: false });
+async function ensureSymbolUniverseForScan(options = {}) {
+  const localUniverse = loadSymbolUniverse({ allowEmergency: false, evaluatedAt: options.evaluatedAt });
   if (localUniverse?.symbols?.length) return localUniverse;
   return refreshSymbolUniverse();
 }
@@ -4639,7 +4641,7 @@ function supportingSignalsFor(item) {
 
 function rankedTopList(predictions, { key, timeframe, modelKey, scoreKey, previousSections }) {
   const previousMap = previousRanks(previousSections, key);
-  return [...predictions]
+  return predictionSemantics.qualifyRows(predictions)
     .sort((a, b) => (Number(b[scoreKey]) || 0) - (Number(a[scoreKey]) || 0))
     .slice(0, 25)
     .map((item, index) => {
@@ -4941,17 +4943,18 @@ function comparisonView(lists) {
 }
 
 function predictionSections(predictions, previousSections = {}) {
-  const byScore = [...predictions].sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
-  const top25OneDay = rankedTopList(predictions, { key: "top25OneDay", timeframe: "1-day trade", modelKey: "oneDay", scoreKey: "oneDayScore", previousSections });
-  const top25SevenDay = rankedTopList(predictions, { key: "top25SevenDay", timeframe: "7-day trade", modelKey: "sevenDay", scoreKey: "sevenDayScore", previousSections });
-  const top25OneMonth = rankedTopList(predictions, { key: "top25OneMonth", timeframe: "1-month trade", modelKey: "thirtyDay", scoreKey: "thirtyDayScore", previousSections });
-  const top25OneYear = rankedTopList(predictions, { key: "top25OneYear", timeframe: "1-year hold", modelKey: "oneYear", scoreKey: "oneYearScore", previousSections });
+  const qualifiedPredictions = predictionSemantics.qualifyRows(predictions);
+  const byScore = [...qualifiedPredictions].sort((a, b) => b.aiOpportunityScore - a.aiOpportunityScore);
+  const top25OneDay = rankedTopList(qualifiedPredictions, { key: "top25OneDay", timeframe: "1-day trade", modelKey: "oneDay", scoreKey: "oneDayScore", previousSections });
+  const top25SevenDay = rankedTopList(qualifiedPredictions, { key: "top25SevenDay", timeframe: "7-day trade", modelKey: "sevenDay", scoreKey: "sevenDayScore", previousSections });
+  const top25OneMonth = rankedTopList(qualifiedPredictions, { key: "top25OneMonth", timeframe: "1-month trade", modelKey: "thirtyDay", scoreKey: "thirtyDayScore", previousSections });
+  const top25OneYear = rankedTopList(qualifiedPredictions, { key: "top25OneYear", timeframe: "1-year hold", modelKey: "oneYear", scoreKey: "oneYearScore", previousSections });
   const lists = { top25OneDay, top25SevenDay, top25OneMonth, top25OneYear };
   const comparisons = comparisonView(lists);
   const highAlignmentTickers = new Set(comparisons.filter((item) => item.label === "High Alignment Candidate").map((item) => item.ticker));
   let stocksToBuyCenter;
   try {
-    stocksToBuyCenter = buildStocksToBuyCenter(predictions, previousSections, new Date().toISOString());
+    stocksToBuyCenter = buildStocksToBuyCenter(qualifiedPredictions, previousSections, new Date().toISOString());
   } catch (error) {
     stocksToBuyCenter = previousSections.stocksToBuyCenter || {
       version: "v2.2-stocks-to-buy-center",
@@ -4982,7 +4985,7 @@ function predictionSections(predictions, previousSections = {}) {
     bestFiveSevenDay: top25SevenDay.slice(0, 5),
     bestFiveOneMonth: top25OneMonth.slice(0, 5),
     bestFiveOneYear: top25OneYear.slice(0, 5),
-    avoidList: [...predictions]
+    avoidList: [...qualifiedPredictions]
       .filter((item) => item.oneDayScore < 55 || item.riskScore >= 70)
       .sort((a, b) => (b.riskScore - a.riskScore) || (a.oneDayScore - b.oneDayScore))
       .slice(0, 25)
@@ -5010,22 +5013,22 @@ function predictionSections(predictions, previousSections = {}) {
       .filter((item) => item.rankMovement?.status !== "repeated winner")
       .slice(0, 40),
     oneDayOpportunities: top25OneDay,
-    threeDayOpportunities: [...predictions].sort((a, b) => b.threeDayScore - a.threeDayScore).slice(0, 6),
+    threeDayOpportunities: [...qualifiedPredictions].sort((a, b) => b.threeDayScore - a.threeDayScore).slice(0, 6),
     sevenDayOpportunities: top25SevenDay,
     thirtyDayOpportunities: top25OneMonth,
     dailyOpportunities: top25OneDay,
     weeklyOpportunities: top25SevenDay,
     monthlyOpportunities: top25OneMonth,
     goldSilverOpportunities: byScore.filter((item) => item.assetGroup === "Gold/Silver").slice(0, 5),
-    highestMomentum: [...predictions].sort((a, b) => b.modelScores.momentum - a.modelScores.momentum).slice(0, 5),
-    strongestSector: [...predictions].sort((a, b) => b.modelScores.sectorStrength - a.modelScores.sectorStrength).slice(0, 5),
+    highestMomentum: [...qualifiedPredictions].sort((a, b) => b.modelScores.momentum - a.modelScores.momentum).slice(0, 5),
+    strongestSector: [...qualifiedPredictions].sort((a, b) => b.modelScores.sectorStrength - a.modelScores.sectorStrength).slice(0, 5),
     congressionalTradeSignals: byScore.filter((item) => item.congressionalSignal.count > 0).slice(0, 5),
-    strongestOneDay: [...predictions].sort((a, b) => b.oneDayScore - a.oneDayScore).slice(0, 5),
-    strongestThreeDay: [...predictions].sort((a, b) => b.threeDayScore - a.threeDayScore).slice(0, 5),
-    strongestSevenDay: [...predictions].sort((a, b) => b.sevenDayScore - a.sevenDayScore).slice(0, 5),
-    strongestThirtyDay: [...predictions].sort((a, b) => b.thirtyDayScore - a.thirtyDayScore).slice(0, 5),
-    biggestScoreIncrease: [...predictions].sort((a, b) => b.scoreChange - a.scoreChange).slice(0, 5),
-    biggestScoreDrop: [...predictions].sort((a, b) => a.scoreChange - b.scoreChange).slice(0, 5),
+    strongestOneDay: [...qualifiedPredictions].sort((a, b) => b.oneDayScore - a.oneDayScore).slice(0, 5),
+    strongestThreeDay: [...qualifiedPredictions].sort((a, b) => b.threeDayScore - a.threeDayScore).slice(0, 5),
+    strongestSevenDay: [...qualifiedPredictions].sort((a, b) => b.sevenDayScore - a.sevenDayScore).slice(0, 5),
+    strongestThirtyDay: [...qualifiedPredictions].sort((a, b) => b.thirtyDayScore - a.thirtyDayScore).slice(0, 5),
+    biggestScoreIncrease: [...qualifiedPredictions].sort((a, b) => b.scoreChange - a.scoreChange).slice(0, 5),
+    biggestScoreDrop: [...qualifiedPredictions].sort((a, b) => a.scoreChange - b.scoreChange).slice(0, 5),
   };
 }
 
@@ -5811,12 +5814,18 @@ async function refreshPredictions(options = {}) {
   }
   const predictionHistory = appendPredictionHistory(historicalPredictionRows({ predictions, sections, scanId, scanHealth, updatedAt }));
   const outcomeSettlement = settlePredictionOutcomes(config);
+  const semanticSummary = predictionSemantics.summarize({ updatedAt, predictions, sections, predictionEngineHealth, scanHealth });
+  predictionEngineHealth.analyzedCount = semanticSummary.analyzedCount;
+  predictionEngineHealth.storedResearchRecordCount = semanticSummary.storedCount;
+  predictionEngineHealth.qualifiedRecommendationCount = semanticSummary.qualifiedCount;
+  predictionEngineHealth.qualifiedHorizonCounts = semanticSummary.horizonCounts;
   const result = {
     updatedAt,
     predictions,
     sections,
     predictionEngineHealth,
     scanHealth,
+    predictionSemantics: semanticSummary,
     predictionHistory: predictionHistory.records.slice(-300),
     performanceSummary: performanceSummary(),
     outcomeSettlementStatus: outcomeSettlement.status,

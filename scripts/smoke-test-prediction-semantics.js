@@ -1,0 +1,25 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const semantics = require("../prediction-semantics");
+
+const good = (ticker) => ({ ticker, currentPrice: 25, marketVolume: 1000, quoteTimestamp: "2026-07-18T14:30:00Z", dataQualityStatus: "good", freshnessStatus: "recent", criticalDataComplete: true, missingCriticalFields: [] });
+const bad = (ticker) => ({ ticker, currentPrice: null, marketVolume: null, quoteTimestamp: null, dataQualityStatus: "failed", freshnessStatus: "unavailable", criticalDataComplete: false, missingCriticalFields: ["price"] });
+const failed = Array.from({ length: 600 }, (_, index) => bad(`FAIL${index}`));
+const zero = semantics.normalizePayload({ predictions: failed, sections: { top25OneDay: failed.slice(0, 25), avoidList: failed.slice(0, 25) }, predictionEngineHealth: { tickersScanned: 600, usablePredictionRecords: 0 } });
+assert.equal(zero.predictions.length, 600);
+assert.equal(zero.predictionSemantics.storedCount, 600);
+assert.equal(zero.predictionSemantics.qualifiedCount, 0);
+assert.equal(zero.sections.top25OneDay.length, 0);
+assert.equal(zero.sections.avoidList.length, 0);
+const qualified = Array.from({ length: 25 }, (_, index) => good(`GOOD${index}`));
+const mixed = semantics.normalizePayload({ predictions: [...qualified, ...failed], sections: { top25OneDay: [...qualified, ...failed] }, predictionEngineHealth: { tickersScanned: 625 } });
+assert.equal(mixed.predictionSemantics.analyzedCount, 625);
+assert.equal(mixed.predictionSemantics.storedCount, 625);
+assert.equal(mixed.predictionSemantics.qualifiedCount, 25);
+assert.equal(mixed.sections.top25OneDay.length, 25);
+const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+assert.match(app, /Observed Market Breadth[^\n]+Unavailable/);
+assert.match(app, /No currently qualified recommendations/);
+assert.doesNotMatch(app, /marketMetricCard\("Advancers"/);
+console.log("Prediction qualification and cross-route semantics contract passed.");

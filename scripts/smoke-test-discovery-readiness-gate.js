@@ -119,6 +119,8 @@ const insufficientEvidence = evaluateReadiness({
   })),
 });
 assert.ok(insufficientEvidence.blockingReasons.some((item) => item.reasonCode === "INSUFFICIENT_REAL_EVIDENCE"));
+assert.match(insufficientEvidence.blockingReasons.find((item) => item.reasonCode === "INSUFFICIENT_REAL_EVIDENCE").message, /has not met its required threshold/);
+assert.doesNotMatch(insufficientEvidence.blockingReasons.map((item) => item.message).join(" "), /succeeds reliably|remain compatible|sufficient real evidence/);
 
 const unavailableBuckets = readyObservations.map((item) => ({
   ...item,
