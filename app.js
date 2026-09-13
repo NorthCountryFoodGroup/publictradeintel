@@ -70,6 +70,9 @@ const output = {
   stocksInvestmentAmount: document.querySelector("#stocksInvestmentAmount"),
   stocksInvestmentCustom: document.querySelector("#stocksInvestmentCustom"),
   stocksToBuyGrid: document.querySelector("#stocksToBuyGrid"),
+  stocksPagePrevious: document.querySelector("#stocksPagePrevious"),
+  stocksPageNext: document.querySelector("#stocksPageNext"),
+  stocksPageStatus: document.querySelector("#stocksPageStatus"),
   stocksToBuySummaryGrid: document.querySelector("#stocksToBuySummaryGrid"),
   stocksToBuyAISummary: document.querySelector("#stocksToBuyAISummary"),
   stocksToBuyQualifiedCount: document.querySelector("#stocksToBuyQualifiedCount"),
@@ -286,6 +289,9 @@ let selectedBriefTicker = "";
 const securityProfileRequests = new Map();
 let selectedMarketSector = "All sectors";
 let stocksToBuyComparison = [];
+let stocksToBuyPage = 0;
+const STOCKS_TO_BUY_PAGE_SIZE = 6;
+let performanceSubview = "summary";
 let watchlists = [];
 let watchlistAlerts = [];
 let alertHistory = [];
@@ -2516,10 +2522,33 @@ function renderStocksToBuyCenter() {
   }
 
   const sortedRows = rows.map((item) => ({ ...item, inBestIdeas: bestIdeaTickers.has(item.ticker) }));
+  const pageCount = Math.max(1, Math.ceil(sortedRows.length / STOCKS_TO_BUY_PAGE_SIZE));
+  stocksToBuyPage = Math.min(stocksToBuyPage, pageCount - 1);
+  const visibleRows = sortedRows.slice(stocksToBuyPage * STOCKS_TO_BUY_PAGE_SIZE, (stocksToBuyPage + 1) * STOCKS_TO_BUY_PAGE_SIZE);
   output.stocksToBuyGrid.innerHTML = sortedRows.length
-    ? sortedRows.map((item) => renderStocksToBuyCard(item, { timeframe, category, ranking })).join("")
+    ? visibleRows.map((item) => renderStocksToBuyCard(item, { timeframe, category, ranking })).join("")
     : `<article class="stock-card"><span>No qualified stocks</span><strong>This list stayed empty honestly</strong><p>The completed scan did not produce stocks meeting the ${escapeHtml(categoryLabel)} ${escapeHtml(timeframeLabel)} standards for ${escapeHtml(output.stocksToBuyInvestorView?.selectedOptions?.[0]?.textContent || "this view")}.</p></article>`;
+  const pager = output.stocksPageStatus?.closest(".stocks-pagination");
+  if (pager) pager.hidden = sortedRows.length <= STOCKS_TO_BUY_PAGE_SIZE;
+  if (output.stocksPageStatus) output.stocksPageStatus.textContent = `Page ${stocksToBuyPage + 1} of ${pageCount} · ${sortedRows.length} recommendations`;
+  if (output.stocksPagePrevious) output.stocksPagePrevious.disabled = stocksToBuyPage === 0;
+  if (output.stocksPageNext) output.stocksPageNext.disabled = stocksToBuyPage >= pageCount - 1;
   renderStocksComparison(sortedRows);
+}
+
+function setPerformanceSubview(next = "summary") {
+  performanceSubview = ["summary", "audit", "methodology"].includes(next) ? next : "summary";
+  document.querySelectorAll("[data-performance-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.performancePanel !== performanceSubview;
+    if (panel.hasAttribute("data-page")) {
+      panel.classList.toggle("is-active", !panel.hidden);
+    }
+  });
+  document.querySelectorAll("[data-performance-subview]").forEach((button) => {
+    const active = button.dataset.performanceSubview === performanceSubview;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
 }
 
 function opportunityCardReasons(item) {
@@ -3444,7 +3473,9 @@ function securityProfileForTradeBrief(item) {
   };
 }
 
-function renderTradeBrief() {
+// Retained as a non-invoked reference until its older markup can be removed in a dedicated cleanup.
+// The enhanced renderer below is the only authoritative renderTradeBrief entry point.
+function legacyTradeBriefReference() {
   if (!output.tradeBriefPanel) return;
   const firstPick = firstFromSection("top25OneDay") || firstFromSection("top25SevenDay") || (predictionEngine.predictions || [])[0];
   const item = findPredictionByTicker(selectedBriefTicker) || firstPick;
@@ -5186,7 +5217,10 @@ function setPage(pageName) {
   if (target === "briefs") renderTradeBrief();
   if (target === "stocksToBuy") renderStocksToBuyCenter();
   if (target === "market") renderMarketIntelligence();
-  if (target === "performance") renderPerformanceCenter();
+  if (target === "performance") {
+    setPerformanceSubview(performanceSubview);
+    renderPerformanceCenter();
+  }
   if (target === "alerts") renderAlertsCenter();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -5481,6 +5515,19 @@ output.globalSearch?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") runGlobalSearch();
 });
 output.performanceSearch?.addEventListener("input", () => renderPredictionAudit(predictionPerformanceRecords()));
+output.stocksPagePrevious?.addEventListener("click", () => {
+  stocksToBuyPage = Math.max(0, stocksToBuyPage - 1);
+  renderStocksToBuyCenter();
+  output.stocksToBuyGrid?.scrollIntoView({ block: "start" });
+});
+output.stocksPageNext?.addEventListener("click", () => {
+  stocksToBuyPage += 1;
+  renderStocksToBuyCenter();
+  output.stocksToBuyGrid?.scrollIntoView({ block: "start" });
+});
+document.querySelectorAll("[data-performance-subview]").forEach((button) => {
+  button.addEventListener("click", () => setPerformanceSubview(button.dataset.performanceSubview));
+});
 [
   output.predictionSearch,
   output.filterTimeframe,
@@ -5516,8 +5563,12 @@ output.performanceSearch?.addEventListener("input", () => renderPredictionAudit(
 ]
   .filter(Boolean)
   .forEach((control) => {
-    control.addEventListener("input", renderStocksToBuyCenter);
-    control.addEventListener("change", renderStocksToBuyCenter);
+    const resetAndRender = () => {
+      stocksToBuyPage = 0;
+      renderStocksToBuyCenter();
+    };
+    control.addEventListener("input", resetAndRender);
+    control.addEventListener("change", resetAndRender);
   });
 document.querySelectorAll("[data-prediction-layout]").forEach((button) => {
   button.addEventListener("click", () => {

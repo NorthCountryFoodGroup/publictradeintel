@@ -241,7 +241,10 @@
           </div>
           <p id="bestIdeasSummary" class="muted-copy">Run a prediction scan to build AI Best Ideas from completed scan data.</p>
           <p class="muted-copy">AI Best Ideas represent the model's highest-conviction research opportunities based on available data. They are not guarantees of future performance or personalized investment advice.</p>
-          <div class="stocks-to-buy-grid best-ideas-grid" id="bestIdeasGrid"></div>
+          <details class="best-ideas-disclosure">
+            <summary>View all 10 Best Ideas</summary>
+            <div class="stocks-to-buy-grid best-ideas-grid" id="bestIdeasGrid"></div>
+          </details>
         </section>
 
         <section class="dashboard-card stocks-to-buy-controls">
@@ -327,6 +330,11 @@
         </section>
 
         <div class="stocks-to-buy-grid" id="stocksToBuyGrid"></div>
+        <nav class="stocks-pagination" aria-label="Stocks to Buy pages" hidden>
+          <button type="button" id="stocksPagePrevious">Previous</button>
+          <span id="stocksPageStatus" aria-live="polite"></span>
+          <button type="button" id="stocksPageNext">Next</button>
+        </nav>
       </section>
 
       <section class="portfolio-section portfolio-hud dashboard-page" data-page="watchlist">
@@ -666,9 +674,10 @@
         <section class="dashboard-card performance-explorer" id="performanceExplorer" aria-labelledby="performanceExplorerTitle">
           <div class="performance-explorer-heading">
             <div><p class="eyebrow">Historical analysis</p><h3 id="performanceExplorerTitle">Performance Explorer</h3><p id="performanceExplorerBasis">Top 10 currently published qualified recommendations</p></div>
-            <div class="performance-explorer-actions"><button type="button" id="performanceExplorerCollapse" aria-expanded="true">Collapse</button><button type="button" id="performanceExplorerWidth" aria-pressed="false">Full-width</button></div>
+            <div class="performance-explorer-compact" aria-live="polite"><span id="performanceExplorerCompactSummary">Best 10 Today · 1M</span></div>
+            <div class="performance-explorer-actions"><button type="button" id="performanceExplorerCollapse" aria-expanded="false">Open Performance Explorer</button><button type="button" id="performanceExplorerWidth" aria-pressed="false">Full-width</button></div>
           </div>
-          <div class="performance-explorer-body" id="performanceExplorerBody">
+          <div class="performance-explorer-body" id="performanceExplorerBody" hidden>
             <div class="performance-explorer-controls">
               <label><span>Stock group</span><select id="performanceExplorerGroup"><option value="best10">Best 10 Today</option><option value="watchlist">My Watchlist</option><option value="selected">Top 25 Selection</option><option value="single">Single Stock Focus</option></select></label>
               <label><span>Horizon</span><select id="performanceExplorerHorizon"><option value="1-Day">1 Day</option><option value="7-Day">7 Days</option><option value="1-Month">1 Month</option><option value="1-Year">1 Year</option></select></label>
@@ -716,8 +725,13 @@
           </div>
         </div>
 
+        <nav class="performance-subnav" aria-label="AI Performance views">
+          <button type="button" class="is-active" data-performance-subview="summary">Performance Summary</button>
+          <button type="button" data-performance-subview="audit">Prediction Audit / History</button>
+          <button type="button" data-performance-subview="methodology">Methodology &amp; Learning</button>
+        </nav>
         <div class="performance-center">
-          <section class="dashboard-card performance-section">
+          <section class="dashboard-card performance-section" data-performance-panel="summary">
             <div class="card-heading">
               <span>Overview</span>
               <strong>Accuracy and returns</strong>
@@ -725,7 +739,7 @@
             <div class="performance-overview-grid" id="performanceOverviewGrid"></div>
           </section>
 
-          <section class="dashboard-card performance-section">
+          <section class="dashboard-card performance-section" data-performance-panel="summary">
             <div class="card-heading">
               <span>Performance Charts</span>
               <strong>Visual read</strong>
@@ -733,7 +747,7 @@
             <div class="performance-chart-grid" id="performanceChartsGrid"></div>
           </section>
 
-          <section class="dashboard-card performance-section">
+          <section class="dashboard-card performance-section" data-performance-panel="summary">
             <div class="card-heading">
               <span>Signal Analysis</span>
               <strong>What is working</strong>
@@ -741,7 +755,7 @@
             <div class="signal-analysis-grid" id="signalAnalysisGrid"></div>
           </section>
 
-          <section class="dashboard-card performance-section">
+          <section class="dashboard-card performance-section" data-performance-panel="audit" hidden>
             <div class="card-heading">
               <span>Prediction Audit</span>
               <strong>Search historical predictions</strong>
@@ -753,7 +767,7 @@
             <div class="prediction-audit-list" id="predictionAuditList"></div>
           </section>
 
-          <section class="dashboard-card performance-section">
+          <section class="dashboard-card performance-section" data-performance-panel="methodology" hidden>
             <div class="card-heading">
               <span>AI Learning Summary</span>
               <strong>Plain-English report</strong>
@@ -761,7 +775,7 @@
             <div class="learning-summary" id="aiLearningSummary"></div>
           </section>
 
-          <section class="dashboard-card performance-section">
+          <section class="dashboard-card performance-section" data-performance-panel="methodology" hidden>
             <div class="card-heading">
               <span>Future Model Tracking</span>
               <strong>Version placeholders</strong>
@@ -917,7 +931,7 @@
         </div>
       </section>
 
-      <section class="daytrade-section dashboard-page" data-page="performance">
+      <section class="daytrade-section dashboard-page" data-page="performance" data-performance-panel="methodology" hidden>
         <div class="section-heading">
           <div>
             <p class="eyebrow">Buy today / sell today</p>
@@ -1098,7 +1112,7 @@
         <div class="congress-grid" id="congressGrid"></div>
       </section>
 
-      <section class="learn-section dashboard-page" data-page="performance">
+      <section class="learn-section dashboard-page" data-page="performance" data-performance-panel="methodology" hidden>
         <div>
           <p class="eyebrow">Trading intelligence</p>
           <h2>What this app keeps visible</h2>
@@ -1121,6 +1135,13 @@
       <button type="button" class="nav-link" data-page-target="briefs">Briefs</button>
       <button type="button" class="nav-link" data-page-target="watchlist">Lists</button>
       <button type="button" class="nav-link" data-page-target="alerts">Alerts</button>
+      <details class="mobile-nav-more">
+        <summary>More</summary>
+        <div>
+          <button type="button" class="nav-link" data-page-target="performance">AI Performance</button>
+          <button type="button" class="nav-link" data-page-target="settings">Settings</button>
+        </div>
+      </details>
     </nav>
 
     <script src="prediction-semantics.js"></script>

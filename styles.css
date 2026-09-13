@@ -5463,6 +5463,177 @@ textarea:focus-visible,
   color: #ffffff;
 }
 
+/* Authoritative Phase 2 component presentation. */
+.dashboard-main.app-shell,
+.dashboard-page,
+.performance-center,
+.stocks-to-buy-grid,
+.prediction-grid {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.member-summary .summary-tile,
+#predictionSummary .summary-tile {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface, #171a1f);
+  color: var(--text-primary);
+  box-shadow: var(--shadow);
+}
+
+.member-summary .summary-tile span,
+.member-summary .summary-tile small,
+#predictionSummary .summary-tile span,
+#predictionSummary .summary-tile small {
+  color: var(--text-secondary);
+}
+
+.member-summary .summary-tile strong,
+#predictionSummary .summary-tile strong {
+  color: var(--text-primary);
+}
+
+.performance-explorer {
+  margin: 12px 0 18px;
+}
+
+.performance-explorer-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.performance-explorer-compact {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.performance-explorer-body[hidden],
+[data-performance-panel][hidden] {
+  display: none;
+}
+
+.performance-subnav,
+.stocks-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.performance-subnav {
+  margin-bottom: 14px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.performance-subnav button,
+.stocks-pagination button {
+  border-color: #343a43;
+  background: #171a1f;
+  color: var(--text-primary);
+}
+
+.performance-subnav button.is-active {
+  border-color: var(--color-secondary);
+  background: rgba(30, 136, 255, 0.13);
+}
+
+.stocks-pagination {
+  justify-content: center;
+  margin: 16px 0 4px;
+}
+
+.stocks-pagination[hidden] {
+  display: none;
+}
+
+.best-ideas-disclosure {
+  margin-top: 0.85rem;
+}
+
+.best-ideas-disclosure > summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--color-electric-blue, #43a5ff);
+  font-weight: 700;
+}
+
+.best-ideas-disclosure[open] > summary {
+  margin-bottom: 0.85rem;
+}
+
+.mobile-nav-more {
+  position: relative;
+}
+
+.mobile-nav-more summary {
+  min-height: 42px;
+  padding: 10px 12px;
+  list-style: none;
+  cursor: pointer;
+  color: var(--nav-muted);
+}
+
+.mobile-nav-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.mobile-nav-more > div {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow);
+}
+
+@media (min-width: 768px) {
+  .mobile-nav-more {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .performance-explorer-heading {
+    grid-template-columns: 1fr auto;
+  }
+
+  .performance-explorer-compact {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 560px) {
+  .performance-explorer-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .performance-explorer-actions,
+  .performance-explorer-actions button,
+  .performance-subnav button {
+    width: 100%;
+  }
+
+  .performance-explorer-compact {
+    grid-column: auto;
+  }
+
+  .mobile-nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
 .login-shell {
   background:
     radial-gradient(circle at 50% 12%, rgba(30, 136, 255, 0.12), transparent 25rem),
