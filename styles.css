@@ -5473,23 +5473,23 @@ textarea:focus-visible,
   max-width: 100%;
 }
 
-.member-summary .summary-tile,
-#predictionSummary .summary-tile {
+.member-summary > div,
+#predictionSummary > div {
   border: 1px solid var(--color-border);
   background: var(--color-surface, #171a1f);
   color: var(--text-primary);
   box-shadow: var(--shadow);
 }
 
-.member-summary .summary-tile span,
-.member-summary .summary-tile small,
-#predictionSummary .summary-tile span,
-#predictionSummary .summary-tile small {
+.member-summary > div > span,
+.member-summary > div > small,
+#predictionSummary > div > span,
+#predictionSummary > div > small {
   color: var(--text-secondary);
 }
 
-.member-summary .summary-tile strong,
-#predictionSummary .summary-tile strong {
+.member-summary > div > strong,
+#predictionSummary > div > strong {
   color: var(--text-primary);
 }
 
