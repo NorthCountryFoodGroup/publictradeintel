@@ -40,23 +40,49 @@ function median(values) {
 }
 
 function criterion(id, description, reasonCode, observedValue, threshold, pass, details = []) {
+  const status = pass === true ? "PASS" : pass === false ? "FAIL" : "UNKNOWN";
   return {
     criterionId: id,
     description,
     required: true,
-    status: pass === true ? "PASS" : pass === false ? "FAIL" : "UNKNOWN",
+    status,
     observedValue,
     threshold,
     pass: pass === true,
-    reasonCode: pass === true ? null : reasonCode,
+    reasonCode: status === "PASS" ? null : reasonCode,
     details: [...new Set((details || []).filter(Boolean).map(String))].sort().slice(0, 50),
   };
 }
 
 function failedCriterionMessage(item) {
+  const status = item?.status === "UNKNOWN" || (item?.observedValue === null || item?.observedValue === undefined) ? "unknown" : "failed";
   const observed = item.observedValue === null || item.observedValue === undefined ? "unknown" : JSON.stringify(item.observedValue);
   const required = item.threshold === null || item.threshold === undefined ? "the configured requirement" : JSON.stringify(item.threshold);
-  return `${item.criterionId} has not met its required threshold. Observed ${observed}; required ${required}.`;
+  return status === "unknown"
+    ? `${item.criterionId} remains unknown. Observed ${observed}; required ${required}.`
+    : `${item.criterionId} has not met its required threshold. Observed ${observed}; required ${required}.`;
+}
+
+function projectBlockingReasons(readiness = {}) {
+  const criteria = Array.isArray(readiness.criteria) ? readiness.criteria : [];
+  const criterionByReason = new Map(criteria
+    .filter((item) => item?.reasonCode && item.pass !== true && item.status !== "PASS")
+    .map((item) => [item.reasonCode, item]));
+  const source = Array.isArray(readiness.blockingReasons) ? readiness.blockingReasons : [];
+  return source.slice(0, 100).map((item) => {
+    const criterionItem = criterionByReason.get(item?.reasonCode);
+    return {
+      reasonCode: String(item?.reasonCode || "UNKNOWN").slice(0, 100),
+      criterionId: String(criterionItem?.criterionId || item?.criterionId || "unknown").slice(0, 100),
+      status: criterionItem?.status === "UNKNOWN" ? "UNKNOWN" : "FAIL",
+      observedValue: criterionItem?.observedValue ?? null,
+      requiredValue: criterionItem?.threshold ?? null,
+      message: String(criterionItem
+        ? failedCriterionMessage(criterionItem)
+        : item?.message || "Readiness requirement has not been confirmed.").slice(0, 240),
+      preExisting: item?.preExisting === true,
+    };
+  });
 }
 
 function structuredError(input, message) {
@@ -176,22 +202,22 @@ function evaluateReadiness(input = {}) {
 
     const values = {
       "observation-sufficiency": [observationCount, minimumObservationCount, observationCount >= minimumObservationCount],
-      "execution-success": [executionRate, `>= ${DISCOVERY_READINESS_THRESHOLDS.executionSuccessRate}%`, executionRate !== null && executionRate >= DISCOVERY_READINESS_THRESHOLDS.executionSuccessRate],
-      "selector-activation": [activationRate, `>= ${DISCOVERY_READINESS_THRESHOLDS.selectorActivationSuccessRate}%`, activationRate !== null && activationRate >= DISCOVERY_READINESS_THRESHOLDS.selectorActivationSuccessRate],
-      "fallback-reliability": [fallbackRate, "100%", fallbackRate !== null && fallbackRate === DISCOVERY_READINESS_THRESHOLDS.fallbackReliabilityRate],
+      "execution-success": [executionRate, `>= ${DISCOVERY_READINESS_THRESHOLDS.executionSuccessRate}%`, executionRate === null ? null : executionRate >= DISCOVERY_READINESS_THRESHOLDS.executionSuccessRate],
+      "selector-activation": [activationRate, `>= ${DISCOVERY_READINESS_THRESHOLDS.selectorActivationSuccessRate}%`, activationRate === null ? null : activationRate >= DISCOVERY_READINESS_THRESHOLDS.selectorActivationSuccessRate],
+      "fallback-reliability": [fallbackRate, "100%", fallbackRate === null ? null : fallbackRate === DISCOVERY_READINESS_THRESHOLDS.fallbackReliabilityRate],
       "fatal-error-rate": [fatalRate, "0%", fatalRate !== null && fatalRate === 0],
       "runtime-compliance": [runtimeRate, `>= ${DISCOVERY_READINESS_THRESHOLDS.runtimeComplianceRate}%`, runtimeRate !== null && runtimeRate >= DISCOVERY_READINESS_THRESHOLDS.runtimeComplianceRate],
-      "evidence-coverage": [evidenceRate, `>= ${DISCOVERY_READINESS_THRESHOLDS.minimumEvidenceCoveragePercent}%`, evidenceRate !== null && evidenceRate >= DISCOVERY_READINESS_THRESHOLDS.minimumEvidenceCoveragePercent],
+      "evidence-coverage": [evidenceRate, `>= ${DISCOVERY_READINESS_THRESHOLDS.minimumEvidenceCoveragePercent}%`, evidenceRate === null ? null : evidenceRate >= DISCOVERY_READINESS_THRESHOLDS.minimumEvidenceCoveragePercent],
       "bucket-availability": [availableBuckets.length, `>= ${DISCOVERY_READINESS_THRESHOLDS.minimumAvailableBucketCount} of 8`, availableBuckets.length >= DISCOVERY_READINESS_THRESHOLDS.minimumAvailableBucketCount],
-      "candidate-pool-viability": [poolRate, `>= ${DISCOVERY_READINESS_THRESHOLDS.candidatePoolViabilityRate}%`, poolRate !== null && poolRate >= DISCOVERY_READINESS_THRESHOLDS.candidatePoolViabilityRate],
+      "candidate-pool-viability": [poolRate, `>= ${DISCOVERY_READINESS_THRESHOLDS.candidatePoolViabilityRate}%`, poolRate === null ? null : poolRate >= DISCOVERY_READINESS_THRESHOLDS.candidatePoolViabilityRate],
       "production-eligibility": [eligibilityViolations, "0 violations", eligibilityViolations === 0 && observations.length > 0],
-      "explanation-completeness": [explanationRate, "100% and 0 errors", explanationRate !== null && explanationRate === 100 && explanationErrors === 0],
-      "deterministic-stability": [stabilityRate, "100%", stabilityRate !== null && stabilityRate === 100],
+      "explanation-completeness": [explanationRate, "100% and 0 errors", explanationRate === null ? null : explanationRate === 100 && explanationErrors === 0],
+      "deterministic-stability": [stabilityRate, "100%", stabilityRate === null ? null : stabilityRate === 100],
       "duplicate-integrity": [duplicateTickerCount, "0 duplicates", duplicateTickerCount === 0 && observations.length > 0],
-      "shadow-availability": [shadowRate, "100% when expected", shadowRate !== null && shadowRate === 100],
-      "api-compatibility": [apiObserved.filter((item) => item.apiCompatible).length, "all observations passing", apiObserved.length === observationCount && apiObserved.every((item) => item.apiCompatible)],
-      "persistence-compatibility": [persistenceObserved.filter((item) => item.persistenceCompatible).length, "all observations passing", persistenceObserved.length === observationCount && persistenceObserved.every((item) => item.persistenceCompatible)],
-      "prediction-boundary": [boundaryObserved.filter((item) => item.predictionBoundaryCompatible).length, "all observations passing", boundaryObserved.length === observationCount && boundaryObserved.every((item) => item.predictionBoundaryCompatible)],
+      "shadow-availability": [shadowRate, "100% when expected", shadowRate === null ? null : shadowRate === 100],
+      "api-compatibility": [apiObserved.length === observationCount ? apiObserved.filter((item) => item.apiCompatible).length : null, "all observations passing", apiObserved.length !== observationCount ? null : apiObserved.every((item) => item.apiCompatible)],
+      "persistence-compatibility": [persistenceObserved.length === observationCount ? persistenceObserved.filter((item) => item.persistenceCompatible).length : null, "all observations passing", persistenceObserved.length !== observationCount ? null : persistenceObserved.every((item) => item.persistenceCompatible)],
+      "prediction-boundary": [boundaryObserved.length === observationCount ? boundaryObserved.filter((item) => item.predictionBoundaryCompatible).length : null, "all observations passing", boundaryObserved.length !== observationCount ? null : boundaryObserved.every((item) => item.predictionBoundaryCompatible)],
       "selector-safety": [selectorAmbiguityCount, "0 ambiguous observations", selectorAmbiguityCount === 0 && observations.length > 0],
       "critical-diagnostics": [criticalDiagnostics.length, "0 unresolved critical diagnostics", criticalDiagnostics.length === 0 && observations.length > 0],
     };
@@ -297,4 +323,5 @@ function evaluateReadiness(input = {}) {
 
 module.exports = {
   evaluateReadiness,
+  projectBlockingReasons,
 };

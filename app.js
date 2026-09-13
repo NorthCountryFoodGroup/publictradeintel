@@ -2252,10 +2252,17 @@ function fallbackStocksToBuyCenter() {
 function stocksToBuyCenterData() {
   const center = predictionEngine.sections?.stocksToBuyCenter || predictionEngine.stocksToBuyCenter || fallbackStocksToBuyCenter();
   const rankingLists = Object.fromEntries(Object.entries(center.rankingLists || {}).map(([key, list]) => {
-    const qualifiedRows = predictionSemantics.qualifyRows(list.qualifiedRows || list.rows);
+    const qualifiedRows = predictionSemantics.requalifyDerivedRows(list.qualifiedRows || list.rows, predictionEngine.predictions);
     return [key, { ...list, qualifiedRows, rows: qualifiedRows.slice(0, 25), qualifiedCount: qualifiedRows.length }];
   }));
-  return { ...center, rankingLists, bestIdeas: { ...(center.bestIdeas || {}), current: predictionSemantics.qualifyRows(center.bestIdeas?.current) } };
+  return {
+    ...center,
+    rankingLists,
+    bestIdeas: {
+      ...(center.bestIdeas || {}),
+      current: predictionSemantics.requalifyDerivedRows(center.bestIdeas?.current, predictionEngine.predictions).slice(0, 10),
+    },
+  };
 }
 
 function stocksToBuyCategorySummary(rows, category, timeframe) {
@@ -2473,8 +2480,8 @@ function renderStocksToBuyCenter() {
   const { center, list, rows, timeframe, category, investorView, ranking } = currentStocksToBuyRows();
   const timeframeLabel = stocksToBuyTimeframes[timeframe]?.label || "Selected";
   const categoryLabel = stocksToBuyPriceCategories.find((item) => item.key === category)?.label || "Overall";
-  const allRows = list.rows || [];
-  const summary = list.summary || stocksToBuyCategorySummary(allRows, { key: category, label: categoryLabel }, { key: timeframe, label: timeframeLabel });
+  const allRows = list.qualifiedRows || list.rows || [];
+  const summary = stocksToBuyCategorySummary(allRows, { key: category, label: categoryLabel }, { key: timeframe, label: timeframeLabel });
   const bestIdeas = center.bestIdeas?.current || buildBestIdeasFromCompletedScan(predictionEngine.predictions || []);
   const bestIdeaTickers = new Set(bestIdeas.map((item) => item.ticker));
 
@@ -4174,8 +4181,7 @@ function sectorForPrediction(item) {
   return item.ticker ? "Technology" : "Consumer";
 }
 
-function sectorStats() {
-  const predictions = predictionEngine.predictions || [];
+function sectorStats(predictions = predictionEngine.predictions || []) {
   return marketSectors.map((sector) => {
     const matches = predictions.filter((item) => sectorForPrediction(item) === sector);
     const avgScore = matches.length ? Math.round(matches.reduce((sum, item) => sum + scoreValue(item.unifiedPredictionScore || item.aiOpportunityScore), 0) / matches.length) : 0;
@@ -4247,11 +4253,12 @@ function renderMarketIntelligence() {
   const health = predictionEngine.predictionEngineHealth || {};
   const researchRecords = predictionEngine.predictions || [];
   const predictions = qualifiedPredictionRows();
-  const stats = sectorStats();
+  const marketSemantics = predictionSemantics.deriveMarketSemantics(predictionEngine);
+  const stats = sectorStats(predictions);
   const strongestSector = [...stats].sort((a, b) => b.avgScore - a.avgScore)[0];
   const weakestSector = [...stats].sort((a, b) => a.avgScore - b.avgScore)[0];
-  const bullishCount = predictions.filter((item) => String(item.unifiedDirection || "").toLowerCase() === "bullish").length;
-  const bearishCount = predictions.filter((item) => String(item.unifiedDirection || "").toLowerCase() === "bearish").length;
+  const bullishCount = marketSemantics.qualifiedBullishCount;
+  const bearishCount = marketSemantics.qualifiedBearishCount;
   const breadthScore = predictions.length ? Math.round((bullishCount / predictions.length) * 100) : 0;
   const signals = policySignals.signals || [];
   const positiveSignals = signals.filter((signal) => signal.direction === "positive");
@@ -4259,14 +4266,14 @@ function renderMarketIntelligence() {
   const trades = settings.congressTrades || [];
   const buys = trades.filter((trade) => trade.transaction === "Buy");
   const sells = trades.filter((trade) => trade.transaction === "Sell");
-  const predictionBias = predictionEngine.marketRegime?.primary || strongestSector?.direction || "Neutral";
+  const predictionBias = marketSemantics.qualifiedBias;
   const broadMarketTrend = scan.marketStatus || scan.marketSession?.status || "Unavailable";
   if (output.marketIntelligenceStatus) output.marketIntelligenceStatus.textContent = broadMarketTrend;
 
   output.marketSummaryGrid.innerHTML = [
     marketMetricCard("Market Session", broadMarketTrend, scan.scanMode || "Completed scan metadata unavailable", statusTone(broadMarketTrend)),
-    marketMetricCard("Qualified Prediction Bias", predictions.length ? predictionBias : "Insufficient evidence", `${predictions.length} qualified of ${researchRecords.length} stored research record(s)`, statusTone(predictions.length ? predictionBias : "Unavailable")),
-    marketMetricCard("Prediction Universe Sentiment", predictions.length ? `${averageUnifiedScore(predictions)}/100` : "No scan yet", "Internal estimate based on unified prediction scores only"),
+    marketMetricCard("Qualified Prediction Bias", predictionBias, `${predictions.length} qualified of ${researchRecords.length} stored research record(s)`, statusTone(predictions.length ? predictionBias : "Unavailable")),
+    marketMetricCard("Prediction Universe Sentiment", predictions.length && marketSemantics.usableEvidenceCount ? `${averageUnifiedScore(predictions)}/100` : "Insufficient evidence", "Evidence-qualified model estimate; not observed market breadth"),
     marketMetricCard("S&P 500 Proxy - SPY", "Live quote unavailable", "Displayed separately from the completed prediction scan"),
     marketMetricCard("Nasdaq Proxy - QQQ", "Live quote unavailable", "Displayed separately from the completed prediction scan"),
     marketMetricCard("Dow Proxy - DIA", "Live quote unavailable", "Displayed separately from the completed prediction scan"),
@@ -4337,8 +4344,8 @@ function renderMarketIntelligence() {
 
   output.aiMarketSummary.innerHTML = `
     <p><strong>Broad market trend:</strong> ${escapeHtml(broadMarketTrend)} based on available external index/proxy quotes. ETF proxies are labeled as proxies when exact indexes are unavailable.</p>
-    <p><strong>Prediction universe bias:</strong> ${escapeHtml(predictionBias)} with ${bullishCount} bullish and ${bearishCount} bearish prediction reads across the active analyzed universe.</p>
-    <p><strong>Highest-scoring group in current scan:</strong> ${escapeHtml(strongestSector?.sector || "No scan yet")} averages ${Number(strongestSector?.avgScore) || 0}/100 across ${strongestSector?.matches?.length || 0} deeply analyzed securities.</p>
+    <p><strong>Prediction universe bias:</strong> ${escapeHtml(predictionBias)} with ${bullishCount} qualified bullish and ${bearishCount} qualified bearish records. Directional analytical records may still exist, but current evidence coverage must qualify before supporting market bias.</p>
+    <p><strong>Highest-scoring qualified group:</strong> ${escapeHtml(strongestSector?.sector || "Insufficient evidence")} ${strongestSector ? `averages ${Number(strongestSector.avgScore) || 0}/100 across ${strongestSector.matches?.length || 0} qualified securities.` : "is unavailable because no records currently qualify."}</p>
     <p><strong>What to watch today:</strong> Watch external index freshness, market data quality, policy catalysts, congressional disclosure age, and whether top predictions stay aligned across the 1-day, 7-day, 1-month, and 1-year lists.</p>
   `;
 }

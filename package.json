@@ -26,6 +26,7 @@
     "smoke:discovery:selector": "node scripts/smoke-test-discovery-selector.js",
     "smoke:predictions": "node scripts/smoke-test-prediction-scan.js",
     "smoke:prediction-semantics": "node scripts/smoke-test-prediction-semantics.js",
+    "smoke:phase1b-production-consistency": "node scripts/smoke-test-phase1b-production-consistency.js",
     "smoke:watchlists": "node scripts/smoke-test-watchlists.js",
     "smoke:alerts": "node scripts/smoke-test-alerts.js",
     "smoke:layout": "node scripts/smoke-test-layout.js",

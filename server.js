@@ -26,7 +26,7 @@ const { buildCandidatePool } = require("./discovery/candidate-pool");
 const { buildDiscoveryExplanations } = require("./discovery/explanations");
 const { runShadowComparison } = require("./discovery/shadow-comparison");
 const { selectDiscoveryEngine } = require("./discovery/selector");
-const { evaluateReadiness } = require("./discovery/readiness-gate");
+const { evaluateReadiness, projectBlockingReasons } = require("./discovery/readiness-gate");
 const { resolveUniverseProvenance } = require("./discovery/provenance");
 const {
   LIVE_REFRESH_DEADLINE_MS,
@@ -2100,11 +2100,15 @@ function boundedReadinessAdminPayload(saved = {}) {
       },
       fallbackReliability: readiness.fallbackHealth || null,
       availableBucketCount: Number(readiness.bucketCoverage?.availableBucketCount) || 0,
-      blockingReasons: (Array.isArray(readiness.blockingReasons) ? readiness.blockingReasons : [])
+      blockingReasons: projectBlockingReasons(readiness)
         .slice(0, 30)
         .map((item) => ({
           reasonCode: String(item?.reasonCode || "UNKNOWN").slice(0, 100),
           message: String(item?.message || "Readiness requirement not met.").slice(0, 240),
+          criterionId: String(item?.criterionId || "unknown").slice(0, 100),
+          status: item?.status === "UNKNOWN" ? "UNKNOWN" : "FAIL",
+          observedValue: item?.observedValue ?? null,
+          requiredValue: item?.requiredValue ?? null,
           preExisting: item?.preExisting === true,
         })),
       knownProvenanceBlocker: (Array.isArray(readiness.blockingReasons) ? readiness.blockingReasons : [])
@@ -6254,7 +6258,7 @@ async function handleApi(request, response, pathname) {
   if (request.method === "GET" && pathname === "/api/predictions") {
     const saved = readJson(PREDICTIONS_FILE, null);
     sendJson(response, 200, saved && Array.isArray(saved.predictions)
-      ? saved
+      ? predictionSemantics.normalizePayload(saved)
       : { updatedAt: null, predictions: [], sections: {}, status: "not_generated" });
     return;
   }
