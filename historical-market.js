@@ -62,6 +62,18 @@ function normalizeSeries(result, period) {
   return bounded.map((row) => ({ ...row, cumulativeReturn: Number((((row.adjustedClose / base) - 1) * 100).toFixed(4)) }));
 }
 
+function normalizeKlines(result, maximum = 512) {
+  const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
+  const quote = result?.indicators?.quote?.[0] || {};
+  const observedNumber = (value) => value === null || value === undefined || value === "" ? NaN : Number(value);
+  return timestamps.map((timestamp, index) => ({
+    timestamp: new Date(Number(timestamp) * 1000).toISOString(),
+    open: observedNumber(quote.open?.[index]), high: observedNumber(quote.high?.[index]),
+    low: observedNumber(quote.low?.[index]), close: observedNumber(quote.close?.[index]),
+    volume: observedNumber(quote.volume?.[index]),
+  })).filter((row) => Number.isFinite(Date.parse(row.timestamp)) && [row.open, row.high, row.low, row.close, row.volume].every(Number.isFinite) && Math.min(row.open, row.high, row.low, row.close) > 0 && row.volume >= 0 && row.high >= Math.max(row.open, row.close) && row.low <= Math.min(row.open, row.close)).slice(-maximum);
+}
+
 function metricsForSeries(series) {
   if (!series.length) return null;
   let peak = series[0].adjustedClose;
@@ -140,6 +152,22 @@ function createHistoricalMarketService({ cacheFile, fetchImpl = global.fetch, no
       throw error;
     } finally { clearTimeout(timer); }
   }
+  async function getKlines(ticker, { lookback = 512 } = {}) {
+    const normalized = normalizeTicker(ticker);
+    if (!normalized) throw Object.assign(new Error("Ticker input is invalid."), { code: "invalid_symbol" });
+    const boundedLookback = Math.max(64, Math.min(512, Number(lookback) || 512));
+    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const providerTicker = normalized.replace(".", "-");
+      const response = await fetchImpl(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(providerTicker)}?range=3y&interval=1d&events=div%2Csplits`, { signal: controller.signal, headers: { "User-Agent": "PublicTradeIntelHistory/1.0", Accept: "application/json" } });
+      if (!response.ok) throw Object.assign(new Error("Historical K-line provider unavailable."), { code: response.status === 429 ? "throttled" : "unavailable" });
+      const result = (await response.json())?.chart?.result?.[0]; const bars = normalizeKlines(result, boundedLookback);
+      if (bars.length < 64) throw Object.assign(new Error("Insufficient historical K-line observations."), { code: "insufficient_history" });
+      const fetchedAt = new Date(now()).toISOString();
+      return { ticker: normalized, securityName: result.meta?.longName || result.meta?.shortName || normalized, source: "Yahoo Finance chart", sourceTimestamp: fetchedAt, priceTreatment: "unadjusted OHLCV; adjusted close is not mixed into model input", corporateActions: "Provider split/dividend events requested for provenance only; inputs remain unadjusted and affected series may require later exclusion review", interval: "1d", dataQuality: bars.length === boundedLookback ? "complete" : "partial", bars };
+    } catch (error) { if (error?.name === "AbortError") error.code = "timeout"; throw error; }
+    finally { clearTimeout(timer); }
+  }
   async function getOne(ticker, period) {
     const dateBoundary = new Date(now()).toISOString().slice(0, 10);
     const key = `${ticker}|${period}|Yahoo Finance chart|${dateBoundary}`;
@@ -169,7 +197,7 @@ function createHistoricalMarketService({ cacheFile, fetchImpl = global.fetch, no
     const history = predictionHistoryLoader(); const evidence = evidenceLoader();
     return { requestedPeriod: period, requestedHorizon: horizon, requestedTickers: tickers, benchmark, generatedAt: new Date(now()).toISOString(), results: results.map((item) => ({ ...item, predictionHistory: item.ticker ? history.filter((row) => row.ticker === item.ticker && String(row.timeframe || row.horizon || "") === horizon).slice(-100) : [], events: item.ticker ? evidence.filter((event) => event.ticker === item.ticker && event.timestamp).slice(-100) : [] })), disclosure: "Historical market performance, not a forecast." };
   }
-  return { getHistory, getOne, readCache };
+  return { getHistory, getOne, getKlines, readCache };
 }
 
-module.exports = { PERIODS, MAX_TICKERS, MAX_CACHE_ENTRIES, MAX_CACHE_BYTES, FAILURE_TTLS, normalizeTicker, validateRequest, targetStartDate, normalizeSeries, metricsForSeries, createHistoricalMarketService };
+module.exports = { PERIODS, MAX_TICKERS, MAX_CACHE_ENTRIES, MAX_CACHE_BYTES, FAILURE_TTLS, normalizeTicker, validateRequest, targetStartDate, normalizeSeries, normalizeKlines, metricsForSeries, createHistoricalMarketService };

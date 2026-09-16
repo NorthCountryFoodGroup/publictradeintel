@@ -12,6 +12,7 @@ function loadFeatureFlags(environment = process.env) {
     decisionLabEnabled: strictBoolean(environment.DECISION_LAB_ENABLED),
     v3ShadowEnabled: strictBoolean(environment.V3_SHADOW_ENABLED),
     productionOrderExecutionEnabled: strictBoolean(environment.PRODUCTION_ORDER_EXECUTION_ENABLED),
+    kronosShadowEnabled: strictBoolean(environment.KRONOS_SHADOW_ENABLED),
   });
   if (flags.productionOrderExecutionEnabled) {
     const error = new Error("Production order execution is prohibited.");

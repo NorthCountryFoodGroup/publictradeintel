@@ -49,6 +49,7 @@ assert.deepEqual(loadFeatureFlags({}), {
   decisionLabEnabled: false,
   v3ShadowEnabled: false,
   productionOrderExecutionEnabled: false,
+  kronosShadowEnabled: false,
 });
 assert.throws(() => loadFeatureFlags({ PRODUCTION_ORDER_EXECUTION_ENABLED: "true" }), /prohibited/i);
 

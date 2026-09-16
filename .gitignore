@@ -2,3 +2,5 @@ data/securityProfiles.json
 data/securityProfiles.json.*.tmp
 data/historicalMarket.json
 data/.historicalMarket.json.*.tmp
+data/kronosShadowForecasts.json
+data/.kronosShadowForecasts.json.*.tmp

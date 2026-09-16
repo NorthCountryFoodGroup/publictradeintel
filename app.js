@@ -1,3 +1,6 @@
+const uiLanguage = globalThis.PublicTradeIntelLanguage;
+const scanOutcomeInterpreter = globalThis.PublicTradeIntelScanOutcome;
+
 const fields = {
   cashOnHand: document.querySelector("#cashOnHand"),
   billsDue: document.querySelector("#billsDue"),
@@ -127,6 +130,9 @@ const output = {
   dashboardAlertCount: document.querySelector("#dashboardAlertCount"),
   marketOverviewTone: document.querySelector("#marketOverviewTone"),
   marketOverviewGrid: document.querySelector("#marketOverviewGrid"),
+  todayMarketReadGrid: document.querySelector("#todayMarketReadGrid"),
+  todayMarketReadStatus: document.querySelector("#todayMarketReadStatus"),
+  todayMarketReadMessage: document.querySelector("#todayMarketReadMessage"),
   marketIntelligenceStatus: document.querySelector("#marketIntelligenceStatus"),
   marketSummaryGrid: document.querySelector("#marketSummaryGrid"),
   marketBreadthGrid: document.querySelector("#marketBreadthGrid"),
@@ -287,6 +293,7 @@ let predictionLayout = "cards";
 let portfolio = [];
 let selectedBriefTicker = "";
 const securityProfileRequests = new Map();
+const kronosShadowState = new Map();
 let selectedMarketSector = "All sectors";
 let stocksToBuyComparison = [];
 let stocksToBuyPage = 0;
@@ -461,11 +468,13 @@ function firstFromSection(sectionName) {
 
 function compactPickCard(label, item) {
   if (!item) {
+    const outcome = currentScanOutcome();
+    const empty = uiLanguage.emptyState({ hasScan: Boolean(predictionEngine.updatedAt), outcome: outcome.status, recommendationCount: 0 });
     return `
       <article class="summary-tile empty-tile clickable-card" data-page-target="predictions">
         <span>${escapeHtml(label)}</span>
-        <strong>No pick yet</strong>
-        <small>Run a prediction scan.</small>
+        <strong>${escapeHtml(empty.title)}</strong>
+        <small>${escapeHtml(empty.explanation)}</small>
       </article>
     `;
   }
@@ -1229,12 +1238,12 @@ function renderDashboardBrief({ predictions, marketMood, signals, positiveSignal
   const biasLabel = evidenceAdequate ? (/bull market/i.test(String(marketMood || "")) ? "Bullish" : marketMood) : "Insufficient evidence";
   if (output.aiDashboardBriefStatus) output.aiDashboardBriefStatus.textContent = predictions.length ? "Generated from latest scan" : "Waiting for scan";
   const broadTrend = marketIndexData.broadMarketTrend || "Unavailable";
-  const dataLimit = warningCount ? `Market-data quality has ${warningCount} limitation flag(s), so short-term rankings should be interpreted cautiously.` : "Market-data quality has no major warning in the saved scan.";
+  const dataLimit = warningCount ? "Some market data is incomplete. Review the data-quality details before acting." : "The saved scan has no major market-data warning.";
   const warning = risks[0] || "watch whether the next scan confirms the same leadership and data quality.";
   output.aiDashboardBrief.textContent = predictions.length
     ? evidenceAdequate
-      ? `Broad Market Trend is currently ${broadTrend}, while the evidence-qualified Prediction Universe Bias reads ${biasLabel}. ${sector} in the latest scan, with ${highConfidence} high-confidence candidate(s) among ${qualified.length} qualified securities. ${dataLimit} The most important warning is to ${warning}. Review each Trade Brief before taking action.`
-      : `${predictions.length} analytical record(s) were stored, but market-data coverage is inadequate and zero records currently qualify for ordinary recommendation use. Directional model output exists but is not sufficiently supported to characterize the prediction universe as bullish or bearish. Observed market conditions remain separate and unavailable where live proxy data was not supplied. ${dataLimit}`
+      ? `The broad market read is ${broadTrend}. Among stocks with enough reliable data, the overall outlook is ${biasLabel}. ${sector} in the latest scan. ${highConfidence} high-confidence candidate(s) were found among ${qualified.length} evidence-qualified stocks. ${dataLimit} The most important warning is to ${warning}. Review each Trade Brief before acting.`
+      : `${predictions.length} stocks were analyzed, but not enough reliable market data was available to make a broad market call or issue ordinary recommendations. The research records were preserved. ${dataLimit}`
     : "Run a prediction scan to generate a concise market brief from available market, sector, policy, news, congressional, and data-quality signals.";
 }
 
@@ -1299,17 +1308,17 @@ function renderScanProgressSummary(isActive = false, stage = "Idle", percent = 0
       metricCard("Universe Source", universeSource, coverageWarning || `${symbolsAvailable} eligible symbols`, "predictions"),
       metricCard("Broad Screen", `${screened} screened`, `Target: ${broadTarget}`, "predictions"),
       metricCard("Deep Analysis", `${deepSelected} analyzed`, `Target: ${deepTarget || "Not recorded"}`, "predictions"),
-      metricCard("Analyzed", `${semantics.analyzedCount} records`, "Processed by the prediction engine", "predictions"),
-      metricCard("Stored Research", `${semantics.storedCount} records`, "Persisted analytical records; not automatically recommendations", "predictions"),
-      metricCard("Qualified", `${semantics.qualifiedCount} recommendations`, "Meets current market-evidence requirements", "predictions"),
+      metricCard("Stocks analyzed", `${semantics.analyzedCount}`, "Processed by the prediction engine", "predictions"),
+      metricCard("Research records stored", `${semantics.storedCount}`, "Preserved analytical records; not automatically recommendations", "predictions"),
+      metricCard("Enough reliable data", `${semantics.qualifiedCount}`, "Meets current evidence requirements; this does not mean every record is a buy", "predictions"),
       metricCard("Total Wall Clock Time", compactDuration(scan.totalWallClockTimeMs || scan.totalDuration || scan.durationMs || scan.scanDurationSeconds), durationBreakdown ? `Parallel Stage Timing: ${durationBreakdown}` : "Parallel stage timing unavailable", "predictions"),
       metricCard("Engine", predictionEngine.predictionEngineHealth?.predictionEngineStatus || predictionEngine.predictionEngineHealth?.status || "Not run", predictionEngine.predictionEngineHealth?.predictionEngineStatusReasons?.join("; ") || "Separate from market data freshness", "predictions"),
-      metricCard("Market Data Availability", availabilityLabel, criticalReady, "predictions"),
+      metricCard("Market data", availabilityLabel, criticalReady, "predictions"),
       metricCard("Market Data Quality", `${Number(scan.marketDataQualityScore ?? predictionEngine.predictionEngineHealth?.marketDataQualityScore) || 0}/100`, scan.marketDataQualityLabel || predictionEngine.predictionEngineHealth?.marketDataQualityLabel || "Quality score unavailable", "predictions"),
-      metricCard("Market Data Freshness", freshnessLabel, freshnessReason, "predictions"),
-      metricCard("Primary Market Data Provider", mainProvider.providerName === "Yahoo" ? "Yahoo Finance" : mainProvider.providerName || "Unknown", mainProvider.providerName ? `Quote Coverage attempt success: ${Number(mainProvider.successRatePercent) || 0}%. Prediction contribution: ${Number(mainProvider.contributionPercent) || 0}%.` : "Provider summary unavailable", "predictions"),
-      metricCard("Cached Fresh Data Reused", `${Number(quoteDiagnostic.symbolsServedFromCache) || 0} symbols`, `Fallback data: ${Number(quoteDiagnostic.symbolsWithFallbackGeneratedValues) || 0} symbols`, "predictions"),
-      metricCard("Fallback Usage", `${fallbackCount} symbols`, coverage.symbolsUsingCache ? `${coverage.symbolsUsingCache} cache-backed symbols` : "Latest provider data used where available", "predictions"),
+      metricCard("How current is the data?", freshnessLabel, freshnessReason, "predictions"),
+      metricCard("Market data source", mainProvider.providerName === "Yahoo" ? "Yahoo Finance" : mainProvider.providerName || "Unknown", mainProvider.providerName ? `Quote coverage attempt success: ${Number(mainProvider.successRatePercent) || 0}%. Prediction contribution: ${Number(mainProvider.contributionPercent) || 0}%.` : "Provider summary unavailable", "predictions"),
+      metricCard("Recent saved data used", `${Number(quoteDiagnostic.symbolsServedFromCache) || 0} symbols`, `Fallback data: ${Number(quoteDiagnostic.symbolsWithFallbackGeneratedValues) || 0} symbols`, "predictions"),
+      metricCard("Backup data used", `${fallbackCount} symbols`, coverage.symbolsUsingCache ? `${coverage.symbolsUsingCache} cache-backed symbols` : "Latest provider data used where available", "predictions"),
       metricCard("Provider Fetch", providerFetchedAt ? exactEt(providerFetchedAt) : "Not recorded", "When the app requested provider data", "predictions"),
       metricCard("Underlying Data", underlyingDataAt ? exactEt(underlyingDataAt) : "Unavailable", "Representative underlying market timestamp", "predictions"),
       metricCard("Oldest Market Data", timestampStats.oldestUnderlyingTimestamp ? exactEt(timestampStats.oldestUnderlyingTimestamp) : "Unavailable", "Oldest usable quote timestamp", "predictions"),
@@ -1323,6 +1332,45 @@ function setScanUi(stage, percent, message) {
   if (output.scanProgressBar) output.scanProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
   if (output.scanProgressMessage) output.scanProgressMessage.textContent = message || stage;
   if (output.predictionScanMessage) output.predictionScanMessage.textContent = message || stage;
+}
+
+function currentScanOutcome() {
+  return predictionEngine.scanHealth?.scanOutcome || scanOutcomeInterpreter?.classify(predictionEngine) || { status: predictionEngine.updatedAt ? "SUCCESS" : "FAILED", analyzedCount: 0, usableMarketDataCount: 0, qualifiedCount: 0, marketDataAvailability: "Unavailable" };
+}
+
+function renderTodayMarketRead(predictions, qualifiedPredictions, predictionBias) {
+  if (!output.todayMarketReadGrid) return;
+  const outcome = currentScanOutcome();
+  const hasScan = Boolean(predictionEngine.updatedAt || completedScanHealth().scanCompletedAt);
+  const statusLabel = !hasScan ? "No scan yet" : outcome.title || (outcome.status === "DEGRADED" ? "Scan degraded" : outcome.status === "SUCCESS" ? "Scan complete" : "Scan failed");
+  const reliable = Number(outcome.usableMarketDataCount) || 0;
+  const analyzed = Number(outcome.analyzedCount) || predictions.length;
+  const recommendationCounts = qualifiedPredictions.reduce((counts, item) => {
+    const state = uiLanguage.recommendation(item.label || item.recommendation || recommendationCategory(item, predictionModelForView(item))).label;
+    counts[state] = (counts[state] || 0) + 1;
+    return counts;
+  }, {});
+  const possibleTrades = Number(recommendationCounts["Possible trade"]) || 0;
+  const watchOnly = Number(recommendationCounts["Watch only"]) || 0;
+  const caution = Number(recommendationCounts["Avoid / caution"]) || 0;
+  if (output.todayMarketReadStatus) output.todayMarketReadStatus.textContent = statusLabel;
+  output.todayMarketReadGrid.innerHTML = [
+    metricCard("Scan status", statusLabel, outcome.status === "DEGRADED" ? "The process finished, but the result should not be used as a normal recommendation scan." : "Processing status and recommendation usability are assessed separately.", "predictions"),
+    metricCard("Market data", outcome.marketDataAvailability || "Unavailable", uiLanguage.dataQuality(outcome.marketDataAvailability).explanation, "market"),
+    metricCard("Stocks analyzed", String(analyzed), "Research records evaluated by the prediction engine.", "predictions"),
+    metricCard("Stocks with reliable data", String(reliable), "Records with enough current evidence to participate safely.", "predictions"),
+    metricCard("Possible trades", String(possibleTrades), "Meets the current evidence and setup requirements; review the full analysis before acting.", "predictions"),
+    metricCard("Watch only", String(watchOnly), "Interesting records whose conditions are not strong enough yet.", "predictions"),
+    metricCard("Caution / avoid", String(caution), "Records with important negative signals.", "predictions"),
+    metricCard("Overall outlook", predictionBias, qualifiedPredictions.length ? "Based only on stocks with enough reliable evidence." : "Not enough reliable market data was available to make a broad market call.", "market"),
+  ].join("");
+  if (output.todayMarketReadMessage) output.todayMarketReadMessage.textContent = !hasScan
+    ? "Run a scan to look for opportunities."
+    : outcome.status === "DEGRADED"
+      ? `We couldn't get enough current market data for this scan. ${analyzed} stocks were analyzed; ${reliable} had enough current market data; 0 recommendations were issued. Your existing research was preserved.`
+      : outcome.status === "FAILED"
+        ? "The scan could not safely complete. No new authoritative recommendation output was issued."
+        : `${analyzed} stocks were analyzed. ${outcome.qualifiedCount} had enough reliable data. Recommendation categories: ${possibleTrades} possible trade, ${watchOnly} watch only, ${caution} caution or avoid. Overall outlook: ${predictionBias}.`;
 }
 
 function renderDashboard() {
@@ -1369,19 +1417,20 @@ function renderDashboard() {
   const needsAttention = watchlistRows.filter((item) => item.badges.includes("Needs Attention")).length;
 
   if (output.marketOverviewTone) output.marketOverviewTone.textContent = broadMarketTrend;
+  renderTodayMarketRead(predictions, qualifiedPredictions, predictionBias);
   renderDashboardBrief({ predictions, marketMood: predictionBias, signals, positiveSignals, negativeSignals, health });
   renderScanProgressSummary(false, predictionEngine.updatedAt ? "Scan complete" : "Idle", predictionEngine.updatedAt ? 100 : 0);
   output.marketOverviewGrid.innerHTML = [
     metricCard("Market Session", broadMarketTrend, scan.scanMode || "Completed scan metadata unavailable", "market"),
-    metricCard("Qualified Prediction Bias", predictionBias, `${qualifiedPredictions.length} qualified of ${predictions.length} stored research record(s)`, "market"),
-    metricCard("Qualified Prediction Sentiment", qualifiedPredictions.length ? `${averageUnifiedScore(qualifiedPredictions)}/100` : "Insufficient evidence", "Model estimate for evidence-qualified records only", "market"),
+    metricCard("Overall outlook", predictionBias, `${qualifiedPredictions.length} of ${predictions.length} analyzed stocks had enough reliable evidence`, "market"),
+    metricCard("Outlook strength", qualifiedPredictions.length ? uiLanguage.score(averageUnifiedScore(qualifiedPredictions)) : "Not enough reliable data", "Model estimate for evidence-qualified records only", "market"),
     metricCard("S&P 500 Proxy - SPY", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
     metricCard("Nasdaq Proxy - QQQ", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
     metricCard("Dow Proxy - DIA", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
     metricCard("Russell 2000 Proxy - IWM", "Live quote unavailable", "Displayed separately from the completed prediction scan.", "market"),
     metricCard("VIX", "Supplemental only", "Displayed separately from the completed prediction scan.", "market"),
-    metricCard("Highest-Scoring Qualified Group", qualifiedPredictions.length ? sectorStrengthSummary(qualifiedPredictions) : "Insufficient evidence", `Based on ${qualifiedPredictions.length} qualified recommendation(s)`, "market"),
-    metricCard("Scan Universe Source", scanUniverseSourceLabel(scan), scanUniverseSourceNote(scan), "market"),
+    metricCard("Strongest area right now", qualifiedPredictions.length ? sectorStrengthSummary(qualifiedPredictions) : "Not enough reliable data", `Based on ${qualifiedPredictions.length} evidence-qualified record(s)`, "market"),
+    metricCard("Stocks scanned from", scanUniverseSourceLabel(scan), scanUniverseSourceNote(scan), "market"),
   ].join("");
 
   output.predictionEngineGrid.innerHTML = [
@@ -2587,6 +2636,11 @@ function renderCompactPredictionCard(item) {
     ? `<p class="prediction-ai-summary warning-copy">Penny and speculative stocks can be highly volatile, illiquid, and subject to rapid losses. This section is for high-risk research only.</p>`
     : "";
   const cardReasons = opportunityCardReasons(item);
+  const confidenceCopy = uiLanguage.confidence(confidence);
+  const riskCopy = uiLanguage.risk(risk);
+  const qualityCopy = uiLanguage.dataQuality(dataQuality);
+  const recommendationCopy = uiLanguage.recommendation(recommendation);
+  const detailsId = `opportunity-details-${normalizeTicker(item.ticker).toLowerCase()}`;
   return `
     <article class="prediction-screener-card">
       <header class="prediction-card-header">
@@ -2597,37 +2651,42 @@ function renderCompactPredictionCard(item) {
         <em>${moneyOrCalculating(price)}</em>
       </header>
       <div class="prediction-score-block">
-        <span>Unified Score</span>
-        <strong>${score}</strong>
-        <small>/100</small>
+        <span>Overall score</span>
+        <strong>${escapeHtml(uiLanguage.score(score))}</strong>
       </div>
       <div class="prediction-badge-row">
-        <span class="pti-badge ${badgeClassForRecommendation(recommendation)}">${escapeHtml(recommendation)}</span>
-        <span class="pti-badge ${badgeClassForConfidence(confidence)}">${escapeHtml(confidence)}</span>
-        <span class="pti-badge ${risk === "Extreme" || risk === "High" ? "market-stale" : "market-good"}">${escapeHtml(risk)} Risk</span>
-        <span class="pti-badge ${dataQualityBadgeClass(dataQuality)}">${escapeHtml(dataQuality)}</span>
+        <span class="pti-badge ${badgeClassForRecommendation(recommendation)}" title="${escapeHtml(recommendationCopy.explanation)}">${escapeHtml(recommendationCopy.label)}</span>
+        <span class="pti-badge ${badgeClassForConfidence(confidence)}" title="${escapeHtml(confidenceCopy.explanation)}">${escapeHtml(confidenceCopy.label)}</span>
+        <span class="pti-badge ${risk === "Extreme" || risk === "High" ? "market-stale" : "market-good"}" title="${escapeHtml(riskCopy.explanation)}">${escapeHtml(riskCopy.label)}</span>
+        <span class="pti-badge ${dataQualityBadgeClass(dataQuality)}" title="${escapeHtml(qualityCopy.explanation)}">${escapeHtml(qualityCopy.label)}</span>
       </div>
-      <div class="prediction-metadata-grid">
+      <div class="prediction-metadata-grid opportunity-primary-fields">
         <div><span>Timeframe</span><strong>${escapeHtml(timeframe)}</strong></div>
-        <div><span>Price Band</span><strong>${escapeHtml(item.priceBand?.label || priceBandForPrice(price).label)}</strong></div>
-        <div><span>Pattern</span><strong>${escapeHtml(pattern)}</strong></div>
-        <div><span>Trend</span><strong>${escapeHtml(trend)}</strong></div>
-        <div><span>Technical</span><strong>${scoreValue(technicalScore)}/100</strong></div>
-        <div><span>Overall Rank</span><strong>${item.overallRank ? `#${item.overallRank}` : "n/a"}</strong></div>
-        <div><span>Category Rank</span><strong>${item.investorViewRank ? `#${item.investorViewRank}` : item.priceBandRank ? `#${item.priceBandRank} in ${item.priceBand?.label}` : "n/a"}</strong></div>
-        <div><span>Freshness</span><strong>${escapeHtml(item.freshnessStatus || item.freshness || "unknown")}</strong></div>
+        <div><span>Direction</span><strong>${escapeHtml(item.unifiedDirection || trend)}</strong></div>
+        <div><span>Reference price</span><strong>${moneyOrCalculating(price)}</strong></div>
+        <div><span>Data freshness</span><strong>${escapeHtml(item.freshnessStatus || item.freshness || "unknown")}</strong></div>
       </div>
-      <p class="prediction-ai-summary">${escapeHtml(oneLineAiSummary(item, model))}</p>
-      <p class="prediction-ai-summary compact-reason-line"><strong>Why selected:</strong> ${escapeHtml(cardReasons.selected.join(", ") || "Supported by the completed prediction record.")}${cardReasons.caution ? ` <strong>Watch:</strong> ${escapeHtml(cardReasons.caution)}` : ""}</p>
-      ${beginnerReasons.length ? `<p class="prediction-ai-summary">Why it qualifies: ${escapeHtml(beginnerReasons.join(", "))}.</p>` : ""}
+      <p class="prediction-ai-summary compact-reason-line"><strong>Why it stands out:</strong> ${escapeHtml(cardReasons.selected.join(", ") || "No concise supporting factor is available; review the full evidence.")}</p>
+      <p class="prediction-ai-summary compact-reason-line"><strong>Main concern:</strong> ${escapeHtml(cardReasons.caution || "No concise limiting factor is available; review the full evidence.")}</p>
       ${pennyWarning}
-      <div class="prediction-metadata-grid">
-        <div><span>Investment Access Preview</span><strong>${moneyOrCalculating(preview.amount)}</strong></div>
-        <div><span>Whole shares</span><strong>${preview.wholeShares}</strong></div>
-        <div><span>Fractional shares</span><strong>${preview.fractionalRequired ? "May be required" : "Not required"}</strong></div>
-        <div><span>One share uses</span><strong>${preview.oneSharePercent}%</strong></div>
-      </div>
-      <p class="prediction-ai-summary">This is a convenience calculation, not a portfolio recommendation.</p>
+      <details class="opportunity-details" id="${detailsId}">
+        <summary>More details</summary>
+        <p class="prediction-ai-summary">${escapeHtml(oneLineAiSummary(item, model))}</p>
+        ${beginnerReasons.length ? `<p class="prediction-ai-summary">Why it meets this view: ${escapeHtml(beginnerReasons.join(", "))}.</p>` : ""}
+        <div class="prediction-metadata-grid">
+          <div><span>Price band</span><strong>${escapeHtml(item.priceBand?.label || priceBandForPrice(price).label)}</strong></div>
+          <div><span>Pattern</span><strong>${escapeHtml(pattern)}</strong></div>
+          <div><span>Trend</span><strong>${escapeHtml(trend)}</strong></div>
+          <div><span>Chart setup</span><strong>${escapeHtml(uiLanguage.score(technicalScore))}</strong></div>
+          <div><span>Overall rank</span><strong>${item.overallRank ? `#${item.overallRank}` : "n/a"}</strong></div>
+          <div><span>Category rank</span><strong>${item.investorViewRank ? `#${item.investorViewRank}` : item.priceBandRank ? `#${item.priceBandRank} in ${item.priceBand?.label}` : "n/a"}</strong></div>
+          <div><span>Investment access preview</span><strong>${moneyOrCalculating(preview.amount)}</strong></div>
+          <div><span>Whole shares</span><strong>${preview.wholeShares}</strong></div>
+          <div><span>Fractional shares</span><strong>${preview.fractionalRequired ? "May be required" : "Not required"}</strong></div>
+          <div><span>One share uses</span><strong>${preview.oneSharePercent}%</strong></div>
+        </div>
+        <p class="prediction-ai-summary">Investment access is a convenience calculation, not a portfolio recommendation.</p>
+      </details>
       <footer class="prediction-actions">
         <button type="button" class="pti-button" data-view-brief="${escapeHtml(item.ticker)}">View Trade Brief</button>
         <button type="button" class="pti-button ghost" data-add-watchlist="${escapeHtml(item.ticker)}">Add to Watchlist</button>
@@ -2747,11 +2806,12 @@ function renderScreenerPredictions() {
   output.predictionGrid.classList.toggle("is-table-view", predictionLayout === "table");
 
   if (!active.length) {
+    const empty = uiLanguage.emptyState({ hasScan: Boolean(predictionEngine.updatedAt), outcome: currentScanOutcome().status, recommendationCount: 0 });
     output.predictionGrid.innerHTML = `
       <article class="stock-card">
-        <span>No currently qualified recommendations</span>
+        <span>${escapeHtml(empty.title)}</span>
         <strong>${predictions.length} stored research record(s) remain available for inspection</strong>
-        <p>The latest records do not meet the required market-evidence standard for this ranking view. Missing or stale evidence is not converted into an actionable recommendation.</p>
+        <p>${escapeHtml(empty.explanation)} Missing or stale evidence is not converted into an actionable recommendation.</p>
       </article>
     `;
     return;
@@ -2764,11 +2824,12 @@ function renderScreenerPredictions() {
 
   const rows = sortedPredictionRows(filteredPredictionRows(active));
   if (!rows.length) {
+    const empty = uiLanguage.emptyState({ hasScan: Boolean(predictionEngine.updatedAt), sectionSpecific: true });
     output.predictionGrid.innerHTML = `
       <article class="stock-card">
-        <span>No matches</span>
-        <strong>Adjust the screener filters</strong>
-        <p>${active.length ? `${active.length} qualified result(s) exist before the secondary search/filter panel. ` : ""}No prediction in this list matches the current filter combination.</p>
+        <span>${escapeHtml(empty.title)}</span>
+        <strong>${escapeHtml(empty.explanation)}</strong>
+        <p>${active.length ? `${active.length} result(s) exist before the secondary search/filter panel. ` : ""}No stock in this ranking matches the current filter combination.</p>
       </article>
     `;
     return;
@@ -3478,6 +3539,47 @@ function securityProfileForTradeBrief(item) {
   };
 }
 
+function percentageOrUnavailable(value) { return Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(2)}%` : "Unavailable"; }
+function kronosPathChart(forecast) {
+  const actual = (forecast?.inputBars || []).slice(-30), median = forecast?.signal?.medianPath || [], lower = forecast?.signal?.lowerPath || [], upper = forecast?.signal?.upperPath || [];
+  const values = [...actual.map((row) => row.close), ...lower.map((row) => row.close), ...upper.map((row) => row.close)].filter(Number.isFinite);
+  if (values.length < 2 || !median.length) return `<p class="muted-copy">Forecast path visualization is unavailable.</p>`;
+  const width = 720, height = 220, padding = 24, minimum = Math.min(...values), span = Math.max(...values) - minimum || 1, count = actual.length + median.length;
+  const x = (index) => padding + (index / Math.max(1, count - 1)) * (width - padding * 2), y = (value) => height - padding - ((value - minimum) / span) * (height - padding * 2), offset = actual.length - 1;
+  const actualPoints = actual.map((row, index) => `${x(index)},${y(row.close)}`).join(" "), medianPoints = median.map((row, index) => `${x(offset + index)},${y(row.close)}`).join(" ");
+  const bandPoints = [...upper.map((row, index) => `${x(offset + index)},${y(row.close)}`), ...lower.slice().reverse().map((row, index) => `${x(offset + lower.length - 1 - index)},${y(row.close)}`)].join(" ");
+  return `<div class="kronos-chart"><div class="kronos-chart-legend"><span>ACTUAL</span><span>KRONOS FORECAST</span></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Historical actual close path followed by Kronos median forecast and uncertainty band"><polygon points="${bandPoints}" class="kronos-band"></polygon><polyline points="${actualPoints}" class="kronos-actual"></polyline><line x1="${x(offset)}" x2="${x(offset)}" y1="${padding}" y2="${height - padding}" class="kronos-boundary"></line><polyline points="${medianPoints}" class="kronos-forecast"></polyline></svg></div>`;
+}
+function renderKronosShadowPanelContent(ticker) {
+  const state = kronosShadowState.get(normalizeTicker(ticker)) || {}, forecast = state.forecast;
+  const intro = `<p class="kronos-disclosure"><strong>RESEARCH ONLY — DOES NOT CHANGE THE PUBLICTRADEINTEL RECOMMENDATION</strong></p><p>Kronos independently studies recent price and trading patterns and generates possible future price paths. PublicTradeIntel tracks these forecasts to see whether Kronos improves our results over time.</p>`;
+  if (state.loading) return `<div class="brief-section-heading"><span>Kronos Shadow Forecast</span><strong>RESEARCH ONLY</strong></div>${intro}<p>Generating isolated shadow research&hellip;</p>`;
+  if (!forecast) return `<div class="brief-section-heading"><span>Kronos Shadow Forecast</span><strong>RESEARCH ONLY</strong></div>${intro}<p class="muted-copy">${escapeHtml(state.message || "No shadow forecast is stored for this security.")}</p><div class="kronos-actions"><select data-kronos-horizon aria-label="Kronos research horizon"><option>1-Day</option><option selected>7-Day</option><option>1-Month</option></select><button type="button" data-generate-kronos="${escapeHtml(ticker)}" ${state.disabled ? "disabled" : ""}>Generate shadow forecast</button></div>`;
+  const signal = forecast.signal || {}, comparison = forecast.agreement || {};
+  const directionCopy = uiLanguage.direction(signal.direction);
+  const agreementCopy = uiLanguage.agreement(comparison.state);
+  const executionLabel = forecast.executionMode === "real_model" ? "OFFICIAL KRONOS MODEL" : forecast.executionMode === "deterministic_adapter" ? "DEVELOPMENT / TEST FORECAST" : "EXECUTION MODE UNAVAILABLE";
+  const executionCopy = forecast.executionMode === "deterministic_adapter" ? "Generated by the deterministic test adapter, not the Kronos neural network." : "Model and checkpoint provenance are available in Forecast details.";
+  const normalized = forecast.outputNormalization && forecast.outputNormalization !== "none";
+  return `<div class="brief-section-heading"><span>Kronos Shadow Forecast</span><strong>${executionLabel}</strong></div>${intro}<p><strong>${escapeHtml(directionCopy.label)}</strong> — ${escapeHtml(directionCopy.explanation)}</p><div class="kronos-metrics"><div><span>Forecast timeframe</span><strong>${escapeHtml(forecast.horizonMapping || forecast.forecastHorizon)}</strong></div><div><span>Forecast paths finishing higher</span><strong>${percentageOrUnavailable(signal.positiveReturnShare)}</strong></div><div><span>Middle forecast return</span><strong>${percentageOrUnavailable(signal.medianExpectedReturn)}</strong></div><div><span>Forecast range</span><strong>${percentageOrUnavailable(signal.lowerReturnBand)} to ${percentageOrUnavailable(signal.upperReturnBand)}</strong></div><div><span>Expected price movement</span><strong>${percentageOrUnavailable(signal.forecastVolatility)}</strong></div><div><span>Largest decline in forecast paths</span><strong>${percentageOrUnavailable(signal.forecastMaxDrawdown)}</strong></div><div><span>How consistent the forecast paths are</span><strong>${escapeHtml(signal.pathStability || signal.dataQuality || "Unavailable")}</strong></div><div><span>Agreement with PublicTradeIntel</span><strong>${escapeHtml(agreementCopy.label)}</strong><small>${escapeHtml(agreementCopy.explanation)}</small></div><div><span>Generated</span><strong>${escapeHtml(forecast.createdAt || "Unavailable")}</strong></div><div><span>Market data cutoff</span><strong>${escapeHtml(forecast.inputEndAt || "Unavailable")}</strong></div><div><span>Data quality</span><strong>${escapeHtml(signal.dataQuality || "unavailable")}</strong></div></div>${kronosPathChart(forecast)}<p class="muted-copy">Forecast-path percentages are sample frequencies, not calibrated probabilities. Agreement is research information only and does not change the recommendation.</p><details class="kronos-forecast-details"><summary>Forecast details</summary><p>${escapeHtml(executionCopy)}</p>${normalized ? `<p>Forecast price bars were normalized into valid OHLC ranges for analysis. Original model output is preserved separately.</p>` : ""}<div class="brief-fact-list"><div><span>Model</span><strong>${escapeHtml(forecast.modelName || "Kronos")}</strong></div><div><span>Tokenizer / checkpoint</span><strong>${escapeHtml(forecast.tokenizerName || forecast.tokenizerId || forecast.modelVersion || "Unavailable")}</strong></div><div><span>Execution mode</span><strong>${escapeHtml(forecast.executionMode || "Unavailable")}</strong></div><div><span>Output normalization</span><strong>${escapeHtml(forecast.outputNormalization || "None recorded")}</strong></div><div><span>Sample count</span><strong>${Number(forecast.sampleCount || forecast.normalizedForecastSamples?.length || forecast.samples?.length) || 0}</strong></div><div><span>Input observations</span><strong>${Number(forecast.inputObservationCount || forecast.inputBars?.length) || 0}</strong></div><div><span>Input interval</span><strong>${escapeHtml(forecast.inputInterval || "Unavailable")}</strong></div><div><span>Raw samples preserved</span><strong>${Array.isArray(forecast.rawForecastSamples) ? "Yes" : "Not recorded"}</strong></div><div><span>Normalized samples stored separately</span><strong>${Array.isArray(forecast.normalizedForecastSamples) ? "Yes" : "Not recorded"}</strong></div><div><span>Production influence</span><strong>None</strong></div></div></details>`;
+}
+function renderKronosShadowPanel(ticker) {
+  return renderKronosShadowPanelContent(ticker);
+}
+function refreshKronosPanel(ticker) { const normalized = normalizeTicker(ticker); const panel = normalized ? document.querySelector(`[data-kronos-shadow-panel="${CSS.escape(normalized)}"]`) : null; if (panel) panel.innerHTML = renderKronosShadowPanel(normalized); }
+async function loadKronosShadowForecast(ticker) {
+  const normalized = normalizeTicker(ticker); if (!normalized) return;
+  try { const response = await fetch(`api/kronos-shadow/${encodeURIComponent(normalized)}`, { cache: "no-store" }); const body = await response.json().catch(() => ({})); kronosShadowState.set(normalized, response.ok ? { forecast: body } : { disabled: body.classification === "feature_disabled", message: body.error || "No shadow forecast is stored for this security." }); }
+  catch { kronosShadowState.set(normalized, { message: "Kronos shadow research is currently unavailable." }); }
+  refreshKronosPanel(normalized);
+}
+async function generateKronosShadowForecast(ticker, horizon) {
+  const normalized = normalizeTicker(ticker); if (!normalized) return; kronosShadowState.set(normalized, { loading: true }); refreshKronosPanel(normalized);
+  try { const response = await fetch("api/kronos-shadow/forecast", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticker: normalized, horizon }) }); const body = await response.json().catch(() => ({})); if (!response.ok) throw Object.assign(new Error(body.error || "Kronos shadow forecast is unavailable."), { disabled: body.classification === "feature_disabled" }); kronosShadowState.set(normalized, { forecast: body }); }
+  catch (error) { kronosShadowState.set(normalized, { disabled: Boolean(error.disabled), message: error.message }); }
+  refreshKronosPanel(normalized);
+}
+
 function renderTradeBrief() {
   if (!output.tradeBriefPanel) return;
   const currentRows = opportunityRowsForHub();
@@ -3530,6 +3632,12 @@ function renderTradeBrief() {
   const recommendation = item.label || item.recommendation || recommendationCategory(item, model);
   const qualityLabel = item.marketDataQuality?.label || item.dataQualityStatus || reliability.availability || "Not available";
   const lastUpdated = item.scannedAt || item.updatedAt || predictionEngine.updatedAt;
+  const recommendationCopy = uiLanguage.recommendation(recommendation);
+  const confidenceCopy = uiLanguage.confidence(item.confidenceTier);
+  const riskCopy = uiLanguage.risk(riskCategory(item));
+  const qualityCopy = uiLanguage.dataQuality(qualityLabel);
+  const strongestSupport = bullCase[0]?.title || "No concise supporting factor is verified; review the structured evidence.";
+  const mainConcern = bearCase[0]?.title || "No concise limiting factor is verified; review the structured evidence.";
 
   output.tradeBriefPanel.innerHTML = `
     <article class="trade-brief-report trade-brief-v2">
@@ -3545,11 +3653,28 @@ function renderTradeBrief() {
           </div>
         </div>
         <div class="brief-score">
-          <span>Unified score</span>
-          <strong>${score}/100</strong>
-          <small>${escapeHtml(item.confidenceTier || "low")} confidence</small>
+          <span>Overall score</span>
+          <strong>${escapeHtml(uiLanguage.score(score))}</strong>
+          <small>${escapeHtml(confidenceCopy.label)}</small>
         </div>
       </header>
+
+      <section class="brief-section brief-wide trade-brief-bottom-line">
+        <div class="brief-section-heading"><span>Bottom line</span><strong>Research, not personalized financial advice</strong></div>
+        <p class="bottom-line-call"><strong>${escapeHtml(recommendationCopy.label)} · ${escapeHtml(item.unifiedDirection || "neutral")} · ${escapeHtml(confidenceCopy.label)}</strong></p>
+        <p>${escapeHtml(recommendationCopy.explanation)}</p>
+        <div class="brief-top-metrics">
+          <div><span>Overall score</span><strong>${escapeHtml(uiLanguage.score(score))}</strong></div>
+          <div><span>Model risk</span><strong>${escapeHtml(riskCopy.label)}</strong></div>
+          <div><span>Data quality</span><strong>${escapeHtml(qualityCopy.label)}</strong></div>
+          <div><span>Timeframe</span><strong>${escapeHtml(item.bestTimeframe || item.timeframe || predictionModelTitle(model))}</strong></div>
+          <div><span>Price that changes our view</span><strong>${invalidation.stop ? moneyOrUnavailable(invalidation.stop) : "No verified price level"}</strong></div>
+        </div>
+        <div class="bottom-line-reasons">
+          <div><span>Why it stands out</span><strong>${escapeHtml(strongestSupport)}</strong></div>
+          <div><span>Main concern</span><strong>${escapeHtml(mainConcern)}</strong></div>
+        </div>
+      </section>
 
       <div class="brief-top-metrics">
         <div><span>Current / Reference Price</span><strong>${moneyOrUnavailable(item.currentPrice)}</strong></div>
@@ -3558,8 +3683,8 @@ function renderTradeBrief() {
         <div><span>Recommendation</span><strong>${escapeHtml(recommendation)}</strong></div>
         <div><span>Confidence</span><strong>${escapeHtml(item.confidenceTier || "low")}</strong></div>
         <div><span>Direction</span><strong>${escapeHtml(item.unifiedDirection || "neutral")}</strong></div>
-        <div><span>Risk Level</span><strong>${escapeHtml(riskCategory(item))}</strong></div>
-        <div><span>Data Freshness</span><strong>${escapeHtml(reliability.freshness)}</strong></div>
+        <div><span>Model risk</span><strong>${escapeHtml(riskCopy.label)}</strong></div>
+        <div><span>Data freshness</span><strong>${escapeHtml(reliability.freshness)}</strong></div>
         <div><span>Model Version</span><strong>${escapeHtml(item.modelVersion || predictionEngine.modelVersion || "Unavailable")}</strong></div>
         <div><span>Last Updated</span><strong>${lastUpdated ? exactEt(lastUpdated) : "Not available"}</strong></div>
         <div><span>Security</span><strong>${escapeHtml(securityProfile.securityName || item.ticker)}</strong></div>
@@ -3583,6 +3708,10 @@ function renderTradeBrief() {
         }
       </section>
 
+      <section class="brief-section brief-wide kronos-shadow-panel" data-kronos-shadow-panel="${escapeHtml(item.ticker)}">
+        ${renderKronosShadowPanel(item.ticker)}
+      </section>
+
       <nav class="brief-actions brief-navigation" aria-label="Trade Brief navigation">
         <button type="button" data-page-target="predictions">Back to Opportunities</button>
         <button type="button" data-view-brief="${escapeHtml(previousTicker || item.ticker)}">Previous result</button>
@@ -3593,24 +3722,26 @@ function renderTradeBrief() {
         <button type="button" disabled>Share Report <small>Coming Soon</small></button>
       </nav>
 
-      <div class="brief-report-grid">
+      <details class="brief-full-analysis">
+        <summary>See full analysis</summary>
+        <div class="brief-report-grid">
         <section class="brief-section brief-wide">
           <div class="brief-section-heading"><span>Executive Research Summary</span><strong>Verified-field brief</strong></div>
           <p>${escapeHtml(summary)}</p>
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Bull Case</span><strong>${bullCase.length} supported factor(s)</strong></div>
+          <div class="brief-section-heading"><span>Why this could work</span><strong>${bullCase.length} supported factor(s)</strong></div>
           <div class="brief-evidence-list positive-list">${renderEvidenceList(bullCase, "No strong positive factor is verified in this prediction record.")}</div>
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>${item.unifiedDirection === "bearish" ? "Bear Case" : "Reasons to Wait"}</span><strong>${bearCase.length} concern(s)</strong></div>
+          <div class="brief-section-heading"><span>${item.unifiedDirection === "bearish" ? "Why this may not work" : "Why you might wait"}</span><strong>${bearCase.length} concern(s)</strong></div>
           <div class="brief-evidence-list risk-list">${renderEvidenceList(bearCase, "No major concern is verified in this prediction record.")}</div>
         </section>
 
         <section class="brief-section brief-wide">
-          <div class="brief-section-heading"><span>What Would Change The Outlook?</span><strong>${invalidation.stop ? `Invalidation ${moneyOrUnavailable(invalidation.stop)}` : "No price level"}</strong></div>
+          <div class="brief-section-heading"><span>What would change our view</span><strong>${invalidation.stop ? `Invalidation ${moneyOrUnavailable(invalidation.stop)}` : "No price level"}</strong></div>
           <div class="outlook-grid">
             <div><strong>Bullish outlook weakens if</strong>${invalidation.bearish.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</div>
             <div><strong>Cautious outlook improves if</strong>${invalidation.bullish.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</div>
@@ -3618,19 +3749,19 @@ function renderTradeBrief() {
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Trade Plan</span><strong>${escapeHtml(positionStatus)}</strong></div>
+          <div class="brief-section-heading"><span>Price levels to watch</span><strong>${escapeHtml(positionStatus)}</strong></div>
           <div class="brief-plan-grid">
-            <div title="Stored entry zone from the selected prediction record."><span>Suggested Entry Zone</span><strong>${escapeHtml(valueOrUnavailable(model?.entryZone || item.suggestedEntryZone))}</strong></div>
-            <div title="Stored stop/invalidation level from the selected prediction record."><span>Invalidation / Stop</span><strong>${escapeHtml(valueOrUnavailable(model?.stopLevel || item.suggestedStopLevel || invalidation.stop))}</strong></div>
+            <div title="Stored entry zone from the selected prediction record."><span>Price area to watch</span><strong>${escapeHtml(valueOrUnavailable(model?.entryZone || item.suggestedEntryZone))}</strong></div>
+            <div title="Stored stop/invalidation level from the selected prediction record."><span>Price that changes our view</span><strong>${escapeHtml(valueOrUnavailable(model?.stopLevel || item.suggestedStopLevel || invalidation.stop))}</strong></div>
             <div title="Stored target level when available."><span>Target 1</span><strong>${escapeHtml(valueOrUnavailable(targetOne))}</strong></div>
             <div title="Secondary target only appears when a validated forecast field exists."><span>Target 2</span><strong>${escapeHtml(valueOrUnavailable(targetTwo))}</strong></div>
-            <div title="Stored risk/reward ratio from the prediction record."><span>Risk / Reward Ratio</span><strong>${Number(item.riskRewardRatio) ? Number(item.riskRewardRatio).toFixed(2) : "Not reliably calculated"}</strong></div>
+            <div title="Stored risk/reward ratio from the prediction record."><span>Potential reward vs. modeled risk</span><strong>${Number(item.riskRewardRatio) ? Number(item.riskRewardRatio).toFixed(2) : "Not reliably calculated"}</strong></div>
           </div>
           <p class="muted-copy">This Trade Plan is research support, not personalized financial advice.</p>
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Signal Agreement</span><strong>${agreement.supporting.length} support / ${agreement.conflicting.length} conflict</strong></div>
+          <div class="brief-section-heading"><span>What the signals are saying</span><strong>${agreement.supporting.length} support / ${agreement.conflicting.length} conflict</strong></div>
           <div class="signal-agreement-grid">${agreement.categories.map((row) => `<div><span>${escapeHtml(row.name)}</span><strong class="${row.status.toLowerCase()}">${escapeHtml(row.status)}</strong></div>`).join("")}</div>
           <details class="why-pick">
             <summary>Agreement details</summary>
@@ -3641,7 +3772,7 @@ function renderTradeBrief() {
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Why This Ranked</span><strong>Transparent ranking</strong></div>
+          <div class="brief-section-heading"><span>Why it ranks here</span><strong>Transparent ranking</strong></div>
           <div class="brief-fact-list">
             <div><span>Overall Rank</span><strong>${escapeHtml(String(ranking.overallRank))}</strong></div>
             <div><span>Timeframe Rank</span><strong>${escapeHtml(String(ranking.timeframeRank))}</strong></div>
@@ -3659,12 +3790,12 @@ function renderTradeBrief() {
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>What Limited The Score?</span><strong>${limitedScore.length} constraint(s)</strong></div>
+          <div class="brief-section-heading"><span>What held the score back</span><strong>${limitedScore.length} constraint(s)</strong></div>
           <div class="brief-chip-list risk-list">${limitedScore.map((risk) => `<span>${escapeHtml(risk)}</span>`).join("")}</div>
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Market Regime Diagnostic</span><strong>${escapeHtml(regime.primary)}</strong></div>
+          <div class="brief-section-heading"><span>Market environment</span><strong>${escapeHtml(regime.primary)}</strong></div>
           <p>${escapeHtml(regime.note)}</p>
           <div class="brief-fact-list">
             <div><span>Confidence</span><strong>${escapeHtml(regime.confidence)}</strong></div>
@@ -3674,7 +3805,7 @@ function renderTradeBrief() {
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Sector Context</span><strong>${escapeHtml(sector.sector)}</strong></div>
+          <div class="brief-section-heading"><span>How its sector looks</span><strong>${escapeHtml(sector.sector)}</strong></div>
           <div class="brief-fact-list">
             <div><span>Classification</span><strong>${escapeHtml(sector.label)}</strong></div>
             <div><span>Sector Score</span><strong>${sector.sectorScore}/100</strong></div>
@@ -3689,7 +3820,7 @@ function renderTradeBrief() {
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Confidence Trend</span><strong>${escapeHtml(trend.label)}</strong></div>
+          <div class="brief-section-heading"><span>Is confidence improving?</span><strong>${escapeHtml(trend.label)}</strong></div>
           <p>${escapeHtml(trend.summary)}</p>
           <div class="brief-fact-list">
             <div><span>Current Confidence</span><strong>${escapeHtml(trend.currentConfidence || item.confidenceTier || "low")}</strong></div>
@@ -3701,7 +3832,7 @@ function renderTradeBrief() {
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Data Reliability</span><strong>${escapeHtml(String(reliability.score))}/100</strong></div>
+          <div class="brief-section-heading"><span>How reliable is the data?</span><strong>${escapeHtml(String(reliability.score))}/100 — ${escapeHtml(uiLanguage.scoreBand(reliability.score))}</strong></div>
           <p>${escapeHtml(reliability.summary)}</p>
           <div class="brief-fact-list">
             <div><span>Availability Label</span><strong>${escapeHtml(reliability.availability)}</strong></div>
@@ -3727,7 +3858,7 @@ function renderTradeBrief() {
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Technical Snapshot</span><strong>${Number(technical.technicalSignalScore) || 0}/100</strong></div>
+          <div class="brief-section-heading"><span>Chart setup</span><strong>${uiLanguage.score(technical.technicalSignalScore || 0)}</strong></div>
           <div class="brief-fact-list">
             <div><span>Trend</span><strong>${escapeHtml(technical.trendDirection || "This signal was not available for the latest scan")}</strong></div>
             <div><span>EMA Alignment</span><strong>${Number(technical.ema9Vs20Ema) > 0 ? "9 EMA above 20 EMA" : Number(technical.ema9Vs20Ema) < 0 ? "9 EMA below 20 EMA" : "This signal was not available for the latest scan"}</strong></div>
@@ -3740,7 +3871,7 @@ function renderTradeBrief() {
         </section>
 
         <section class="brief-section">
-          <div class="brief-section-heading"><span>Congress / Policy / News</span><strong>Signal tone</strong></div>
+          <div class="brief-section-heading"><span>Outside factors</span><strong>Congress / policy / news</strong></div>
           <div class="brief-badge-panel">
             <div><span>Recent Congressional Activity</span><strong class="brief-badge ${Number(congress.buys) > Number(congress.sells || 0) ? "positive" : Number(congress.sells) ? "negative" : "neutral"}">${Number(congress.buys) || Number(congress.sells) ? `${Number(congress.buys) || 0} buys / ${Number(congress.sells) || 0} sells` : "Neutral"}</strong></div>
             <div><span>Policy Catalysts</span><strong class="brief-badge ${badgeTone(matchingPolicy[0]?.direction)}">${matchingPolicy.length ? matchingPolicy[0].direction : "Neutral"}</strong></div>
@@ -3749,7 +3880,7 @@ function renderTradeBrief() {
         </section>
 
         <section class="brief-section brief-wide">
-          <div class="brief-section-heading"><span>Trade Brief Consistency Audit</span><strong>${escapeHtml(consistency.status)}</strong></div>
+          <div class="brief-section-heading"><span>Analysis checks</span><strong>${escapeHtml(consistency.status)}</strong></div>
           <div class="signal-agreement-grid">${consistency.checks.map((check) => `<div><span>${escapeHtml(check.label)}</span><strong class="${check.pass ? "positive" : "negative"}">${check.pass ? "Pass" : "Review"}</strong></div>`).join("")}</div>
         </section>
 
@@ -3768,7 +3899,8 @@ function renderTradeBrief() {
           <div class="brief-section-heading"><span>Historical Performance</span><strong>${trend.rows.length ? `${trend.rows.length} stored scan(s)` : "Coming online"}</strong></div>
           <p>${trend.rows.length ? "Stored scan history is available for confidence trend review." : "Historical tracking will become available as prediction history grows."}</p>
         </section>
-      </div>
+        </div>
+      </details>
 
       <footer class="brief-actions">
         <button type="button" data-page-target="predictions">Back to Opportunities</button>
@@ -4324,7 +4456,12 @@ async function runPredictionScan() {
     localStorage.setItem("publicTradeIntelLastSuccessfulScan", JSON.stringify(result.scanHealth || { scanCompletedAt: result.updatedAt }));
     const warningText = Array.isArray(result.warnings) && result.warnings.length ? ` Warnings: ${result.warnings.join(" ")}` : "";
     const duration = ((performance.now() - startedAt) / 1000).toFixed(1);
-    setScanUi("Scan complete", 100, `Prediction scan complete. ${result.predictions?.length || 0} records generated in ${duration}s.${warningText}`);
+    const outcome = result.scanHealth?.scanOutcome || scanOutcomeInterpreter.classify(result);
+    if (outcome.status === "DEGRADED") {
+      setScanUi("Scan degraded", 100, `Market data wasn't available for this scan, so PublicTradeIntel did not issue recommendations. ${outcome.analyzedCount} stocks analyzed; ${outcome.usableMarketDataCount} had enough current market data; ${outcome.qualifiedCount} recommendations issued. Your research was preserved. Try another scan after market data becomes available.`);
+    } else {
+      setScanUi("Scan complete", 100, `Prediction scan complete. ${outcome.analyzedCount} stocks analyzed; ${outcome.usableMarketDataCount} had enough reliable data; ${outcome.qualifiedCount} met the evidence requirements. Completed in ${duration}s.${warningText}`);
+    }
     renderPredictions();
     renderStocksToBuyCenter();
     renderMarketIntelligence();
@@ -5080,8 +5217,9 @@ function openTradeBrief(ticker) {
   renderTradeBrief();
   setPage("briefs");
   loadSecurityProfile(selectedBriefTicker).then(() => {
-    if (normalizeTicker(selectedBriefTicker) === normalizeTicker(ticker)) renderTradeBrief();
+    if (normalizeTicker(selectedBriefTicker) === normalizeTicker(ticker)) { renderTradeBrief(); loadKronosShadowForecast(ticker); }
   });
+  loadKronosShadowForecast(selectedBriefTicker);
 }
 
 function initDashboardDisclosures() {
@@ -5459,6 +5597,11 @@ document.addEventListener("click", (event) => {
   if (scanButton && !output.predictionGrid?.contains(scanButton)) runPredictionScan();
   const briefButton = event.target.closest("[data-view-brief]");
   if (briefButton && !output.predictionGrid?.contains(briefButton)) openTradeBrief(briefButton.dataset.viewBrief);
+  const kronosButton = event.target.closest("[data-generate-kronos]");
+  if (kronosButton) {
+    const panel = kronosButton.closest("[data-kronos-shadow-panel]");
+    generateKronosShadowForecast(kronosButton.dataset.generateKronos, panel?.querySelector("[data-kronos-horizon]")?.value || "7-Day");
+  }
   const sectorButton = event.target.closest("[data-market-sector]");
   if (sectorButton) {
     selectedMarketSector = sectorButton.dataset.marketSector || "All sectors";

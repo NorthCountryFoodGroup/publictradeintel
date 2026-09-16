@@ -44,6 +44,10 @@ const {
 const { createSecurityProfileService } = require("./security-profile");
 const { createHistoricalMarketService, validateRequest: validateHistoricalMarketRequest } = require("./historical-market");
 const predictionSemantics = require("./prediction-semantics");
+const scanOutcome = require("./scan-outcome");
+const { createKronosClient } = require("./kronos/client");
+const { createShadowStore } = require("./kronos/persistence");
+const { createKronosShadowService } = require("./kronos/service");
 
 const PORT = Number(process.env.PORT || 3000);
 const PRODUCTION = process.env.NODE_ENV === "production";
@@ -79,6 +83,7 @@ const PREDICTION_HISTORY_FILE = path.join(DATA_DIR, "predictionHistory.json");
 const OUTCOME_STATUS_FILE = path.join(DATA_DIR, "outcomeStatus.json");
 const SECURITY_PROFILE_CACHE_FILE = path.join(DATA_DIR, "securityProfiles.json");
 const HISTORICAL_MARKET_CACHE_FILE = path.join(DATA_DIR, "historicalMarket.json");
+const KRONOS_SHADOW_FORECASTS_FILE = path.join(DATA_DIR, "kronosShadowForecasts.json");
 const MARKET_API_KEY = String(process.env.ALPHA_VANTAGE_API_KEY || "").trim();
 const POLICY_REFRESH_MS = Number(process.env.POLICY_REFRESH_MS || 60 * 60 * 1000);
 const CONGRESS_TRADES_FEED_URL = process.env.CONGRESS_TRADES_FEED_URL || "";
@@ -155,6 +160,14 @@ const historicalMarketService = createHistoricalMarketService({
       ...(policy.signals || []).map((record) => ({ ticker: String(record.ticker || "").toUpperCase(), timestamp: record.updatedAt || record.timestamp || null, type: "policy_event", title: record.title || record.summary || "Ticker-specific policy signal", source: record.source || "Saved policy signal", sourceTimestamp: record.updatedAt || record.timestamp || null })),
     ].filter((record) => record.ticker && record.timestamp);
   },
+});
+const kronosShadowStore = createShadowStore(KRONOS_SHADOW_FORECASTS_FILE);
+const kronosShadowService = createKronosShadowService({
+  enabled: FEATURE_FLAGS.kronosShadowEnabled,
+  client: createKronosClient({ endpoint: String(process.env.KRONOS_SERVICE_URL || "").trim() }),
+  store: kronosShadowStore,
+  historyLoader: (ticker, options) => historicalMarketService.getKlines(ticker, options),
+  predictionLoader: () => readJson(PREDICTIONS_FILE, { predictions: [] }),
 });
 const BROAD_SCREEN_TARGET = 2500;
 const DEEP_ANALYSIS_MARKET_HOURS_TARGET = 300;
@@ -2491,6 +2504,34 @@ function quoteCoverageDiagnostic(providerDiagnostics, predictions = []) {
       Number(yahoo.symbolsRequested || 0) < totalDeepAnalysisSymbols
         ? "Yahoo was attempted only where a quote lookup was needed; cache, saved data, or higher-priority completed-scan data may already have supplied usable fields for other symbols."
         : "Yahoo was attempted for every deep-analysis symbol in this scan.",
+  };
+}
+
+function boundedProviderFailureDiagnostics(providerDiagnostics, marketDataAnalysis, quoteDiagnostic) {
+  const providers = Object.values(providerDiagnostics?.providers || {}).slice(0, 8).map((provider) => ({
+    provider: String(provider.providerName || "Unknown").slice(0, 48),
+    classification: String(provider.status || "Unknown").slice(0, 32),
+    requested: Number(provider.symbolsRequested) || 0,
+    successful: Number(provider.symbolsReturned) || 0,
+    failed: Math.max(0, (Number(provider.symbolsRequested) || 0) - (Number(provider.symbolsReturned) || 0)),
+    timeoutCount: Number(provider.timeoutCount) || 0,
+    throttledCount: Number(provider.rateLimitCount) || 0,
+    malformedCount: Number(provider.parseFailureCount) || 0,
+  }));
+  const coverage = marketDataAnalysis?.marketDataCoverage || {};
+  return {
+    providers,
+    requestedSymbolCount: Number(coverage.symbolsRequested) || 0,
+    successfulSymbolCount: Number(coverage.symbolsReturned) || 0,
+    failedSymbolCount: Number(coverage.providerFailures) || 0,
+    usableDataCount: Number(quoteDiagnostic?.totalDeepAnalysisSymbols) - Number(quoteDiagnostic?.symbolsWithNoFreshProviderQuote) || 0,
+    latestUsableObservation: marketDataAnalysis?.timestampStats?.representativeUnderlyingTimestamp || null,
+    timeoutCount: Number(providerDiagnostics?.timeoutCount) || 0,
+    throttledCount: Number(providerDiagnostics?.rateLimitedRequests) || 0,
+    malformedCount: Number(providerDiagnostics?.parseFailures) || 0,
+    cacheUsedCount: Number(providerDiagnostics?.cacheUsage) || 0,
+    fallbackUsedCount: Number(providerDiagnostics?.fallbackUsage) || 0,
+    safeNote: "Bounded classifications and counts only; raw provider responses and unbounded errors are not included.",
   };
 }
 
@@ -5826,6 +5867,7 @@ async function refreshPredictions(options = {}) {
     marketDataTimestampStats: marketDataAnalysis.timestampStats,
     providerHealth: options.providerDiagnostics || null,
     quoteCoverageDiagnostic: quoteDiagnostic,
+    providerFailureDiagnostics: boundedProviderFailureDiagnostics(options.providerDiagnostics, marketDataAnalysis, quoteDiagnostic),
     dataQualityCounts: {
       good: predictionEngineHealth.goodRecords,
       partial: predictionEngineHealth.partialRecords,
@@ -5905,6 +5947,7 @@ async function refreshPredictions(options = {}) {
   predictionEngineHealth.storedResearchRecordCount = semanticSummary.storedCount;
   predictionEngineHealth.qualifiedRecommendationCount = semanticSummary.qualifiedCount;
   predictionEngineHealth.qualifiedHorizonCounts = semanticSummary.horizonCounts;
+  scanHealth.scanOutcome = scanOutcome.classify({ updatedAt, scanHealth, predictionEngineHealth, predictionSemantics: semanticSummary });
   const result = {
     updatedAt,
     predictions,
@@ -6369,6 +6412,24 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (request.method === "GET" && pathname.startsWith("/api/kronos-shadow/")) {
+    const ticker = decodeURIComponent(pathname.slice("/api/kronos-shadow/".length)).toUpperCase();
+    const forecast = kronosShadowService.latest(ticker);
+    sendJson(response, forecast ? 200 : 404, forecast || { error: FEATURE_FLAGS.kronosShadowEnabled ? "No Kronos shadow forecast is available." : "Kronos shadow research is disabled.", classification: FEATURE_FLAGS.kronosShadowEnabled ? "not_found" : "feature_disabled" });
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/kronos-shadow/forecast") {
+    try {
+      const forecast = await kronosShadowService.forecast(await collectBody(request));
+      sendJson(response, 201, forecast);
+    } catch (error) {
+      const status = error.code === "feature_disabled" ? 404 : ["invalid_request", "invalid_symbol", "unsupported_horizon", "invalid_sample_count"].includes(error.code) ? 400 : error.code === "capacity_unavailable" ? 429 : 503;
+      sendJson(response, status, { error: publicErrorMessage(error, "Kronos shadow forecast is unavailable."), classification: error.code || "unavailable", productionInfluence: false });
+    }
+    return;
+  }
+
   if (request.method === "POST" && pathname === "/api/predictions/scan") {
     if (activePredictionScan) {
       sendJson(response, 429, { error: "Prediction scan already in progress", status: "busy" });
@@ -6384,6 +6445,7 @@ async function handleApi(request, response, pathname) {
           ? 500
           : 500;
       sendJson(response, status, {
+        scanOutcome: { status: "FAILED", reasonCode: error.code === "DATABASE_WRITE_FAILED" ? "AUTHORITATIVE_OUTPUT_NOT_PERSISTED" : "SCAN_NOT_COMPLETED", completed: false, recommendationUseAllowed: false },
         error:
           error.code === "NO_WATCHLIST_TICKERS"
             ? "No watchlist tickers found"
@@ -6522,6 +6584,11 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "GET" && pathname === "/api/admin/performance-diagnostics") {
     sendJson(response, 200, { api: apiPerformanceSummary(), retainedInMemory: true, maximumRouteCount: 5 });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/kronos-diagnostics") {
+    sendJson(response, 200, kronosShadowService.diagnostics());
     return;
   }
 

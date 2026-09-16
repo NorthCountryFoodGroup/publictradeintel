@@ -20,6 +20,7 @@ assert.equal(mixed.predictionSemantics.qualifiedCount, 25);
 assert.equal(mixed.sections.top25OneDay.length, 25);
 const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 assert.match(app, /Observed Market Breadth[^\n]+Unavailable/);
-assert.match(app, /No currently qualified recommendations/);
+assert.match(app, /emptyState\(\{ hasScan:/, "empty-state copy should be derived from the centralized language contract");
+assert.match(app, /Enough reliable data|Stocks with reliable data/);
 assert.doesNotMatch(app, /marketMetricCard\("Advancers"/);
 console.log("Prediction qualification and cross-route semantics contract passed.");

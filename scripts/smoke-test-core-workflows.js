@@ -25,7 +25,7 @@ expect(/function addTickerToActiveWatchlist\(ticker\)/, "Shared watchlist add wo
 expect(/function addAlertRuleForTicker\(ticker, source = "alerts"\)/, "Trade Brief can create alert rules directly");
 expect(/data-create-alert-for="\$\{escapeHtml\(item\.ticker\)\}"/, "Trade Brief includes Create Alert action");
 expect(/No predictions yet[\s\S]*Run prediction scan/, "Predictions empty state includes retry action");
-expect(/Prediction scan complete\.[\s\S]*records generated/, "Prediction scan success state is clear");
+expect(/Scan complete[\s\S]*stocks analyzed|Prediction scan complete[\s\S]*stocks analyzed/i, "Prediction scan success state is clear");
 expect(/predictionErrorMessage\(error\)/, "Prediction scan error messages are normalized");
 expect(/function renderWatchlists\(\)/, "Watchlists render path exists");
 expect(/function renderAlertsCenter\(\)/, "Alerts render path exists");

@@ -489,30 +489,41 @@ function renderDiscoveryReadiness(data) {
 
 async function loadAdminStatusPanels() {
   try {
-    const [symbolResponse, congressResponse, congressDiagnosticResponse, marketResponse, readinessResponse] = await Promise.all([
+    const [symbolResponse, congressResponse, congressDiagnosticResponse, marketResponse, readinessResponse, kronosResponse] = await Promise.all([
       fetch("/api/admin/symbol-universe-diagnostic", { headers: adminHeaders() }),
       fetch("/api/congress-feed-status"),
       fetch("/api/admin/congress-connection-diagnostic", { headers: adminHeaders() }),
       fetch("/api/admin/market-index-diagnostic", { headers: adminHeaders() }),
       fetch("/api/admin/discovery-readiness", { headers: adminHeaders() }),
+      fetch("/api/admin/kronos-diagnostics", { headers: adminHeaders() }),
     ]);
     state.symbolUniverse = symbolResponse.ok ? await symbolResponse.json() : null;
     state.congressFeedStatus = congressResponse.ok ? await congressResponse.json() : null;
     state.congressDiagnostic = congressDiagnosticResponse.ok ? await congressDiagnosticResponse.json() : null;
     state.marketIndexData = marketResponse.ok ? await marketResponse.json() : null;
     state.discoveryReadiness = readinessResponse.ok ? await readinessResponse.json() : null;
+    state.kronosDiagnostics = kronosResponse.ok ? await kronosResponse.json() : null;
   } catch (error) {
     state.symbolUniverse = null;
     state.congressFeedStatus = { status: "Failed", userMessage: error.message };
     state.congressDiagnostic = { failureReason: error.message };
     state.marketIndexData = { broadMarketTrend: "Unavailable", rows: [] };
     state.discoveryReadiness = null;
+    state.kronosDiagnostics = null;
   }
   renderSymbolUniverse(state.symbolUniverse);
   renderCongressStatus(state.congressFeedStatus);
   renderMarketIndexDiagnostics(state.marketIndexData);
   renderDiscoveryReadiness(state.discoveryReadiness);
+  renderKronosDiagnostics(state.kronosDiagnostics);
   renderScanSettingsStatus();
+}
+
+function renderKronosDiagnostics(value) {
+  const target = document.querySelector("#kronosDiagnosticsContent"); if (!target) return;
+  if (!value) { target.innerHTML = `<p class="muted-copy">Kronos diagnostics are unavailable.</p>`; return; }
+  const metric = (label, primary, secondary) => `<article class="metric-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(primary ?? "Unavailable"))}</strong><small>${escapeHtml(String(secondary || ""))}</small></article>`;
+  target.innerHTML = `<div class="metric-grid">${metric("State", value.enabled ? "Enabled" : "Disabled", value.serviceReachable ? "Service reachable" : "No successful service contact")}${metric("Model", value.modelName, value.tokenizerVersion)}${metric("Forecasts", `${value.forecastsSucceeded || 0} succeeded`, `${value.forecastsAttempted || 0} attempted; ${value.forecastsFailed || 0} failed`)}${metric("Inference", value.averageInferenceDurationMs == null ? "No sample" : `${value.averageInferenceDurationMs} ms average`, value.latestInferenceDurationMs == null ? "No latest duration" : `${value.latestInferenceDurationMs} ms latest`)}${metric("Outcomes", `${value.maturedOutcomes || 0} matured`, `${value.pendingOutcomes || 0} pending`)}${metric("Direction hit rate", value.directionHitRate == null ? "Insufficient sample" : `${(value.directionHitRate * 100).toFixed(1)}%`, value.sampleSizeWarning ? "Small sample; not statistically conclusive" : "Descriptive shadow metric")}</div><p class="muted-copy">Research diagnostics only. Kronos has no production recommendation influence.</p>`;
 }
 
 async function refreshSymbolUniverse() {

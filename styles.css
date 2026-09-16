@@ -5704,6 +5704,34 @@ textarea:focus-visible,
 .performance-disclosure { color:var(--text-secondary); font-size:.9rem; }
 .chart-empty { display:grid; place-items:center; min-height:270px; gap:10px; text-align:center; }
 .performance-select { margin-top:8px; }
+.kronos-shadow-panel { border-color:rgba(30,136,255,.45); background:linear-gradient(145deg,rgba(30,136,255,.06),rgba(11,13,16,.96)); }
+.kronos-actions,.kronos-chart-legend { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.kronos-actions select { min-width:150px; }
+.kronos-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:14px 0; }
+.kronos-metrics div { min-width:0; padding:10px; border:1px solid var(--line); border-radius:8px; background:#111419; }
+.kronos-metrics span,.kronos-metrics strong { display:block; overflow-wrap:normal; word-break:normal; }
+.kronos-metrics span { color:var(--text-secondary); font-size:.78rem; }
+.kronos-metrics small { display:block; margin-top:4px; color:var(--text-secondary); }
+.kronos-disclosure { border-left:3px solid var(--accent-blue); padding-left:10px; }
+.kronos-forecast-details,.opportunity-details { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+.kronos-forecast-details summary,.opportunity-details summary { cursor:pointer; color:var(--accent-blue); font-weight:700; }
+.trade-brief-bottom-line { border-color:rgba(212,168,67,.55); background:linear-gradient(145deg,rgba(212,168,67,.08),rgba(11,13,16,.96)); }
+.bottom-line-call { font-size:1.05rem; }
+.bottom-line-reasons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.bottom-line-reasons div { padding:10px; border:1px solid var(--line); border-radius:8px; }
+.bottom-line-reasons span,.bottom-line-reasons strong { display:block; }
+.bottom-line-reasons span { color:var(--text-secondary); font-size:.78rem; text-transform:uppercase; }
+.brief-full-analysis { margin-top:14px; }
+.brief-full-analysis > summary { cursor:pointer; padding:12px; border:1px solid var(--line); border-radius:8px; color:var(--accent-blue); font-weight:800; }
+.brief-full-analysis[open] > summary { margin-bottom:12px; }
+.kronos-chart { max-width:100%; overflow-x:auto; }
+.kronos-chart-legend { color:var(--text-secondary); font-size:.75rem; justify-content:space-between; }
+.kronos-chart svg { display:block; width:100%; height:auto; min-height:180px; }
+.kronos-actual,.kronos-forecast { fill:none; vector-effect:non-scaling-stroke; stroke-width:2.5; }
+.kronos-actual { stroke:#f7f8fa; }
+.kronos-forecast { stroke:var(--accent-blue); }
+.kronos-band { fill:rgba(30,136,255,.16); }
+.kronos-boundary { stroke:var(--color-warning); stroke-dasharray:5 4; vector-effect:non-scaling-stroke; }
 
 @media (max-width: 1024px) { .performance-explorer-controls { grid-template-columns:repeat(2,minmax(140px,1fr)); } .return-bar-row { grid-template-columns:60px minmax(100px,1fr) 75px; }.return-bar-row small{grid-column:2/-1;} }
-@media (max-width: 767px) { .performance-explorer.is-full-width { width:100%; margin-left:0; transform:none; }.performance-explorer-controls{display:flex;overflow-x:auto;padding-bottom:8px}.performance-explorer-controls label{min-width:150px}.performance-explorer-chart{min-height:260px;padding:4px}.performance-explorer-chart svg{height:300px}.performance-explorer-timeline article{grid-template-columns:1fr}.performance-explorer-timeline small{grid-column:auto}.performance-selection-status{justify-content:flex-start}.return-bar-row{grid-template-columns:52px minmax(80px,1fr) 68px;gap:6px}.performance-explorer-legend{max-height:104px;overflow:auto}.performance-explorer-actions button{padding:7px 9px} }
+@media (max-width: 767px) { .performance-explorer.is-full-width { width:100%; margin-left:0; transform:none; }.performance-explorer-controls{display:flex;overflow-x:auto;padding-bottom:8px}.performance-explorer-controls label{min-width:150px}.performance-explorer-chart{min-height:260px;padding:4px}.performance-explorer-chart svg{height:300px}.performance-explorer-timeline article{grid-template-columns:1fr}.performance-explorer-timeline small{grid-column:auto}.performance-selection-status{justify-content:flex-start}.return-bar-row{grid-template-columns:52px minmax(80px,1fr) 68px;gap:6px}.performance-explorer-legend{max-height:104px;overflow:auto}.performance-explorer-actions button{padding:7px 9px}.kronos-metrics,.bottom-line-reasons{grid-template-columns:1fr}.kronos-chart svg{min-height:140px} }

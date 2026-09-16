@@ -1,0 +1,47 @@
+const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
+const language = require("../presentation-language");
+const outcome = require("../scan-outcome");
+
+const completed = { updatedAt: "2026-09-16T20:00:00.000Z", scanHealth: { scanStatus: "completed" } };
+const healthyZero = outcome.classify({ ...completed, predictionSemantics: { analyzedCount: 300, storedCount: 300, usableMarketDataCount: 296, qualifiedCount: 0, marketDataAvailability: "Live" } });
+assert.equal(healthyZero.status, "SUCCESS", "zero recommendations alone must not degrade a healthy scan");
+const degraded = outcome.classify({ ...completed, predictionSemantics: { analyzedCount: 300, storedCount: 300, usableMarketDataCount: 0, qualifiedCount: 0, marketDataAvailability: "Unavailable" } });
+assert.equal(degraded.status, "DEGRADED");
+assert.equal(degraded.reasonCode, "NO_USABLE_MARKET_EVIDENCE");
+assert.match(degraded.explanation, /unavailable or incomplete/i);
+assert.match(degraded.decisionImpact, /withheld/i);
+const failed = outcome.classify({ scanHealth: { scanStatus: "failed" }, predictionSemantics: { analyzedCount: 300, storedCount: 0 } });
+assert.equal(failed.status, "FAILED");
+
+assert.deepEqual(language.emptyState(), { title: "No scan yet", explanation: "Run a scan to look for opportunities." });
+assert.match(language.emptyState({ hasScan: true, outcome: "SUCCESS" }).title, /No recommendation right now/i);
+assert.match(language.emptyState({ hasScan: true, outcome: "DEGRADED" }).explanation, /reliable market data/i);
+assert.match(language.emptyState({ hasScan: true, outcome: "FAILED" }).title, /Scan failed/i);
+assert.match(language.emptyState({ hasScan: true, sectionSpecific: true }).title, /matched this ranking/i);
+assert.equal(language.score(77), "77/100 — Strong");
+assert.match(language.confidence("high").explanation, /evidence agrees/i);
+assert.match(language.risk("High").label, /Higher model risk/i);
+assert.equal(language.dataQuality("stale").label, "Stale");
+assert.equal(language.recommendation("Possible Trade").label, "Possible trade");
+
+const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+const guide = fs.readFileSync(path.join(__dirname, "..", "docs", "UX_LANGUAGE_GUIDE.md"), "utf8");
+assert.match(app, /Stocks with reliable data/);
+assert.match(app, /Possible trades/);
+assert.match(app, /No concise supporting factor is available/);
+assert.match(app, /<summary>More details<\/summary>/);
+assert.match(app, /Bottom line/);
+assert.match(app, /<details class="brief-full-analysis">[\s\S]*<summary>See full analysis<\/summary>/);
+assert.match(app, /Price that changes our view/);
+assert.match(app, /RESEARCH ONLY — DOES NOT CHANGE THE PUBLICTRADEINTEL RECOMMENDATION/);
+assert.match(app, /OFFICIAL KRONOS MODEL/);
+assert.match(app, /DEVELOPMENT \/ TEST FORECAST/);
+assert.doesNotMatch(app, /chance of profit/i);
+assert.match(app, /Original model output is preserved separately/);
+assert.match(html, /Filters &amp; ranking options/);
+assert.match(guide, /Qualified.*enough current evidence/is);
+assert.match(guide, /Market session.*separate from market data/is);
+console.log("Scan outcome, empty states, qualification separation, and presentation language: PASS");

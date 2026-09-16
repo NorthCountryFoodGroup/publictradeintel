@@ -126,6 +126,14 @@
           <button type="button" data-run-prediction-scan>Run prediction scan</button>
         </div>
         <div class="executive-dashboard">
+          <section class="dashboard-card executive-section market-read-card">
+            <div class="card-heading">
+              <span>Today's Market Read</span>
+              <strong id="todayMarketReadStatus">Waiting for scan</strong>
+            </div>
+            <div class="executive-card-grid" id="todayMarketReadGrid"></div>
+            <p class="muted-copy" id="todayMarketReadMessage">Run a prediction scan to check market-data reliability and find stocks worth reviewing.</p>
+          </section>
           <section class="dashboard-card executive-section ai-market-brief-card">
             <div class="card-heading">
               <span>AI Market Brief</span>
@@ -174,7 +182,7 @@
 
           <section class="dashboard-card executive-section">
             <div class="card-heading">
-              <span>Today's Opportunities</span>
+              <span>Top Opportunities</span>
               <strong id="opportunityCount">0</strong>
             </div>
             <div class="opportunity-grid" id="todayOpportunitiesGrid"></div>
@@ -576,8 +584,8 @@
             </select>
           </label>
         </div>
-        <details class="prediction-filter-panel">
-          <summary>Filters</summary>
+          <details class="prediction-filter-panel">
+            <summary>Filters &amp; ranking options</summary>
           <div class="prediction-filter-grid">
             <label>
               <span>Search ticker/company</span>
@@ -1145,6 +1153,8 @@
     </nav>
 
     <script src="prediction-semantics.js"></script>
+    <script src="scan-outcome.js"></script>
+    <script src="presentation-language.js"></script>
     <script src="app.js?v=20260710-ux-acceptance"></script>
     <script src="performance-explorer.js"></script>
   </body>
