@@ -5680,6 +5680,11 @@ textarea:focus-visible,
 .chart-series.is-dimmed { opacity:.18; }
 .chart-hit { fill:transparent; stroke:transparent; outline:none; }
 .chart-hit:focus { fill:var(--accent); stroke:#fff; stroke-width:1; }
+.chart-pointer-layer { fill:transparent; pointer-events:all; }
+.chart-pointer-layer:focus { outline:none; stroke:var(--accent-blue); stroke-width:2; }
+.chart-crosshair { stroke:var(--text-secondary); stroke-width:1; stroke-dasharray:4 4; pointer-events:none; }
+.chart-pointer { fill:var(--accent); stroke:#171a1f; stroke-width:2; pointer-events:none; }
+.chart-shared-tooltip { min-height:1.2em; margin-top:6px; color:var(--text-primary); font-size:.85rem; }
 .event-marker { fill:var(--color-warning); stroke:#fff; stroke-width:1; }
 .prediction-marker { fill:var(--accent); stroke:#fff; stroke-width:1; }
 .confidence-line { fill:none; stroke:#c8a7ff; stroke-width:1.5; stroke-dasharray:6 4; vector-effect:non-scaling-stroke; }

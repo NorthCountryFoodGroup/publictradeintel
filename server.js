@@ -88,6 +88,9 @@ const PREDICTION_REFRESH_MS = Number(process.env.PREDICTION_REFRESH_MS || 60 * 6
 const SESSION_COOKIE = "pti_session";
 const sessions = new Map();
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const PORTFOLIO_SESSION_COOKIE = "pti_portfolio_session";
+const portfolioSessions = new Map();
+const PORTFOLIO_SESSION_DURATION_MS = 30 * 60 * 1000;
 const LOGIN_RATE_LIMIT_WINDOW_MS = boundedInteger(process.env.LOGIN_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
 const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = boundedInteger(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS, 5, 1, 100);
 const LOGIN_RATE_LIMIT_LOCKOUT_MS = boundedInteger(process.env.LOGIN_RATE_LIMIT_LOCKOUT_MS, 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
@@ -97,6 +100,43 @@ const loginLimiter = new SlidingWindowLimiter({
   maximumAttempts: LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
   lockoutMs: LOGIN_RATE_LIMIT_LOCKOUT_MS,
 });
+const portfolioLoginLimiter = new SlidingWindowLimiter({
+  windowMs: 15 * 60 * 1000,
+  maximumAttempts: 5,
+  lockoutMs: 15 * 60 * 1000,
+});
+const apiPerformanceMetrics = new Map();
+const OBSERVED_API_ROUTES = new Map([
+  ["/api/predictions", "predictionsRead"],
+  ["/api/market-history", "marketHistory"],
+  ["/api/portfolio", "portfolio"],
+  ["/api/alerts", "alerts"],
+]);
+
+function recordApiPerformance(name, durationMs, statusCode) {
+  if (!name) return;
+  const previous = apiPerformanceMetrics.get(name) || { count: 0, totalDurationMs: 0, maximumDurationMs: 0 };
+  const count = Math.min(previous.count + 1, 1000000);
+  const totalDurationMs = Math.min(previous.totalDurationMs + durationMs, Number.MAX_SAFE_INTEGER);
+  apiPerformanceMetrics.set(name, {
+    count,
+    totalDurationMs,
+    averageDurationMs: Math.round((totalDurationMs / count) * 10) / 10,
+    maximumDurationMs: Math.max(previous.maximumDurationMs, durationMs),
+    lastDurationMs: durationMs,
+    lastStatusClass: `${Math.floor(Number(statusCode || 500) / 100)}xx`,
+  });
+}
+
+function apiPerformanceSummary() {
+  return Object.fromEntries([...apiPerformanceMetrics].map(([name, value]) => [name, {
+    count: value.count,
+    averageDurationMs: value.averageDurationMs,
+    maximumDurationMs: value.maximumDurationMs,
+    lastDurationMs: value.lastDurationMs,
+    lastStatusClass: value.lastStatusClass,
+  }]));
+}
 const securityProfileService = createSecurityProfileService({
   cacheFile: SECURITY_PROFILE_CACHE_FILE,
   apiKey: MARKET_API_KEY,
@@ -340,7 +380,15 @@ function isAdmin(request) {
 }
 
 function isPortfolioOwner(request) {
-  return Boolean(PORTFOLIO_PIN && constantTimeEqual(request.headers["x-portfolio-pin"], PORTFOLIO_PIN));
+  const cookies = parseCookies(request);
+  const token = cookies[PORTFOLIO_SESSION_COOKIE];
+  const loginToken = cookies[SESSION_COOKIE];
+  const authorization = token ? portfolioSessions.get(token) : null;
+  if (!authorization || authorization.expiresAt <= Date.now() || authorization.loginToken !== loginToken) {
+    if (token) portfolioSessions.delete(token);
+    return false;
+  }
+  return isLoggedIn(request);
 }
 
 function parseCookies(request) {
@@ -375,6 +423,31 @@ function cleanupSessions(maximumChecks = 100) {
     if (session.expiresAt <= now) sessions.delete(token);
     checked += 1;
   }
+  checked = 0;
+  for (const [token, session] of portfolioSessions) {
+    if (checked >= maximumChecks) break;
+    if (session.expiresAt <= now || !sessions.has(session.loginToken)) portfolioSessions.delete(token);
+    checked += 1;
+  }
+}
+
+function createPortfolioSession(request, response) {
+  cleanupSessions();
+  const cookies = parseCookies(request);
+  const loginToken = cookies[SESSION_COOKIE];
+  const previous = cookies[PORTFOLIO_SESSION_COOKIE];
+  if (previous) portfolioSessions.delete(previous);
+  const token = crypto.randomBytes(32).toString("hex");
+  const issuedAt = Date.now();
+  portfolioSessions.set(token, { loginToken, issuedAt, expiresAt: issuedAt + PORTFOLIO_SESSION_DURATION_MS });
+  const secure = PRODUCTION ? "; Secure" : "";
+  response.setHeader("Set-Cookie", `${PORTFOLIO_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/api/portfolio; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(PORTFOLIO_SESSION_DURATION_MS / 1000)}${secure}`);
+}
+
+function clearPortfolioSession(request, response) {
+  const token = parseCookies(request)[PORTFOLIO_SESSION_COOKIE];
+  if (token) portfolioSessions.delete(token);
+  return `${PORTFOLIO_SESSION_COOKIE}=; Path=/api/portfolio; HttpOnly; SameSite=Strict; Max-Age=0${PRODUCTION ? "; Secure" : ""}`;
 }
 
 function createSession(request, response) {
@@ -390,8 +463,17 @@ function createSession(request, response) {
 
 function clearSession(request, response) {
   const token = parseCookies(request)[SESSION_COOKIE];
-  if (token) sessions.delete(token);
-  response.setHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  if (token) {
+    sessions.delete(token);
+    for (const [portfolioToken, authorization] of portfolioSessions) {
+      if (authorization.loginToken === token) portfolioSessions.delete(portfolioToken);
+    }
+  }
+  const portfolioCookie = clearPortfolioSession(request, response);
+  response.setHeader("Set-Cookie", [
+    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+    portfolioCookie,
+  ]);
 }
 
 function safeHttpUrl(value, fallback) {
@@ -6190,6 +6272,11 @@ function summarizeEvents() {
 }
 
 async function handleApi(request, response, pathname) {
+  const metricName = OBSERVED_API_ROUTES.get(pathname) || (pathname.startsWith("/api/security-profile/") ? "securityProfile" : null);
+  if (metricName) {
+    const metricStartedAt = Date.now();
+    response.once("finish", () => recordApiPerformance(metricName, Date.now() - metricStartedAt, response.statusCode));
+  }
   if (pathname.startsWith("/api/decision-lab")) {
     sendJson(response, 404, { error: FEATURE_FLAGS.decisionLabEnabled ? "Not found" : "Feature unavailable" });
     return;
@@ -6324,9 +6411,39 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (request.method === "POST" && pathname === "/api/portfolio/auth") {
+    const limiterKey = `${clientIp(request)}:${parseCookies(request)[SESSION_COOKIE] || "anonymous"}`;
+    const limit = portfolioLoginLimiter.check(limiterKey);
+    if (!limit.allowed) {
+      response.setHeader("Retry-After", String(Math.max(1, Math.ceil(limit.retryAfterMs / 1000))));
+      sendJson(response, 429, { error: "Portfolio authorization temporarily unavailable. Try again later." });
+      return;
+    }
+    const body = await collectBody(request);
+    if (!body || typeof body.pin !== "string" || body.pin.length > 256 || Object.keys(body).some((key) => key !== "pin")) {
+      sendJson(response, 400, { error: "Portfolio authorization failed." });
+      return;
+    }
+    if (!PORTFOLIO_PIN || !constantTimeEqual(body.pin, PORTFOLIO_PIN)) {
+      portfolioLoginLimiter.recordFailure(limiterKey);
+      sendJson(response, 401, { error: "Portfolio authorization failed." });
+      return;
+    }
+    portfolioLoginLimiter.reset(limiterKey);
+    createPortfolioSession(request, response);
+    sendJson(response, 200, { ok: true, expiresInSeconds: Math.floor(PORTFOLIO_SESSION_DURATION_MS / 1000) });
+    return;
+  }
+
+  if (request.method === "DELETE" && pathname === "/api/portfolio/auth") {
+    response.setHeader("Set-Cookie", clearPortfolioSession(request, response));
+    sendJson(response, 200, { ok: true });
+    return;
+  }
+
   if (request.method === "GET" && pathname === "/api/portfolio") {
     if (!isPortfolioOwner(request)) {
-      sendJson(response, 401, { error: "Portfolio PIN required" });
+      sendJson(response, 401, { error: "Portfolio authorization required" });
       return;
     }
     sendJson(response, 200, { positions: sanitizePortfolio(readJson(PORTFOLIO_FILE, [])) });
@@ -6335,7 +6452,7 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "PUT" && pathname === "/api/portfolio") {
     if (!isPortfolioOwner(request)) {
-      sendJson(response, 401, { error: "Portfolio PIN required" });
+      sendJson(response, 401, { error: "Portfolio authorization required" });
       return;
     }
     const body = await collectBody(request);
@@ -6400,6 +6517,11 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "GET" && pathname === "/api/admin/summary") {
     sendJson(response, 200, summarizeEvents());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/performance-diagnostics") {
+    sendJson(response, 200, { api: apiPerformanceSummary(), retainedInMemory: true, maximumRouteCount: 5 });
     return;
   }
 

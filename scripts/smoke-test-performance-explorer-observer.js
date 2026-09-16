@@ -8,7 +8,8 @@ assert.match(source, /function setTextIfChanged\(element, value\)/, "selection l
 assert.match(source, /element\.textContent !== value/, "unchanged labels must not be rewritten");
 assert.match(source, /function setAttributeIfChanged\(element, name, value\)/, "selection attributes must be updated idempotently");
 assert.match(source, /element\.getAttribute\(name\) !== value/, "unchanged attributes must not be rewritten");
-assert.match(source, /observe\(document\.querySelector\('#predictionGrid'\),\{childList:true\}\)/, "observer must be limited to direct grid replacements");
+assert.match(source, /observe\(predictionGrid,\{childList:true\}\)/, "observer must be limited to direct grid replacements");
+assert.match(source, /mutation\.target===predictionGrid/, "observer must ignore internal descendant changes");
 assert.doesNotMatch(source, /observe\(document\.querySelector\('#predictionGrid'\),\{childList:true,subtree:true\}\)/, "observer must not watch its own descendant controls");
 assert.match(source, /selected\.length<10/, "ten-security selection limit must remain enforced");
 assert.match(source, /controls\.clear\.addEventListener\('click'/, "clear-selection behavior must remain available");

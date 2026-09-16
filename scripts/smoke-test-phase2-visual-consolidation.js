@@ -60,7 +60,7 @@ function contrast(foreground, background) {
 assert.ok(contrast("#f7f8fa", "#171a1f") >= 4.5, "Opportunities primary text contrast must meet WCAG AA");
 assert.ok(contrast("#c7cdd5", "#171a1f") >= 4.5, "Opportunities secondary text contrast must meet WCAG AA");
 assert.equal((app.match(/function renderTradeBrief\s*\(/g) || []).length, 1, "exactly one authoritative renderTradeBrief is required");
-assert.match(app, /function legacyTradeBriefReference\s*\(/, "legacy renderer comparison reference must remain explicitly non-authoritative");
+assert.doesNotMatch(app, /legacyTradeBriefReference/, "the retired duplicate Trade Brief renderer must remain absent");
 assert.doesNotMatch(css, /Phase 2[^\n]*hotfix/i, "Phase 2 must not add another hotfix layer");
 
 console.log("Phase 2 visual consolidation contract passed.");

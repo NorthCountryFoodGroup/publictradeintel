@@ -292,6 +292,11 @@ let stocksToBuyComparison = [];
 let stocksToBuyPage = 0;
 const STOCKS_TO_BUY_PAGE_SIZE = 6;
 let performanceSubview = "summary";
+let portfolioAuthorized = false;
+const frontendPerformanceDiagnostics = { routeActivations: 0, lastRoute: null, lastRouteDurationMs: 0, lastRouteDomNodes: 0, lastRouteCards: 0 };
+function publishFrontendPerformanceDiagnostics() {
+  window.publicTradeIntelFrontendDiagnostics = { ...frontendPerformanceDiagnostics };
+}
 let watchlists = [];
 let watchlistAlerts = [];
 let alertHistory = [];
@@ -3473,208 +3478,6 @@ function securityProfileForTradeBrief(item) {
   };
 }
 
-// Retained as a non-invoked reference until its older markup can be removed in a dedicated cleanup.
-// The enhanced renderer below is the only authoritative renderTradeBrief entry point.
-function legacyTradeBriefReference() {
-  if (!output.tradeBriefPanel) return;
-  const firstPick = firstFromSection("top25OneDay") || firstFromSection("top25SevenDay") || (predictionEngine.predictions || [])[0];
-  const item = findPredictionByTicker(selectedBriefTicker) || firstPick;
-  if (!item) {
-    output.tradeBriefPanel.innerHTML = `
-      <article class="dashboard-card">
-        <span>No trade brief selected</span>
-        <h3>Run a prediction scan, then open a Trade Brief from any prediction card.</h3>
-        <button type="button" data-run-prediction-scan>Run prediction scan</button>
-      </article>
-    `;
-    return;
-  }
-
-  selectedBriefTicker = item.ticker;
-  const model = predictionModelForView(item);
-  const technical = model?.technicalAnalysis || item.technicalAnalysis?.oneDay || {};
-  const setup = item.setupSignals || model?.setupSignals || {};
-  const chartPattern = item.chartPatternSignal || {};
-  const qualityNotes = item.dataQualityNotes || item.dataQuality?.dataQualityNotes || [];
-  const score = Number(item.unifiedPredictionScore || item.aiOpportunityScore || 0);
-  const signals = briefSignalItems(item, technical, setup, chartPattern);
-  const risks = briefRiskItems(item, technical);
-  const summary = tradeBriefSummary(item, signals, risks);
-  const matchingPolicy = (policySignals.signals || []).filter((signal) => signal.ticker === item.ticker);
-  const congress = item.congressionalSignal || {};
-  const newsSentiment = matchingPolicy.some((signal) => signal.direction === "positive")
-    ? "Positive"
-    : matchingPolicy.some((signal) => signal.direction === "negative")
-    ? "Negative"
-    : "Neutral";
-  const targetOne = model?.profitTarget || item.suggestedProfitTarget;
-  const targetTwo = Number(item.currentPrice) && Number(item.forecasts?.thirtyDay?.expectedUpside)
-    ? dollarsPrecise(Number(item.currentPrice) * (1 + Number(item.forecasts.thirtyDay.expectedUpside) / 100))
-    : "";
-  const relatedAlerts = alertHistory.filter((alert) => normalizeTicker(alert.ticker) === normalizeTicker(item.ticker)).slice(0, 5);
-  const marketDataSourceNote = item.fallbackUsed || item.fallbackDataUsed
-    ? "This recommendation includes fallback daily-session data."
-    : "This recommendation is based on live market data where the provider supplied a current quote.";
-  const rankMeta = rankMetadataForTicker(item.ticker);
-  const rankMetrics = [
-    rankMeta?.overallRank ? `<div><span>Overall Rank</span><strong>#${rankMeta.overallRank}</strong></div>` : "",
-    rankMeta?.priceBandRank ? `<div><span>Price-Band Rank</span><strong>#${rankMeta.priceBandRank}</strong><small>${escapeHtml(rankMeta.priceBand?.label || "Current band")}</small></div>` : "",
-    rankMeta?.beginnerQualification?.qualifies ? `<div><span>Beginner Picks Rank</span><strong>${rankMeta.investorViewRank ? `#${rankMeta.investorViewRank}` : "Qualified"}</strong><small>${escapeHtml((rankMeta.beginnerQualification.reasons || []).slice(0, 2).join(", ") || "Meets beginner filters")}</small></div>` : "",
-  ].filter(Boolean).join("");
-
-  output.tradeBriefPanel.innerHTML = `
-    <article class="trade-brief-report">
-      <header class="trade-brief-card brief-report-hero">
-        <div>
-          <span class="eyebrow">AI Trade Brief&trade;</span>
-          <h2>${escapeHtml(item.ticker)} | ${escapeHtml(securityProfile.securityName || item.ticker)}</h2>
-          <div class="brief-badge-row">
-            <span class="brief-badge ${badgeTone(item.label)}">${escapeHtml(item.label || item.recommendation || "Research candidate")}</span>
-            <span class="brief-badge ${badgeTone(item.unifiedDirection)}">${escapeHtml(item.unifiedDirection || "neutral")}</span>
-            <span class="brief-badge neutral">${escapeHtml(item.bestTimeframe || item.timeframe || predictionModelTitle(model))}</span>
-          </div>
-        </div>
-        <div class="brief-score">
-          <span>Unified score</span>
-          <strong>${score}/100</strong>
-          <small>${escapeHtml(item.confidenceTier || "low")} confidence</small>
-        </div>
-      </header>
-
-      <div class="brief-top-metrics">
-        <div><span>Current Price</span><strong>${moneyOrCalculating(item.currentPrice)}</strong></div>
-        <div><span>Prediction Timeframe</span><strong>${escapeHtml(item.bestTimeframe || item.timeframe || predictionModelTitle(model))}</strong></div>
-        <div><span>Market Trend</span><strong>${escapeHtml(technical.trendDirection || item.marketRegime?.primary || "Calculating")}</strong></div>
-        <div><span>Security</span><strong>${escapeHtml(securityProfile.securityName || item.ticker)}</strong></div>
-        <div><span>Market Data</span><strong>${escapeHtml(item.marketDataQuality?.label || item.dataQualityStatus || "Calculating")}</strong><small>${escapeHtml(marketDataSourceNote)}</small></div>
-        ${rankMetrics}
-      </div>
-
-      <div class="brief-report-grid">
-        <section class="brief-section brief-wide">
-          <div class="brief-section-heading">
-            <span>Executive Summary</span>
-            <strong>Decision read</strong>
-          </div>
-          <p>${escapeHtml(summary)}</p>
-        </section>
-
-        <section class="brief-section">
-          <div class="brief-section-heading">
-            <span>Trade Plan</span>
-            <strong>Levels</strong>
-          </div>
-          <div class="brief-plan-grid">
-            <div><span>Suggested Entry Zone</span><strong>${escapeHtml(calculating(model?.entryZone || item.suggestedEntryZone))}</strong></div>
-            <div><span>Stop Loss</span><strong>${escapeHtml(calculating(model?.stopLevel || item.suggestedStopLevel))}</strong></div>
-            <div><span>Target 1</span><strong>${escapeHtml(calculating(targetOne))}</strong></div>
-            <div><span>Target 2</span><strong>${escapeHtml(calculating(targetTwo))}</strong></div>
-            <div><span>Risk / Reward Ratio</span><strong>${Number(item.riskRewardRatio) ? Number(item.riskRewardRatio).toFixed(2) : "Calculating"}</strong></div>
-          </div>
-        </section>
-
-        <section class="brief-section">
-          <div class="brief-section-heading">
-            <span>Why This Pick</span>
-            <strong>Strongest signals</strong>
-          </div>
-          <div class="brief-chip-list positive-list">
-            ${signals.length ? signals.map((signal) => `<span>✓ ${escapeHtml(signal)}</span>`).join("") : "<span>Calculating signal stack</span>"}
-          </div>
-        </section>
-
-        <section class="brief-section">
-          <div class="brief-section-heading">
-            <span>Risk Factors</span>
-            <strong>Watch these</strong>
-          </div>
-          <div class="brief-chip-list risk-list">
-            ${risks.map((risk) => `<span>! ${escapeHtml(risk)}</span>`).join("")}
-          </div>
-        </section>
-
-        <section class="brief-section">
-          <div class="brief-section-heading">
-            <span>Technical Snapshot</span>
-            <strong>${Number(technical.technicalSignalScore) || 0}/100</strong>
-          </div>
-          <div class="brief-fact-list">
-            <div><span>Trend</span><strong>${escapeHtml(technical.trendDirection || "Calculating")}</strong></div>
-            <div><span>EMA Alignment</span><strong>${Number(technical.ema9Vs20Ema) > 0 ? "9 EMA above 20 EMA" : Number(technical.ema9Vs20Ema) < 0 ? "9 EMA below 20 EMA" : "Calculating"}</strong></div>
-            <div><span>VWAP Position</span><strong>${Number(technical.priceVsVwap) > 0 ? "Above VWAP" : Number(technical.priceVsVwap) < 0 ? "Below VWAP" : "Calculating"}</strong></div>
-            <div><span>Chart Pattern</span><strong>${escapeHtml(chartPattern.primaryPattern || "Calculating")}</strong></div>
-            <div><span>Support</span><strong>${moneyOrCalculating(technical.nearestSupport)}</strong></div>
-            <div><span>Resistance</span><strong>${moneyOrCalculating(technical.nearestResistance)}</strong></div>
-            <div><span>Setup Type</span><strong>${escapeHtml(setup.setupDirection && setup.setupDirection !== "none" ? setup.setupDirection : "Calculating")}</strong></div>
-          </div>
-        </section>
-
-        <section class="brief-section">
-          <div class="brief-section-heading">
-            <span>Congress / Policy / News</span>
-            <strong>Signal tone</strong>
-          </div>
-          <div class="brief-badge-panel">
-            <div><span>Recent Congressional Activity</span><strong class="brief-badge ${Number(congress.buys) > Number(congress.sells || 0) ? "positive" : Number(congress.sells) ? "negative" : "neutral"}">${Number(congress.buys) || Number(congress.sells) ? `${Number(congress.buys) || 0} buys / ${Number(congress.sells) || 0} sells` : "Neutral"}</strong></div>
-            <div><span>Policy Catalysts</span><strong class="brief-badge ${badgeTone(matchingPolicy[0]?.direction)}">${matchingPolicy.length ? matchingPolicy[0].direction : "Neutral"}</strong></div>
-            <div><span>News Sentiment</span><strong class="brief-badge ${badgeTone(newsSentiment)}">${escapeHtml(newsSentiment)}</strong></div>
-          </div>
-        </section>
-
-        <section class="brief-section">
-          <div class="brief-section-heading">
-            <span>Prediction Confidence</span>
-            <strong>${score}/100</strong>
-          </div>
-          <div class="brief-fact-list">
-            <div><span>Confidence Tier</span><strong>${escapeHtml(item.confidenceTier || "low")}</strong></div>
-            <div><span>Data Quality</span><strong>${escapeHtml(item.dataQualityStatus || item.dataQuality?.dataQualityStatus || "partial")}</strong></div>
-            <div><span>Strongest Signals</span><strong>${signals.slice(0, 2).map(escapeHtml).join(", ") || "Calculating"}</strong></div>
-            <div><span>Conflicting Signals</span><strong>${(item.conflictingSignals || []).slice(0, 2).map(escapeHtml).join(", ") || "None flagged"}</strong></div>
-          </div>
-          <details class="why-pick">
-            <summary>Data quality notes</summary>
-            <div class="signal-list">
-              ${qualityNotes.length ? qualityNotes.map((note) => `<span>${escapeHtml(note)}</span>`).join("") : "<span>No data quality warnings for this record.</span>"}
-            </div>
-          </details>
-        </section>
-
-        <section class="brief-section brief-wide">
-          <div class="brief-section-heading">
-            <span>Related Alerts</span>
-            <strong>${relatedAlerts.length}</strong>
-          </div>
-          <div class="alert-brief-list">
-            ${
-              relatedAlerts.length
-                ? relatedAlerts
-                    .map((alert) => `<article><span class="pti-badge ${alert.priority === "Critical" ? "danger" : alert.priority === "High" ? "warning" : "neutral"}">${escapeHtml(alert.priority)}</span><strong>${escapeHtml(alert.type)}</strong><small>${alert.timestamp ? new Date(alert.timestamp).toLocaleString() : "Now"} | ${escapeHtml(alert.resolved ? "Resolved" : alert.read ? "Read" : "Unread")}</small><p>${escapeHtml(alert.explanation)}</p></article>`)
-                    .join("")
-                : `<article><strong>No related alerts yet</strong><p>Create an alert to track score, trend, congress, policy, or price changes for ${escapeHtml(item.ticker)}.</p></article>`
-            }
-          </div>
-        </section>
-
-        <section class="brief-section brief-wide">
-          <div class="brief-section-heading">
-            <span>Historical Performance</span>
-            <strong>Coming online</strong>
-          </div>
-          <p>Historical tracking will become available as prediction history grows.</p>
-        </section>
-      </div>
-
-      <footer class="brief-actions">
-        <button type="button" data-page-target="predictions">Return to Predictions</button>
-        <button type="button" data-add-watchlist="${escapeHtml(item.ticker)}">Add to Watchlist</button>
-        <button type="button" data-create-alert-for="${escapeHtml(item.ticker)}">Create Alert</button>
-        <button type="button" disabled>Share Report <small>Coming Soon</small></button>
-      </footer>
-    </article>
-  `;
-}
-
 function renderTradeBrief() {
   if (!output.tradeBriefPanel) return;
   const currentRows = opportunityRowsForHub();
@@ -4553,16 +4356,15 @@ async function loadPortfolioFromServer() {
   loadPortfolio();
   if (location.protocol === "file:") return;
 
-  const pin = localStorage.getItem("publicTradeIntelPortfolioPin") || "";
-  if (output.portfolioPin) output.portfolioPin.value = pin;
-  if (!pin) return;
-
   try {
-    const response = await fetch("api/portfolio", {
-      cache: "no-store",
-      headers: { "x-portfolio-pin": pin },
-    });
+    const response = await fetch("api/portfolio", { cache: "no-store" });
+    if (response.status === 401) {
+      portfolioAuthorized = false;
+      if (output.portfolioMessage) output.portfolioMessage.textContent = "Enter your Portfolio PIN to authorize private server sync for 30 minutes.";
+      return;
+    }
     if (!response.ok) throw new Error("Portfolio unavailable");
+    portfolioAuthorized = true;
     const data = await response.json();
     const serverPositions = Array.isArray(data.positions) ? data.positions : [];
     if (serverPositions.length) {
@@ -4580,8 +4382,7 @@ async function savePortfolio() {
   localStorage.setItem("publicTradeIntelPortfolio", JSON.stringify(portfolio));
 
   if (location.protocol === "file:") return;
-  const pin = localStorage.getItem("publicTradeIntelPortfolioPin") || "";
-  if (!pin) {
+  if (!portfolioAuthorized) {
     output.portfolioMessage.textContent = "Saved on this device. Enter your Portfolio PIN to sync it to the app backend.";
     return;
   }
@@ -4589,7 +4390,7 @@ async function savePortfolio() {
   try {
     await fetch("api/portfolio", {
       method: "PUT",
-      headers: { "Content-Type": "application/json", "x-portfolio-pin": pin },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ positions: portfolio }),
     });
   } catch {
@@ -5204,6 +5005,7 @@ function recordRecommendation(recommendation) {
 }
 
 function setPage(pageName) {
+  const routeStartedAt = performance.now();
   const target = pageName || "dashboard";
   const label = pageLabels[target] || "Dashboard";
   document.querySelectorAll("[data-page]").forEach((section) => {
@@ -5222,6 +5024,13 @@ function setPage(pageName) {
     renderPerformanceCenter();
   }
   if (target === "alerts") renderAlertsCenter();
+  const activePage = document.querySelector(`[data-page="${CSS.escape(target)}"].is-active`);
+  frontendPerformanceDiagnostics.routeActivations += 1;
+  frontendPerformanceDiagnostics.lastRoute = target;
+  frontendPerformanceDiagnostics.lastRouteDurationMs = Math.round((performance.now() - routeStartedAt) * 10) / 10;
+  frontendPerformanceDiagnostics.lastRouteDomNodes = activePage?.querySelectorAll("*").length || 0;
+  frontendPerformanceDiagnostics.lastRouteCards = activePage?.querySelectorAll("article").length || 0;
+  publishFrontendPerformanceDiagnostics();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -5303,12 +5112,32 @@ document.querySelector("#memberTradeFilter")?.addEventListener("change", renderC
 output.tradeForm?.addEventListener("submit", addPortfolioPosition);
 output.refreshPortfolio?.addEventListener("click", refreshPortfolioPrices);
 output.portfolioPin?.addEventListener("change", async () => {
-  const pin = output.portfolioPin.value.trim();
-  if (pin) localStorage.setItem("publicTradeIntelPortfolioPin", pin);
-  else localStorage.removeItem("publicTradeIntelPortfolioPin");
-  await loadPortfolioFromServer();
-  calculate();
-  output.portfolioMessage.textContent = pin ? "Portfolio PIN saved on this device." : "Portfolio PIN removed. Saving on this device only.";
+  let pin = output.portfolioPin.value.trim();
+  output.portfolioPin.value = "";
+  if (!pin) {
+    await fetch("api/portfolio/auth", { method: "DELETE", cache: "no-store" }).catch(() => {});
+    portfolioAuthorized = false;
+    output.portfolioMessage.textContent = "Portfolio server sync authorization cleared. Local portfolio storage remains available.";
+    return;
+  }
+  try {
+    const requestBody = JSON.stringify({ pin });
+    pin = "";
+    const response = await fetch("api/portfolio/auth", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: requestBody,
+    });
+    if (!response.ok) throw new Error("Portfolio authorization failed.");
+    portfolioAuthorized = true;
+    await loadPortfolioFromServer();
+    calculate();
+    output.portfolioMessage.textContent = "Private server sync authorized for 30 minutes. The PIN was not stored in this browser.";
+  } catch {
+    portfolioAuthorized = false;
+    output.portfolioMessage.textContent = "Portfolio authorization failed. Check the PIN and try again.";
+  }
 });
 output.watchlistCreateForm?.addEventListener("submit", (event) => {
   event.preventDefault();
