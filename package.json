@@ -86,6 +86,7 @@
     "smoke:kronos-service": "node scripts/smoke-test-kronos-service.js",
     "smoke:kronos-ui": "node scripts/smoke-test-kronos-ui.js",
     "smoke:kronos-raw-normalized": "node scripts/smoke-test-kronos-raw-normalized.js",
+    "smoke:kronos-stage2a": "node scripts/smoke-test-kronos-stage2a.js",
     "smoke:scan-outcome-language": "node scripts/smoke-test-scan-outcome-language.js",
     "smoke:market-history": "node scripts/smoke-test-market-history.js",
     "smoke:service-worker-api-cache": "node scripts/smoke-test-service-worker-api-cache.js",

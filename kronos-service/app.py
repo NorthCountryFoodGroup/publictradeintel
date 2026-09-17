@@ -1,4 +1,13 @@
-"""Private persistent Kronos inference service. No PublicTradeIntel business logic."""
+"""Local-only WSGI runner retained for deterministic development smoke tests."""
+if __name__ == "__main__":
+    import os as _os
+    from wsgiref.simple_server import make_server as _make_server
+    from wsgi import app as _wsgi_app
+    with _make_server("127.0.0.1", int(_os.getenv("KRONOS_PORT", "8091")), _wsgi_app) as _server:
+        _server.serve_forever()
+    raise SystemExit(0)
+
+"""Legacy implementation retained below for source-history comparison; never executed."""
 import json, math, os, random, sys, threading
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

@@ -1,6 +1,6 @@
 "use strict";
 
-const { MAX_OBSERVATIONS, MIN_OBSERVATIONS, MAX_SAMPLES, HORIZON_MAPPINGS } = require("./constants");
+const { MAX_OBSERVATIONS, MIN_OBSERVATIONS, MAX_SAMPLES, HORIZON_MAPPINGS, SERVICE_CONTRACT_VERSION } = require("./constants");
 function validationError(message, code = "invalid_request") { return Object.assign(new Error(message), { code }); }
 function normalizeTicker(value) { const ticker = String(value || "").trim().toUpperCase(); return /^[A-Z][A-Z0-9.-]{0,11}$/.test(ticker) ? ticker : null; }
 function finite(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
@@ -27,6 +27,7 @@ function validateForecastRequest(value) {
 }
 function validateAdapterResponse(value, expectedBars) {
   if (!value || typeof value !== "object" || !Array.isArray(value.samples) || !value.samples.length || value.samples.length > MAX_SAMPLES) throw validationError("Kronos response is malformed.", "invalid_model_output");
+  if (value.serviceContractVersion !== SERVICE_CONTRACT_VERSION) throw validationError("Kronos service contract is incompatible.", "contract_mismatch");
   const executionMode = String(value.executionMode || "");
   if (!new Set(["real_model", "deterministic_adapter"]).has(executionMode)) throw validationError("Kronos response execution provenance is invalid.", "invalid_model_output");
   const samples = value.samples.map((sample) => validateBars(sample, { minimum: expectedBars, maximum: expectedBars }));
@@ -34,6 +35,6 @@ function validateAdapterResponse(value, expectedBars) {
     ? value.rawSamples.map((sample) => sample.map((row) => ({ timestamp: iso(row?.timestamp), open: finite(row?.open), high: finite(row?.high), low: finite(row?.low), close: finite(row?.close), volume: finite(row?.volume) })))
     : null;
   if (!rawSamples || rawSamples.some((sample) => sample.length !== expectedBars || sample.some((row) => !row.timestamp || [row.open, row.high, row.low, row.close, row.volume].some((item) => item === null)))) throw validationError("Kronos raw samples are malformed.", "invalid_model_output");
-  return { executionMode, outputNormalization: String(value.outputNormalization || "none").slice(0, 80), modelName: String(value.modelName || "").slice(0, 120), modelVersion: String(value.modelVersion || "").slice(0, 120), tokenizerVersion: String(value.tokenizerVersion || "").slice(0, 120), checkpoint: String(value.checkpoint || "").slice(0, 160), rawSamples, samples };
+  return { serviceContractVersion: SERVICE_CONTRACT_VERSION, executionMode, outputNormalization: String(value.outputNormalization || "none").slice(0, 80), modelName: String(value.modelName || "").slice(0, 120), modelVersion: String(value.modelVersion || "").slice(0, 120), tokenizerVersion: String(value.tokenizerVersion || "").slice(0, 120), checkpoint: String(value.checkpoint || "").slice(0, 160), sourceRevision: String(value.sourceRevision || "").slice(0, 80), rawSamples, samples };
 }
 module.exports = { validationError, normalizeTicker, validateBars, validateForecastRequest, validateAdapterResponse };

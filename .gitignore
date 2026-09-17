@@ -4,3 +4,6 @@ data/historicalMarket.json
 data/.historicalMarket.json.*.tmp
 data/kronosShadowForecasts.json
 data/.kronosShadowForecasts.json.*.tmp
+kronos-service/.model-cache/
+kronos-service/model-cache/
+kronos-service/upstream-kronos/

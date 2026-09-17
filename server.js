@@ -164,7 +164,11 @@ const historicalMarketService = createHistoricalMarketService({
 const kronosShadowStore = createShadowStore(KRONOS_SHADOW_FORECASTS_FILE);
 const kronosShadowService = createKronosShadowService({
   enabled: FEATURE_FLAGS.kronosShadowEnabled,
-  client: createKronosClient({ endpoint: String(process.env.KRONOS_SERVICE_URL || "").trim() }),
+  client: createKronosClient({
+    endpoint: String(process.env.KRONOS_SERVICE_URL || "").trim(),
+    serviceToken: String(process.env.KRONOS_SERVICE_TOKEN || "").trim(),
+    production: PRODUCTION,
+  }),
   store: kronosShadowStore,
   historyLoader: (ticker, options) => historicalMarketService.getKlines(ticker, options),
   predictionLoader: () => readJson(PREDICTIONS_FILE, { predictions: [] }),
