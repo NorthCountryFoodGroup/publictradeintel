@@ -3585,7 +3585,9 @@ function renderTradeBrief() {
   if (!output.tradeBriefPanel) return;
   const currentRows = opportunityRowsForHub();
   const firstPick = currentRows[0] || firstFromSection("top25OneDay") || firstFromSection("top25SevenDay") || (predictionEngine.predictions || [])[0];
-  const item = findPredictionByTicker(selectedBriefTicker) || firstPick;
+  const requestedTicker = normalizeTicker(selectedBriefTicker);
+  const trackedTicker = requestedTicker && watchlists.some((list) => (list.tickers || []).some((ticker) => normalizeTicker(ticker) === requestedTicker));
+  const item = findPredictionByTicker(requestedTicker) || (trackedTicker ? watchlistTickerRecord(requestedTicker) : null) || (!requestedTicker ? firstPick : null);
   if (!item) {
     output.tradeBriefPanel.innerHTML = `
       <article class="dashboard-card">
@@ -5214,13 +5216,14 @@ async function loadSecurityProfile(ticker) {
 }
 
 function openTradeBrief(ticker) {
-  selectedBriefTicker = String(ticker || "").toUpperCase();
+  const requestedTicker = normalizeTicker(ticker);
+  selectedBriefTicker = requestedTicker;
   renderTradeBrief();
   setPage("briefs");
-  loadSecurityProfile(selectedBriefTicker).then(() => {
-    if (normalizeTicker(selectedBriefTicker) === normalizeTicker(ticker)) { renderTradeBrief(); loadKronosShadowForecast(ticker); }
+  loadSecurityProfile(requestedTicker).then(() => {
+    if (normalizeTicker(selectedBriefTicker) === requestedTicker) { renderTradeBrief(); loadKronosShadowForecast(requestedTicker); }
   });
-  loadKronosShadowForecast(selectedBriefTicker);
+  loadKronosShadowForecast(requestedTicker);
 }
 
 function initDashboardDisclosures() {

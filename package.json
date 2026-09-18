@@ -101,6 +101,7 @@
     "smoke:confidence-trend": "node scripts/smoke-test-confidence-trend.js",
     "smoke:dashboard-disclosure": "node scripts/smoke-test-dashboard-progressive-disclosure.js",
     "smoke:trade-brief-consistency": "node scripts/smoke-test-trade-brief-consistency.js",
+    "smoke:trade-brief-selection": "node scripts/smoke-test-trade-brief-selection.js",
     "smoke:stocks-to-buy": "node scripts/smoke-test-stocks-to-buy-center.js",
     "smoke:stocks-to-buy-24-lists": "node scripts/smoke-test-24-ranking-lists.js",
     "smoke:stocks-to-buy-independent-rankings": "node scripts/smoke-test-independent-price-rankings.js",
