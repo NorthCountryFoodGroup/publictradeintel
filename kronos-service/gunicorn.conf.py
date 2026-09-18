@@ -10,6 +10,10 @@ graceful_timeout = 30
 keepalive = 5
 preload_app = False
 
+def post_worker_init(_worker):
+    from wsgi import start_service_initialization
+    return start_service_initialization()
+
 def worker_int(_worker):
     from wsgi import shutdown_service
     shutdown_service()

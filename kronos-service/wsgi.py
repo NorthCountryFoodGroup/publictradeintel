@@ -112,6 +112,8 @@ class ServiceState:
     def __init__(self):
         self.lock = threading.Lock()
         self.inference = threading.BoundedSemaphore(1)
+        self.initialization_started = False
+        self.initialization_thread = None
         self.state = "STARTING"
         self.model = self.tokenizer = self.predictor = None
         self.active_jobs = 0
@@ -124,8 +126,15 @@ class ServiceState:
     def ready(self):
         return self.state == "READY"
 
-    def initialize(self):
+    def initialize(self, preclaimed=False):
         with self.lock:
+            if preclaimed:
+                if not self.initialization_started:
+                    return False
+            else:
+                if self.initialization_started:
+                    return False
+                self.initialization_started = True
             self.state = "HEALTHY_NOT_READY"
         safe_log("model_load_started", state=self.state, executionMode=self.mode)
         try:
@@ -155,6 +164,7 @@ class ServiceState:
         except Exception:
             with self.lock: self.state, self.failure = "FAILED_NOT_READY", "model_load_failed"
             safe_log("model_load_failed", state=self.state, classification=self.failure, executionMode=self.mode)
+        return True
 
     def shutdown(self):
         with self.lock: self.state = "SHUTTING_DOWN"
@@ -258,14 +268,21 @@ def application(environ, start_response):
 
 
 def initialize_service():
-    STATE.initialize()
+    return STATE.initialize()
 
 
+def start_service_initialization():
+    with STATE.lock:
+        if STATE.initialization_started:
+            return False
+        STATE.initialization_started = True
+        STATE.state = "HEALTHY_NOT_READY"
+        thread = threading.Thread(target=STATE.initialize, args=(True,), name="kronos-initialize", daemon=True)
+        STATE.initialization_thread = thread
+    thread.start()
+    return True
 def shutdown_service(*_args):
     STATE.shutdown()
 
-
-if os.getenv("KRONOS_DISABLE_STARTUP_INITIALIZATION", "false").lower() != "true":
-    threading.Thread(target=initialize_service, name="kronos-initialize", daemon=True).start()
 
 app = application

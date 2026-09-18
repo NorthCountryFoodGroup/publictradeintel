@@ -2,7 +2,9 @@
 if __name__ == "__main__":
     import os as _os
     from wsgiref.simple_server import make_server as _make_server
-    from wsgi import app as _wsgi_app
+    from wsgi import app as _wsgi_app, start_service_initialization as _start_service_initialization
+    if _os.getenv("KRONOS_DISABLE_STARTUP_INITIALIZATION", "false").lower() != "true":
+        _start_service_initialization()
     with _make_server("127.0.0.1", int(_os.getenv("KRONOS_PORT", "8091")), _wsgi_app) as _server:
         _server.serve_forever()
     raise SystemExit(0)

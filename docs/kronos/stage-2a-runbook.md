@@ -28,6 +28,8 @@ cd kronos-service && gunicorn --worker-class gthread --workers 1 --threads 4 --t
 
 `--preload` is deliberately absent. One worker means one resident model copy. Four HTTP threads keep health/readiness responsive, while the one-slot inference semaphore permits only one active PyTorch inference. The 120-second Gunicorn worker timeout is distinct from the Node inference budget, which remains 20 seconds by default and can be changed only by trusted server construction.
 
+Real model initialization is deliberately absent from `wsgi:app` module import. Gunicorn's `post_worker_init` hook starts one guarded background initialization in the serving worker, so the same process owns the service state, model, tokenizer, inference semaphore, warm-up, and readiness transition. During loading, `/healthz` remains available while authenticated `/readyz` truthfully reports not ready. Repeated hook calls are idempotent and do not create another model copy or warm-up.
+
 ## Authentication and private routing
 
 `/healthz` is intentionally unauthenticated and returns only service and contract versions plus process health. `/readyz` and `/v1/forecast` require `Authorization: Bearer <KRONOS_SERVICE_TOKEN>`. The optional `KRONOS_SERVICE_TOKEN_NEXT` permits overlap during a future rotation; remove the old token after both services have been redeployed. Comparisons use `hmac.compare_digest`. Tokens are never logged, returned, written to forecast records, or sent to browsers.
