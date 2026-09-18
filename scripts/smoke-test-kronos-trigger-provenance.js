@@ -69,6 +69,8 @@ const forecast = {
   const server = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
   const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
   assert.match(server, /forecast\(await collectBody\(request\), \{ triggerMode: "manual" \}\)/, "manual route assigns provenance server-side");
+  assert.match(server, /classification: "not_found"/, "missing read-only research must remain a truthful not-found result while inference is disabled");
+  assert.doesNotMatch(server, /FEATURE_FLAGS\.kronosShadowEnabled \? "not_found" : "feature_disabled"/, "read-only absence must not inherit the inference feature gate");
   assert.doesNotMatch(server.slice(server.indexOf("async function runPredictionScan"), server.indexOf("function summarizeEvents")), /kronosShadowService\.forecast/, "automatic collection must remain absent");
   assert.match(app, /Trigger: Manual shadow research\./);
   console.log("Server-authoritative Kronos trigger provenance and guarded metadata repair: PASS");

@@ -6419,7 +6419,7 @@ async function handleApi(request, response, pathname) {
   if (request.method === "GET" && pathname.startsWith("/api/kronos-shadow/")) {
     const ticker = decodeURIComponent(pathname.slice("/api/kronos-shadow/".length)).toUpperCase();
     const forecast = kronosShadowService.latest(ticker);
-    sendJson(response, forecast ? 200 : 404, forecast || { error: FEATURE_FLAGS.kronosShadowEnabled ? "No Kronos shadow forecast is available." : "Kronos shadow research is disabled.", classification: FEATURE_FLAGS.kronosShadowEnabled ? "not_found" : "feature_disabled" });
+    sendJson(response, forecast ? 200 : 404, forecast || { error: "No Kronos shadow forecast is available.", classification: "not_found" });
     return;
   }
 
