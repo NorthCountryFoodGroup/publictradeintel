@@ -10,7 +10,29 @@ function createShadowStore(file, { maximumForecasts = MAX_FORECASTS, maximumOutc
   function mutate(operation) { const result = queue.catch(() => {}).then(() => { const next = operation(read()); write({ ...next, version: STORE_VERSION, updatedAt: new Date().toISOString(), forecasts: next.forecasts.slice(-maximumForecasts), outcomes: next.outcomes.slice(-maximumOutcomes), comparisons: next.comparisons.slice(-maximumOutcomes) }); return next; }); queue = result.then(() => undefined, () => undefined); return result; }
   const addForecast = (forecast) => mutate((store) => ({ ...store, forecasts: [...store.forecasts.filter((item) => item.id !== forecast.id), forecast] })).then(() => forecast);
   const addOutcome = (outcome, comparison = null) => mutate((store) => ({ ...store, outcomes: [...store.outcomes.filter((item) => item.forecastId !== outcome.forecastId), outcome], comparisons: comparison ? [...store.comparisons.filter((item) => item.forecastId !== outcome.forecastId), comparison] : store.comparisons }));
+  const repairForecastTriggerMode = ({ id, expected, triggerMode }) => {
+    let repairResult = null;
+    return mutate((store) => {
+    const index = store.forecasts.findIndex((item) => item.id === id);
+    if (index < 0) throw Object.assign(new Error("Target Kronos forecast was not found."), { code: "repair_target_not_found" });
+    const forecast = store.forecasts[index];
+    const actual = {
+      id: forecast.id, ticker: forecast.ticker, horizon: forecast.forecastHorizon, generatedAt: forecast.createdAt,
+      executionMode: forecast.executionMode, productionInfluence: forecast.productionInfluence,
+      sampleCount: Array.isArray(forecast.normalizedForecastSamples) ? forecast.normalizedForecastSamples.length : null,
+      forecastBars: forecast.forecastObservationCount, sourceRevision: forecast.sourceRevision,
+      modelRevision: forecast.modelVersion, tokenizerRevision: forecast.tokenizerVersion,
+    };
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) throw Object.assign(new Error("Target Kronos forecast no longer matches the approved repair predicates."), { code: "repair_predicate_mismatch" });
+    if (forecast.triggerMode === triggerMode) { repairResult = { repaired: false, alreadyApplied: true, forecast }; return store; }
+    if (forecast.triggerMode != null) throw Object.assign(new Error("Target Kronos forecast already has different trigger provenance."), { code: "repair_trigger_conflict" });
+    const repaired = { ...forecast, triggerMode };
+    const forecasts = store.forecasts.slice(); forecasts[index] = repaired;
+    repairResult = { repaired: true, alreadyApplied: false, forecast: repaired };
+    return { ...store, forecasts };
+    }).then(() => repairResult);
+  };
   const latest = (ticker) => [...read().forecasts].reverse().find((item) => item.ticker === ticker) || null;
-  return { read, addForecast, addOutcome, latest };
+  return { read, addForecast, addOutcome, repairForecastTriggerMode, latest };
 }
 module.exports = { emptyStore, validStore, createShadowStore };

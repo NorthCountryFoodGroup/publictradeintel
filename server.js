@@ -6425,7 +6425,7 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "POST" && pathname === "/api/kronos-shadow/forecast") {
     try {
-      const forecast = await kronosShadowService.forecast(await collectBody(request));
+      const forecast = await kronosShadowService.forecast(await collectBody(request), { triggerMode: "manual" });
       sendJson(response, 201, forecast);
     } catch (error) {
       const status = error.code === "feature_disabled" ? 404 : ["invalid_request", "invalid_symbol", "unsupported_horizon", "invalid_sample_count"].includes(error.code) ? 400 : error.code === "capacity_unavailable" ? 429 : 503;
@@ -6593,6 +6593,26 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "GET" && pathname === "/api/admin/kronos-diagnostics") {
     sendJson(response, 200, kronosShadowService.diagnostics());
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/admin/kronos-stage2b-manual-provenance-repair") {
+    try {
+      const result = await kronosShadowStore.repairForecastTriggerMode({
+        id: "7676c5fe-a320-4007-9353-3e98b5e9143f", triggerMode: "manual",
+        expected: {
+          id: "7676c5fe-a320-4007-9353-3e98b5e9143f", ticker: "AAPL", horizon: "7-Day",
+          generatedAt: "2026-09-18T17:55:21.433Z", executionMode: "real_model", productionInfluence: false,
+          sampleCount: 8, forecastBars: 5,
+          sourceRevision: "67b630e67f6a18c9e9be918d9b4337c960db1e9a",
+          modelRevision: "f4e68697d9d5aed55cef5c96aabc3376bcad9f81",
+          tokenizerRevision: "26966d0035065a0cae0ebad7af8ece35bc1fb51c",
+        },
+      });
+      sendJson(response, 200, { ok: true, repaired: result.repaired, alreadyApplied: result.alreadyApplied, forecastId: result.forecast.id, triggerMode: result.forecast.triggerMode });
+    } catch (error) {
+      sendJson(response, 409, { error: publicErrorMessage(error, "Kronos provenance repair was not applied."), classification: error.code || "repair_failed" });
+    }
     return;
   }
 

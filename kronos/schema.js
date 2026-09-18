@@ -25,6 +25,11 @@ function validateForecastRequest(value) {
   const sampleCount = value.sampleCount == null ? null : Number(value.sampleCount); if (sampleCount !== null && (!Number.isInteger(sampleCount) || sampleCount < 1 || sampleCount > MAX_SAMPLES)) throw validationError(`sampleCount must be between 1 and ${MAX_SAMPLES}.`, "invalid_sample_count");
   return { ticker, horizon, sampleCount };
 }
+function validateTriggerMode(value) {
+  const mode = String(value || "").trim();
+  if (!new Set(["manual", "automatic_shadow"]).has(mode)) throw validationError("Kronos trigger provenance is invalid.", "invalid_trigger_mode");
+  return mode;
+}
 function validateAdapterResponse(value, expectedBars) {
   if (!value || typeof value !== "object" || !Array.isArray(value.samples) || !value.samples.length || value.samples.length > MAX_SAMPLES) throw validationError("Kronos response is malformed.", "invalid_model_output");
   if (value.serviceContractVersion !== SERVICE_CONTRACT_VERSION) throw validationError("Kronos service contract is incompatible.", "contract_mismatch");
@@ -37,4 +42,4 @@ function validateAdapterResponse(value, expectedBars) {
   if (!rawSamples || rawSamples.some((sample) => sample.length !== expectedBars || sample.some((row) => !row.timestamp || [row.open, row.high, row.low, row.close, row.volume].some((item) => item === null)))) throw validationError("Kronos raw samples are malformed.", "invalid_model_output");
   return { serviceContractVersion: SERVICE_CONTRACT_VERSION, executionMode, outputNormalization: String(value.outputNormalization || "none").slice(0, 80), modelName: String(value.modelName || "").slice(0, 120), modelVersion: String(value.modelVersion || "").slice(0, 120), tokenizerVersion: String(value.tokenizerVersion || "").slice(0, 120), checkpoint: String(value.checkpoint || "").slice(0, 160), sourceRevision: String(value.sourceRevision || "").slice(0, 80), rawSamples, samples };
 }
-module.exports = { validationError, normalizeTicker, validateBars, validateForecastRequest, validateAdapterResponse };
+module.exports = { validationError, normalizeTicker, validateBars, validateForecastRequest, validateTriggerMode, validateAdapterResponse };

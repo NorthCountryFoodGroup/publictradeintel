@@ -19,7 +19,8 @@ const normalizedSamples = [[bar("2026-02-02T00:00:00.000Z", 132, 134, 130, 131)]
     historyLoader: async () => ({ bars: input, source: "isolated-fixture" }),
     client: { infer: async () => ({ rawSamples, samples: normalizedSamples, executionMode: "real_model", outputNormalization: "deterministic_ohlc_envelope_v1", modelName: "NeoQuasar/Kronos-mini", tokenizerName: "NeoQuasar/Kronos-Tokenizer-2k" }) },
   });
-  const forecast = await service.forecast({ ticker: "AAPL", horizon: "1-Day" });
+  const forecast = await service.forecast({ ticker: "AAPL", horizon: "1-Day" }, { triggerMode: "manual" });
+  assert.equal(forecast.triggerMode, "manual");
   assert.deepEqual(forecast.rawForecastSamples, rawSamples, "raw model output must remain unchanged");
   assert.deepEqual(forecast.normalizedForecastSamples, normalizedSamples, "normalized samples must be stored separately");
   assert.notDeepEqual(forecast.rawForecastSamples, forecast.normalizedForecastSamples);
