@@ -6,6 +6,7 @@ const os = require("os");
 const path = require("path");
 const { validateForecastRequest, validateTriggerMode } = require("../kronos/schema");
 const { createShadowStore } = require("../kronos/persistence");
+const { createKronosShadowService } = require("../kronos/service");
 
 const id = "7676c5fe-a320-4007-9353-3e98b5e9143f";
 const expected = {
@@ -49,6 +50,21 @@ const forecast = {
   assert.equal((await store.repairForecastTriggerMode({ id, expected, triggerMode: "manual" })).alreadyApplied, true, "repair is idempotent");
   await assert.rejects(store.repairForecastTriggerMode({ id, expected: { ...expected, sampleCount: 9 }, triggerMode: "manual" }), (error) => error.code === "repair_predicate_mismatch");
   assert.equal(store.latest("AAPL").triggerMode, "manual");
+
+  let inferenceCalls = 0;
+  const persistedBeforeRead = fs.readFileSync(file, "utf8");
+  const disabledService = createKronosShadowService({
+    enabled: false,
+    store,
+    client: { infer: async () => { inferenceCalls += 1; }, diagnostics: () => ({}) },
+    historyLoader: async () => { throw new Error("read path must not load history"); },
+  });
+  assert.equal(disabledService.latest("AAPL").id, id, "disabled inference must not hide stored research");
+  assert.equal(disabledService.latest("MSFT"), null, "missing research remains a truthful empty result");
+  assert.equal(inferenceCalls, 0, "stored-research reads must not call Python inference");
+  assert.equal(fs.readFileSync(file, "utf8"), persistedBeforeRead, "stored-research reads must not mutate persistence");
+  await assert.rejects(disabledService.forecast({ ticker: "AAPL", horizon: "7-Day" }, { triggerMode: "manual" }), (error) => error.code === "feature_disabled");
+  assert.equal(inferenceCalls, 0, "disabled forecast creation must fail before Python inference");
 
   const server = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
   const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
