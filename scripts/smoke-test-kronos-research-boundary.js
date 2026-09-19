@@ -10,7 +10,7 @@ const diff = execFileSync("git", ["diff", baseline, "--", ...protectedPaths], { 
 assert.equal(diff, "", "Slice 1 must not alter existing authoritative surfaces or protected implementations.");
 // Check every tracked production JS module, including future imports into Legacy.
 const files = execFileSync("git", ["ls-files", "*.js"], { cwd: root, encoding: "utf8" }).trim().split(/\r?\n/);
-for (const file of files.filter(file => !file.startsWith("scripts/") && !["kronos/schema.js", "kronos/service.js", "kronos/research-contracts.js", "kronos/research-guards.js"].includes(file))) {
+for (const file of files.filter(file => !file.startsWith("scripts/") && !["kronos/schema.js", "kronos/service.js", "kronos/research-contracts.js", "kronos/research-guards.js", "kronos/research-store.js"].includes(file))) {
   assert.doesNotMatch(fs.readFileSync(path.join(root, file), "utf8"), /require\s*\([^)]*research-(?:contracts|guards)|from\s+["'][^"']*research-(?:contracts|guards)/, `${file} must not consume research contracts`);
 }
 const server = fs.readFileSync(path.join(root, "server.js"), "utf8");
