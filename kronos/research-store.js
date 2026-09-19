@@ -34,7 +34,7 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
   requireValue(major === 24 && minor >= 18, "Validated Node runtime range is >=24.18.0 <25; no fallback binding.");
   text(file, 4096); requireValue(path.isAbsolute(file) && file !== ":memory:", "Absolute on-disk path required.");
   const filename = path.resolve(file), lockfile = `${filename}.writer.lock`, readOnly = mode === "restore-validation";
-  let db, lockToken, closed = false, quarantined = false;
+  let db, lockToken, closed = false, quarantined = false, snapshotActive = false;
   const { DatabaseSync } = require("node:sqlite"); // Lazy: importing this module never opens SQLite.
   function fileStat() {
     let stat; try { stat = fs.lstatSync(filename); } catch (error) { if (error.code === "ENOENT") fail("research_store_missing", "Expected research database is missing."); throw error; }
@@ -199,7 +199,7 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
       }).sort((a,b)=>a.sequence-b.sequence).map((entry,index)=>{requireValue(entry.sequence===index+1,"Recovery sequence gap or duplicate.");return entry;});
     });
   }
-  function ensureOpen(write = false) { if (closed) fail("research_store_closed","Research store is closed."); if (quarantined) fail("research_store_quarantined","Integrity failure requires offline review."); if (write && readOnly) fail("research_store_readonly","Restore validation cannot write."); }
+  function ensureOpen(write = false) { if (write && snapshotActive) fail("research_snapshot_busy","Snapshot writer barrier is active."); if (closed) fail("research_store_closed","Research store is closed."); if (quarantined) fail("research_store_quarantined","Integrity failure requires offline review."); if (write && readOnly) fail("research_store_readonly","Restore validation cannot write."); }
   function guardedRead(operation) { ensureOpen(); try { return operation(); } catch(error) { quarantined=true; throw error; } }
   function insertBlob(value) {
     const bytes = Buffer.from(canonicalize(value),"utf8"), hash = hashBytes(bytes);
@@ -264,6 +264,15 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
   return Object.freeze({
     writeTransaction,
     committedTransactions,
+    async backupSnapshot(destination) {
+      ensureOpen(); requireValue(!snapshotActive && !db.isTransaction,"Snapshot requires an idle single writer.");
+      text(destination,4096); requireValue(path.isAbsolute(destination) && !fs.existsSync(destination),"Snapshot destination must be explicitly new.");
+      const descriptor=fs.openSync(destination,"wx",0o600); fs.closeSync(descriptor); snapshotActive=true;
+      try {
+        const {backup}=require("node:sqlite"); await backup(db,destination);
+        const file=fs.openSync(destination,"r+"); try {fs.fsyncSync(file);} finally {fs.closeSync(file);}
+      } finally {snapshotActive=false;}
+    },
     readRecord(table,id) { return guardedRead(() => getRecord(table,id)); },
     readForecast(id,{effective=false}={}) { return guardedRead(() => { const value=effectiveForecast(id); return value ? (effective ? value.effective : value.record) : null; }); },
     readBlob(hash) { return guardedRead(() => blob(hash)); },
@@ -276,7 +285,7 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
     }); },
     integrity() { ensureOpen(); try { return verifyIntegrity(); } catch(error) { quarantined=true; throw error; } },
     diagnostics() { ensureOpen(); return { mode,databaseSchemaVersion:schema.DATABASE_SCHEMA_VERSION,canonicalizationVersion:CANONICALIZATION_VERSION,compressionVersion:schema.COMPRESSION_VERSION,journalMode:db.prepare("PRAGMA journal_mode").get().journal_mode,synchronous:db.prepare("PRAGMA synchronous").get().synchronous,foreignKeys:db.prepare("PRAGMA foreign_keys").get().foreign_keys,busyTimeoutMs:db.prepare("PRAGMA busy_timeout").get().timeout,offDiskDurability:false }; },
-    close() { if(!closed) { db.close(); releaseLock(); closed=true; } }
+    close() { requireValue(!snapshotActive,"Cannot close during snapshot."); if(!closed) { db.close(); releaseLock(); closed=true; } }
   });
 }
 module.exports=Object.freeze({researchDatabasePath,openResearchStore,BUSY_TIMEOUT_MS});
