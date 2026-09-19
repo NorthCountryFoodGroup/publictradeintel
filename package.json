@@ -7,6 +7,13 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
+    "smoke:kronos-s3-compatibility-contracts": "node scripts/smoke-test-kronos-s3-compatibility-contracts.js",
+    "smoke:kronos-s3-compatibility-abort": "node scripts/smoke-test-kronos-s3-compatibility-abort.js",
+    "smoke:kronos-s3-compatibility-restart": "node scripts/smoke-test-kronos-s3-compatibility-restart.js",
+    "smoke:kronos-s3-compatibility-integrity": "node scripts/smoke-test-kronos-s3-compatibility-integrity.js",
+    "smoke:kronos-s3-compatibility-large": "node --expose-gc scripts/smoke-test-kronos-s3-compatibility-large.js",
+    "smoke:kronos-s3-compatibility-discovery": "node scripts/smoke-test-kronos-s3-compatibility-discovery.js",
+    "smoke:kronos-s3-compatibility-boundary": "node scripts/smoke-test-kronos-s3-compatibility-boundary.js",
     "smoke:kronos-backup-contracts": "node scripts/smoke-test-kronos-backup-contracts.js",
     "smoke:kronos-backup-delivery": "node scripts/smoke-test-kronos-backup-delivery.js",
     "smoke:kronos-backup-snapshot": "node scripts/smoke-test-kronos-backup-snapshot.js",

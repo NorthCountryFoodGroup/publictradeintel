@@ -34,7 +34,7 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
   requireValue(major === 24 && minor >= 18, "Validated Node runtime range is >=24.18.0 <25; no fallback binding.");
   text(file, 4096); requireValue(path.isAbsolute(file) && file !== ":memory:", "Absolute on-disk path required.");
   const filename = path.resolve(file), lockfile = `${filename}.writer.lock`, readOnly = mode === "restore-validation";
-  let db, lockToken, closed = false, quarantined = false, snapshotActive = false;
+  let db, lockToken, closed = false, quarantined = false, snapshotActive = false, backupLeaseActive = false;
   const { DatabaseSync } = require("node:sqlite"); // Lazy: importing this module never opens SQLite.
   function fileStat() {
     let stat; try { stat = fs.lstatSync(filename); } catch (error) { if (error.code === "ENOENT") fail("research_store_missing", "Expected research database is missing."); throw error; }
@@ -262,6 +262,13 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
     verifyIntegrity();
   } catch(error) { if(db) db.close(); releaseLock(); throw error; }
   return Object.freeze({
+    claimBackupWriter() {
+      ensureOpen(true); requireValue(!backupLeaseActive,"A backup writer already owns this research store."); backupLeaseActive=true;let released=false;
+      return Object.freeze({assertOwned(){ensureOpen(true);requireValue(!released && !readOnly && lockToken && fs.readFileSync(lockfile,"utf8")===lockToken,"Backup writer ownership lost.");},release(){if(!released){released=true;backupLeaseActive=false;}}});
+    },
+    assertBackupWriter() {
+      ensureOpen(true); requireValue(!readOnly && lockToken && fs.readFileSync(lockfile,"utf8")===lockToken,"Backup requires current research writer ownership.");
+    },
     writeTransaction,
     committedTransactions,
     async backupSnapshot(destination) {
@@ -285,7 +292,7 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
     }); },
     integrity() { ensureOpen(); try { return verifyIntegrity(); } catch(error) { quarantined=true; throw error; } },
     diagnostics() { ensureOpen(); return { mode,databaseSchemaVersion:schema.DATABASE_SCHEMA_VERSION,canonicalizationVersion:CANONICALIZATION_VERSION,compressionVersion:schema.COMPRESSION_VERSION,journalMode:db.prepare("PRAGMA journal_mode").get().journal_mode,synchronous:db.prepare("PRAGMA synchronous").get().synchronous,foreignKeys:db.prepare("PRAGMA foreign_keys").get().foreign_keys,busyTimeoutMs:db.prepare("PRAGMA busy_timeout").get().timeout,offDiskDurability:false }; },
-    close() { requireValue(!snapshotActive,"Cannot close during snapshot."); if(!closed) { db.close(); releaseLock(); closed=true; } }
+    close() { requireValue(!snapshotActive,"Cannot close during snapshot."); requireValue(!backupLeaseActive,"Close the backup journal before releasing the research writer."); if(!closed) { db.close(); releaseLock(); closed=true; } }
   });
 }
 module.exports=Object.freeze({researchDatabasePath,openResearchStore,BUSY_TIMEOUT_MS});
