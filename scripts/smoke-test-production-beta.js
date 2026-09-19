@@ -50,6 +50,8 @@ assert.deepEqual(loadFeatureFlags({}), {
   v3ShadowEnabled: false,
   productionOrderExecutionEnabled: false,
   kronosShadowEnabled: false,
+  kronosAutoCollectionEnabled: false,
+  kronosOutcomeEvaluationEnabled: false,
 });
 assert.throws(() => loadFeatureFlags({ PRODUCTION_ORDER_EXECUTION_ENABLED: "true" }), /prohibited/i);
 

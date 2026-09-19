@@ -1,6 +1,7 @@
 "use strict";
 
 const { MAX_OBSERVATIONS, MIN_OBSERVATIONS, MAX_SAMPLES, HORIZON_MAPPINGS, SERVICE_CONTRACT_VERSION } = require("./constants");
+const { TRIGGER_MODES } = require("./research-contracts");
 function validationError(message, code = "invalid_request") { return Object.assign(new Error(message), { code }); }
 function normalizeTicker(value) { const ticker = String(value || "").trim().toUpperCase(); return /^[A-Z][A-Z0-9.-]{0,11}$/.test(ticker) ? ticker : null; }
 function finite(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
@@ -27,7 +28,7 @@ function validateForecastRequest(value) {
 }
 function validateTriggerMode(value) {
   const mode = String(value || "").trim();
-  if (!new Set(["manual", "automatic_shadow"]).has(mode)) throw validationError("Kronos trigger provenance is invalid.", "invalid_trigger_mode");
+  if (!TRIGGER_MODES.includes(mode)) throw validationError("Kronos trigger provenance is invalid.", "invalid_trigger_mode");
   return mode;
 }
 function validateAdapterResponse(value, expectedBars) {
