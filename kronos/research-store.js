@@ -184,6 +184,21 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
     for (const transaction of db.prepare("SELECT id FROM research_transactions").all()) requireValue(db.prepare("SELECT id FROM backup_outbox WHERE transactionId=?").get(transaction.id),"Transaction outbox missing.");
     return { integrity: "ok", databaseSchemaVersion: schema.DATABASE_SCHEMA_VERSION };
   }
+  function committedTransactions() {
+    ensureOpen(); requireValue(!db.isTransaction,"Recovery cannot export an uncommitted transaction.");
+    return guardedRead(() => {
+      const entries = db.prepare("SELECT id FROM backup_outbox").all().map(row => getRecord("backup_outbox",row.id).record);
+      return entries.map(outbox => {
+        const recovery=outbox.recovery;
+        requireValue(recovery?.version === "KRONOS_COMMITTED_TRANSACTION_V1", "Older outbox lacks an exact recovery request; explicit future migration required.");
+        requireValue(recovery.request.id === outbox.transactionId && hashValue(recovery.request) === outbox.transactionHash,"Recovery request hash mismatch.");
+        for (const item of recovery.request.records) requireValue(getRecord(item.table,item.record.id)?.hash === hashValue(item.record),"Recovery record mismatch.");
+        requireValue(getRecord("audit_events",recovery.request.audit.id)?.hash === hashValue(recovery.request.audit),"Recovery audit mismatch.");
+        for (const value of recovery.request.blobs) requireValue(hashValue(blob(hashValue(value))) === hashValue(value),"Recovery blob mismatch.");
+        return {sequence:recovery.sequence,transactionHash:outbox.transactionHash,request:recovery.request};
+      }).sort((a,b)=>a.sequence-b.sequence).map((entry,index)=>{requireValue(entry.sequence===index+1,"Recovery sequence gap or duplicate.");return entry;});
+    });
+  }
   function ensureOpen(write = false) { if (closed) fail("research_store_closed","Research store is closed."); if (quarantined) fail("research_store_quarantined","Integrity failure requires offline review."); if (write && readOnly) fail("research_store_readonly","Restore validation cannot write."); }
   function guardedRead(operation) { ensureOpen(); try { return operation(); } catch(error) { quarantined=true; throw error; } }
   function insertBlob(value) {
@@ -218,7 +233,7 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
       for (const item of request.records) { requireValue(item && Object.keys(item).sort().join(",") === "record,table" && Object.hasOwn(schema.TABLES,item.table) && !["backup_outbox","audit_events"].includes(item.table),"Invalid transaction record class."); if (insertRecord(item.table,item.record)) inserted++; }
       insertRecord("audit_events",request.audit);
       checkRelationships();
-      const outbox = { id:request.id,recordContractVersion:schema.TABLES.backup_outbox.version,productionInfluence:false,createdAt:request.audit.createdAt,transactionId:request.id,transactionHash:hash,recordReferences:[...request.records.map(item=>({table:item.table,id:item.record.id,hash:hashValue(item.record)})),{table:"audit_events",id:request.audit.id,hash:hashValue(request.audit)}] };
+      const outbox = { id:request.id,recordContractVersion:schema.TABLES.backup_outbox.version,productionInfluence:false,createdAt:request.audit.createdAt,transactionId:request.id,transactionHash:hash,recovery:{version:"KRONOS_COMMITTED_TRANSACTION_V1",sequence:db.prepare("SELECT count(*) AS n FROM research_transactions").get().n,request},recordReferences:[...request.records.map(item=>({table:item.table,id:item.record.id,hash:hashValue(item.record)})),{table:"audit_events",id:request.audit.id,hash:hashValue(request.audit)}] };
       const envelope = recordEnvelope(outbox);
       db.prepare("INSERT INTO backup_outbox VALUES(?,?,?,?,?)").run(outbox.id,envelope.hash,envelope.json,0,request.id);
       db.exec("COMMIT"); return { inserted,idempotent:false };
@@ -248,6 +263,7 @@ function openResearchStore(file, { mode, busyTimeoutMs = BUSY_TIMEOUT_MS } = {})
   } catch(error) { if(db) db.close(); releaseLock(); throw error; }
   return Object.freeze({
     writeTransaction,
+    committedTransactions,
     readRecord(table,id) { return guardedRead(() => getRecord(table,id)); },
     readForecast(id,{effective=false}={}) { return guardedRead(() => { const value=effectiveForecast(id); return value ? (effective ? value.effective : value.record) : null; }); },
     readBlob(hash) { return guardedRead(() => blob(hash)); },

@@ -7,6 +7,11 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
+    "smoke:kronos-recovery-bundle": "node scripts/smoke-test-kronos-recovery-bundle.js",
+    "smoke:kronos-research-archive": "node scripts/smoke-test-kronos-research-archive.js",
+    "smoke:kronos-research-replay": "node scripts/smoke-test-kronos-research-replay.js",
+    "smoke:kronos-research-artifact-recovery": "node scripts/smoke-test-kronos-research-artifact-recovery.js",
+    "smoke:kronos-research-portable-boundary": "node scripts/smoke-test-kronos-research-portable-boundary.js",
     "start": "node server.js",
     "smoke:discovery:api-contract": "node scripts/smoke-test-discovery-api-contract.js",
     "smoke:discovery:buckets": "node scripts/smoke-test-discovery-buckets.js",
