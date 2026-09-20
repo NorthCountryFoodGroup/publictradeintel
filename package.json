@@ -155,7 +155,12 @@
     "smoke:kronos-preflight-operator": "node scripts/smoke-test-kronos-preflight-operator.js",
     "smoke:kronos-preflight-journal": "node scripts/smoke-test-kronos-preflight-journal.js",
     "smoke:kronos-preflight-gate": "node scripts/smoke-test-kronos-preflight-gate.js",
-    "smoke:kronos-preflight-boundary": "node scripts/smoke-test-kronos-preflight-boundary.js"
+    "smoke:kronos-preflight-boundary": "node scripts/smoke-test-kronos-preflight-boundary.js",
+    "smoke:kronos-witness-contracts": "node scripts/smoke-test-kronos-witness-contracts.js",
+    "smoke:kronos-witness-continuity": "node scripts/smoke-test-kronos-witness-continuity.js",
+    "smoke:kronos-witness-vault": "node scripts/smoke-test-kronos-witness-vault.js",
+    "smoke:kronos-witness-recovery": "node scripts/smoke-test-kronos-witness-recovery.js",
+    "smoke:kronos-witness-boundary": "node scripts/smoke-test-kronos-witness-boundary.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0"

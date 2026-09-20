@@ -22,7 +22,7 @@ try {
     const source=fs.readFileSync(path.join(root,file),"utf8");
     if(/^kronos\/research-qualification-signer-(?:contracts|verifier)\.js$/.test(file))
       assert.doesNotMatch(source,/process\.env|@aws-sdk|node:fs|node:https?|\bfetch\s*\(|\.sign\(|createPrivateKey|generateKeyPair|setTimeout|setInterval/);
-    else if(!/^kronos\/research-qualification-preflight-(?:contracts|journal|gate)\.js$/.test(file)) assert.doesNotMatch(source,/require\s*\([^)]*research-qualification-signer-/);
+    else if(!/^kronos\/research-qualification-(?:preflight-(?:contracts|journal|gate)|witness-(?:contracts|state|disk|store))\.js$/.test(file)) assert.doesNotMatch(source,/require\s*\([^)]*research-qualification-signer-/);
   }
   const protectedPaths=["server.js","app.js","render.yaml","config","kronos/service.js","kronos/research-qualification-authority.js","kronos/research-qualification-contracts.js","kronos/research-qualification-policy.js","kronos/research-backup-adapter.js","kronos/research-backup-health.js","kronos/research-backup-qualification.js","package-lock.json"];
   assert.equal(cp.execFileSync("git",["diff","cc740efb196b70de3c7ffefe371756653c64482d","--",...protectedPaths],{cwd:root,encoding:"utf8"}),"");
