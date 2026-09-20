@@ -7,6 +7,7 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
+    "smoke:kronos-s3-retention-modes": "node scripts/smoke-test-kronos-s3-retention-modes.js",
     "smoke:kronos-s3-adapter-contracts": "node scripts/smoke-test-kronos-s3-adapter-contracts.js",
     "smoke:kronos-s3-adapter-qualification": "node scripts/smoke-test-kronos-s3-adapter-qualification.js",
     "smoke:kronos-s3-adapter-streaming": "node scripts/smoke-test-kronos-s3-adapter-streaming.js",

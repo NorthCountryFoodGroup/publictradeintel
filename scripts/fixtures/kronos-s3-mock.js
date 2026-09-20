@@ -5,12 +5,12 @@ const r = require("../../kronos/research-backup-retention");
 const t = require("../../kronos/research-backup-transport");
 const instant = "2026-09-29T00:00:00.000Z";
 const context = { environmentId: "fixture", streamId: "qualification-s3-fixture" };
-const required = r.fixtureRequirement("QUALIFICATION_SHORT_V1", instant);
+const required = r.fixtureRequirement("QUALIFICATION_SHORT_V1", instant, undefined, "GOVERNANCE");
 const config = { bucket: "pti-qualification-fixture", region: "us-east-2", expectedBucketOwner: "000000000000", ...context, purpose: "qualification", retentionPolicies: [required], requestMs: 2000, softwareRevision: "fixture-v1" };
 function aws(name, status) { return Object.assign(new Error("fake secret Authorization=NEVER_EXPORT"), { name, $metadata: { httpStatusCode: status, requestId: "NEVER_EXPORT" } }); }
 function mockS3() {
   const objects = new Map(), calls = [], faults = new Map(); let serial = 0;
-  const state = { versioning: "Enabled", lock: "Enabled", encryption: "AES256", owner: config.expectedBucketOwner, ignoreConditional: false, deleteMarker: false, extraVersion: false, cursorLoop: false, active: 0, aborted: 0, maxUploadChunk: 0, bodyDestroyed: 0 };
+  const state = { versioning: "Enabled", lock: "Enabled", defaultMode: "GOVERNANCE", defaultDays: 1, encryption: "AES256", owner: config.expectedBucketOwner, ignoreConditional: false, deleteMarker: false, extraVersion: false, cursorLoop: false, active: 0, aborted: 0, maxUploadChunk: 0, bodyDestroyed: 0 };
   function inject(name, action) { const q = faults.get(name) || []; q.push(action); faults.set(name, q); }
   async function send(command, { abortSignal }) {
     const name = command.constructor.name.replace(/Command$/, ""), input = command.input;
@@ -25,7 +25,7 @@ function mockS3() {
     }
     if (typeof action === "function") return action(input, abortSignal);
     if (name === "GetBucketVersioning") return { Status: state.versioning };
-    if (name === "GetObjectLockConfiguration") return { ObjectLockConfiguration: { ObjectLockEnabled: state.lock } };
+    if (name === "GetObjectLockConfiguration") return { ObjectLockConfiguration: { ObjectLockEnabled: state.lock, Rule: { DefaultRetention: { Mode: state.defaultMode, Days: state.defaultDays } } } };
     if (name === "GetBucketEncryption") return { ServerSideEncryptionConfiguration: { Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: state.encryption } }] } };
     if (name === "ListObjectVersions") {
       const all = [...objects.values()].filter(o => o.key.startsWith(input.Prefix)).sort((a,b) => a.key.localeCompare(b.key));
@@ -37,12 +37,12 @@ function mockS3() {
     }
     if (name === "PutObject") {
       if (objects.has(input.Key) && !state.ignoreConditional) throw aws("PreconditionFailed", 412);
-      c.check(input.IfNoneMatch === "*" && input.ServerSideEncryption === "AES256" && input.ObjectLockMode === "COMPLIANCE");
+      c.check(input.IfNoneMatch === "*" && input.ServerSideEncryption === "AES256" && ["GOVERNANCE", "COMPLIANCE"].includes(input.ObjectLockMode));
       const parts = []; for await (const bytes of input.Body) { if (abortSignal.aborted) throw aws("AbortError", 0); state.maxUploadChunk = Math.max(state.maxUploadChunk, bytes.length); parts.push(Buffer.from(bytes)); }
       const bytes = Buffer.concat(parts); c.check(bytes.length === input.ContentLength);
       c.check(require("node:crypto").createHash("sha256").update(bytes).digest("base64") === input.ChecksumSHA256);
       const version = `opaque/+\u03b2=${++serial}`;
-      objects.set(input.Key, { key: input.Key, version, bytes, metadata: structuredClone(input.Metadata), retention: input.ObjectLockRetainUntilDate, mode: "COMPLIANCE", encryption: "AES256", etag: '"opaque-multipart-7"' });
+      objects.set(input.Key, { key: input.Key, version, bytes, metadata: structuredClone(input.Metadata), retention: input.ObjectLockRetainUntilDate, mode: input.ObjectLockMode, encryption: "AES256", etag: '"opaque-multipart-7"' });
       return { VersionId: version, ETag: '"opaque-multipart-7"' };
     }
     const object = objects.get(input.Key);

@@ -32,6 +32,7 @@ function validateConfig(input) {
   c.check(Array.isArray(input.retentionPolicies) && input.retentionPolicies.length > 0 && input.retentionPolicies.length <= 16);
   input.retentionPolicies.forEach(r.validate);
   c.check(new Set(input.retentionPolicies.map(p => p.policyHash)).size === input.retentionPolicies.length);
+  c.check(new Set(input.retentionPolicies.map(p => p.artifactClass)).size === input.retentionPolicies.length);
   return structuredClone(input);
 }
 function createS3Adapter(input, { transport, clientFactory, now = Date.now } = {}) {
@@ -60,9 +61,12 @@ function createS3Adapter(input, { transport, clientFactory, now = Date.now } = {
     c.sameContext(d, context); key(d.objectKey); return d;
   }
   function requirement(d, original) {
-    const required = d.requiredRetention || original || config.retentionPolicies.find(p => p.artifactClass === (d.artifactType.startsWith("snapshot") ? "SNAPSHOT" : "EVIDENCE")) || config.retentionPolicies.find(p => p.artifactClass === "QUALIFICATION");
+    const required = config.retentionPolicies.find(p => p.artifactClass === (d.artifactType.startsWith("snapshot") ? "SNAPSHOT" : "EVIDENCE")) || config.retentionPolicies.find(p => p.artifactClass === "QUALIFICATION");
     r.appropriate(required, d.artifactType);
-    c.check(config.retentionPolicies.some(p => p.policyHash === required.policyHash), "BACKUP_RETENTION_UNVERIFIED");
+    // Descriptors and remote metadata can only confirm the server-selected policy.
+    for (const supplied of [d.requiredRetention, original]) {
+      if (supplied !== undefined) { r.validate(supplied); c.check(canonicalize(supplied) === canonicalize(required), "BACKUP_RETENTION_UNVERIFIED"); }
+    }
     return required;
   }
   function locator(l) {
@@ -70,6 +74,7 @@ function createS3Adapter(input, { transport, clientFactory, now = Date.now } = {
     c.sameContext(l, context); key(l.objectKey); c.providerVersion(l.versionId); return l;
   }
   function scopeFor(options = {}) {
+    c.check(Object.keys(options).every(k => ["signal", "maxAttempts"].includes(k)));
     c.check(options.maxAttempts === undefined || options.maxAttempts === 1);
     return deadline({ timeoutMs: config.requestMs, signal: options.signal });
   }
@@ -197,7 +202,7 @@ function createS3Adapter(input, { transport, clientFactory, now = Date.now } = {
       const abort = () => upload.destroy(c.failure("BACKUP_TIMEOUT")); scope.signal.addEventListener("abort", abort, { once: true });
       let response, rejected = false;
       try {
-        response = await send("PutObject", { Key: d.objectKey, Body: upload, ContentLength: d.sizeBytes, IfNoneMatch: "*", Metadata: metadata, ServerSideEncryption: "AES256", ObjectLockMode: "COMPLIANCE", ObjectLockRetainUntilDate: new Date(required.minimumRetainUntil), ChecksumAlgorithm: "SHA256", ChecksumSHA256: Buffer.from(d.artifactSha256, "hex").toString("base64") }, scope);
+        response = await send("PutObject", { Key: d.objectKey, Body: upload, ContentLength: d.sizeBytes, IfNoneMatch: "*", Metadata: metadata, ServerSideEncryption: "AES256", ObjectLockMode: required.mode, ObjectLockRetainUntilDate: new Date(required.minimumRetainUntil), ChecksumAlgorithm: "SHA256", ChecksumSHA256: Buffer.from(d.artifactSha256, "hex").toString("base64") }, scope);
       } catch (error) {
         if (!preconditions.has(error)) throw error;
         const found = await unique(d.objectKey, scope); c.check(found, "BACKUP_CONFLICT");
@@ -275,13 +280,16 @@ function createS3Adapter(input, { transport, clientFactory, now = Date.now } = {
   }
   async function collectQualificationEvidence(artifact, options) {
     c.check(artifact.descriptor.requiredRetention?.artifactClass === "QUALIFICATION");
+    const required = requirement(descriptor(artifact.descriptor));
     const inspected = await inspectCapabilities(options), first = await put(artifact.descriptor, artifact.source, options);
     c.check(!first.idempotent, "BACKUP_CONFLICT");
     const second = await put(artifact.descriptor, artifact.source, options, true);
     c.check(second.conditionalRejected === true && second.versionId === first.versionId, "BACKUP_CONFLICT");
     const listed = await listPrefix(artifact.descriptor.objectKey, null, 2, options);
     c.check(listed.cursor === null && listed.items.length === 1 && listed.items[0].versionId === first.versionId);
-    const evidence = Object.freeze({ ...context, providerType: "s3", containerRef, ...inspected, conditionalWriteVerified: true, readbackVerified: true, boundedListingVerified: true, policyHash: artifact.descriptor.requiredRetention.policyHash, observedAt: new Date(now()).toISOString(), simulated: true });
+    const actual = await describeRetention({ ...context, objectKey: artifact.descriptor.objectKey, versionId: first.versionId }, options);
+    const retentionEvidence = Object.freeze({ requiredRetention: Object.freeze(structuredClone(required)), observedRetention: Object.freeze({ mode: actual.mode, retainUntil: actual.retainUntil, policyHash: actual.policyHash, encryptionStatus: actual.encryptionStatus }), objectKey: artifact.descriptor.objectKey, versionId: first.versionId });
+    const evidence = Object.freeze({ retentionEvidence, ...context, providerType: "s3", containerRef, ...inspected, conditionalWriteVerified: true, readbackVerified: true, boundedListingVerified: true, policyHash: artifact.descriptor.requiredRetention.policyHash, observedAt: new Date(now()).toISOString(), simulated: true });
     observations.add(evidence); return evidence;
   }
   function qualificationRecord(evidence, { runtime, drill, expiresAt } = {}) {
@@ -293,7 +301,7 @@ function createS3Adapter(input, { transport, clientFactory, now = Date.now } = {
     }
     c.check(now() >= Date.parse(evidence.observedAt) && now() - Date.parse(evidence.observedAt) < 3600000);
     const q = require("./research-backup-qualification");
-    const body = { qualificationVersion: q.VERSION, providerType: "s3", containerRef, region: config.region, ...context, capabilitiesVerified: true, versioningVerified: true, objectLockVerified: true, encryptionVerified: true, conditionalWriteVerified: true, readbackVerified: true, restoreDrillId: drill.id, runtimeQualificationReference: runtime.hash, policyHashes: [evidence.policyHash], qualifiedAt: evidence.observedAt, expiresAt, softwareRevision: config.softwareRevision };
+    const body = { qualificationVersion: q.VERSION, providerType: "s3", containerRef, region: config.region, ...context, capabilitiesVerified: true, versioningVerified: true, objectLockVerified: true, encryptionVerified: true, conditionalWriteVerified: true, readbackVerified: true, restoreDrillId: drill.id, runtimeQualificationReference: runtime.hash, policyHashes: [evidence.policyHash], retentionEvidence: [evidence.retentionEvidence], qualifiedAt: evidence.observedAt, expiresAt, softwareRevision: config.softwareRevision };
     const record = q.validate({ ...body, qualificationHash: hashValue(body) }, context);
     return { record, simulated: true, productionQualified: false, runtimeQualified: false, status: q.qualificationStatus(record, context, now()) };
   }

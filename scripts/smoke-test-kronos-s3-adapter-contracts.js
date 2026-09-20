@@ -46,7 +46,7 @@ async function main() {
   // V1 API interoperability and normalized receipt; ETag is never a digest.
   const setup = require("./fixtures/kronos-backup-compatibility").setup();
   try { const object=f.c.encodeObject(f.context,"bundle","KRONOS_RECOVERY_BUNDLE_V1",setup.bundle), adapter=require("../kronos/research-backup-adapter").createAdapter(provider,f.context), candidate=await adapter.putImmutable(object.descriptor,object.bytes), l={...f.context,objectKey:object.descriptor.objectKey,versionId:candidate.versionId};
-    const receipt=await adapter.verifyExact(l,object.descriptor,{now:()=>Date.parse(f.instant),retainUntil:f.required.minimumRetainUntil,retentionPolicyVersion:f.required.policyId,softwareRevision:"fixture-v1"});
+    const receipt=await adapter.verifyExact(l,object.descriptor,{now:()=>Date.parse(f.instant),retainUntil:f.required.minimumRetainUntil,retentionPolicyVersion:f.required.policyId,requiredRetention:f.required,softwareRevision:"fixture-v1"});
     assert.equal(receipt.receiptVersion,"KRONOS_REMOTE_RECEIPT_V1"); assert.equal(receipt.providerType,"s3"); assert.equal(receipt.providerETag,'"opaque-multipart-7"'); assert.equal(receipt.verificationMethod,"EXACT_GET_SHA256"); assert.notEqual(receipt.providerETag,receipt.artifactSha256);
     assert.doesNotMatch(JSON.stringify(receipt),/NEVER_EXPORT|000000000000|Authorization/);
   } finally { setup.cleanup(); }
