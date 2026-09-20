@@ -160,7 +160,12 @@
     "smoke:kronos-witness-continuity": "node scripts/smoke-test-kronos-witness-continuity.js",
     "smoke:kronos-witness-vault": "node scripts/smoke-test-kronos-witness-vault.js",
     "smoke:kronos-witness-recovery": "node scripts/smoke-test-kronos-witness-recovery.js",
-    "smoke:kronos-witness-boundary": "node scripts/smoke-test-kronos-witness-boundary.js"
+    "smoke:kronos-witness-boundary": "node scripts/smoke-test-kronos-witness-boundary.js",
+    "smoke:kronos-native-keys": "node scripts/smoke-test-kronos-native-keys.js",
+    "smoke:kronos-native-authorization": "node scripts/smoke-test-kronos-native-authorization.js",
+    "smoke:kronos-native-witness": "node scripts/smoke-test-kronos-native-witness.js",
+    "smoke:kronos-native-recovery": "node scripts/smoke-test-kronos-native-recovery.js",
+    "smoke:kronos-native-boundary": "node scripts/smoke-test-kronos-native-boundary.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0"
