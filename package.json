@@ -147,7 +147,10 @@
     "smoke:kronos-real-attestations": "node scripts/smoke-test-kronos-real-attestations.js",
     "smoke:kronos-qualification-authority": "node scripts/smoke-test-kronos-qualification-authority.js",
     "smoke:kronos-qualification-coverage": "node scripts/smoke-test-kronos-qualification-coverage.js",
-    "smoke:kronos-qualification-boundary": "node scripts/smoke-test-kronos-qualification-boundary.js"
+    "smoke:kronos-qualification-boundary": "node scripts/smoke-test-kronos-qualification-boundary.js",
+    "smoke:kronos-signer-contracts": "node scripts/smoke-test-kronos-signer-contracts.js",
+    "smoke:kronos-signer-lifecycle": "node scripts/smoke-test-kronos-signer-lifecycle.js",
+    "smoke:kronos-signer-boundary": "node scripts/smoke-test-kronos-signer-boundary.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0"
