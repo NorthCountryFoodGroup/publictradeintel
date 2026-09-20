@@ -150,7 +150,12 @@
     "smoke:kronos-qualification-boundary": "node scripts/smoke-test-kronos-qualification-boundary.js",
     "smoke:kronos-signer-contracts": "node scripts/smoke-test-kronos-signer-contracts.js",
     "smoke:kronos-signer-lifecycle": "node scripts/smoke-test-kronos-signer-lifecycle.js",
-    "smoke:kronos-signer-boundary": "node scripts/smoke-test-kronos-signer-boundary.js"
+    "smoke:kronos-signer-boundary": "node scripts/smoke-test-kronos-signer-boundary.js",
+    "smoke:kronos-preflight-sizes": "node scripts/smoke-test-kronos-preflight-sizes.js",
+    "smoke:kronos-preflight-operator": "node scripts/smoke-test-kronos-preflight-operator.js",
+    "smoke:kronos-preflight-journal": "node scripts/smoke-test-kronos-preflight-journal.js",
+    "smoke:kronos-preflight-gate": "node scripts/smoke-test-kronos-preflight-gate.js",
+    "smoke:kronos-preflight-boundary": "node scripts/smoke-test-kronos-preflight-boundary.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0"
