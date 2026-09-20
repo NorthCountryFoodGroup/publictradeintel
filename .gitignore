@@ -7,3 +7,5 @@ data/.kronosShadowForecasts.json.*.tmp
 kronos-service/.model-cache/
 kronos-service/model-cache/
 kronos-service/upstream-kronos/
+
+node_modules/

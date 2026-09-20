@@ -7,6 +7,10 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
+    "smoke:kronos-s3-adapter-contracts": "node scripts/smoke-test-kronos-s3-adapter-contracts.js",
+    "smoke:kronos-s3-adapter-qualification": "node scripts/smoke-test-kronos-s3-adapter-qualification.js",
+    "smoke:kronos-s3-adapter-streaming": "node scripts/smoke-test-kronos-s3-adapter-streaming.js",
+    "smoke:kronos-s3-adapter-boundary": "node scripts/smoke-test-kronos-s3-adapter-boundary.js",
     "smoke:kronos-s3-compatibility-contracts": "node scripts/smoke-test-kronos-s3-compatibility-contracts.js",
     "smoke:kronos-s3-compatibility-abort": "node scripts/smoke-test-kronos-s3-compatibility-abort.js",
     "smoke:kronos-s3-compatibility-restart": "node scripts/smoke-test-kronos-s3-compatibility-restart.js",
@@ -139,5 +143,8 @@
     "smoke:stocks-to-buy-atomic-publish": "node scripts/smoke-test-stocks-to-buy-atomic-publish.js",
     "diagnose:quotes": "node scripts/diagnose-market-quotes.js",
     "validate:discovery:phase1": "node scripts/validate-discovery-phase1.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1136.0"
   }
 }
