@@ -14,7 +14,7 @@ try{
  for(const file of new Set(files)){
   if(file.startsWith("scripts/"))continue;const source=fs.readFileSync(path.join(root,file),"utf8");
   if(/^kronos\/research-qualification-preflight-(?:contracts|journal|gate)\.js$/.test(file))assert.doesNotMatch(source,/process\.env|@aws-sdk|\bfetch\s*\(|\.sign\(|createPrivateKey|generateKeyPair|setTimeout|setInterval/);
-  else if(!/^kronos\/research-qualification-(?:witness-(?:contracts|state|disk|store)|native-(?:proofs|signer)|integration-contracts|public-proof)\.js$/.test(file)) assert.doesNotMatch(source,/require\s*\([^)]*research-qualification-preflight-/);
+  else if(!/^kronos\/research-qualification-(?:witness-(?:contracts|state|disk|store)|native-(?:proofs|signer)|integration-contracts|public-proof|operator-(?:contracts|store|control|proof|cli))\.js$/.test(file)) assert.doesNotMatch(source,/require\s*\([^)]*research-qualification-preflight-/);
  }
  const protectedPaths=["server.js","app.js","render.yaml","config","kronos/service.js","kronos/research-qualification-authority.js","kronos/research-qualification-contracts.js","kronos/research-qualification-policy.js","kronos/research-qualification-signer-contracts.js","kronos/research-qualification-signer-verifier.js","kronos/research-backup-adapter.js","kronos/research-backup-health.js","package-lock.json"];
  assert.equal(cp.execFileSync("git",["diff","791c41f88963f26814c18daf51c01a51e0c6b3dc","--",...protectedPaths],{cwd:root,encoding:"utf8"}),"");

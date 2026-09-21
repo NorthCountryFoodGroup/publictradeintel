@@ -172,7 +172,14 @@
     "smoke:kronos-integration-continuity": "node scripts/smoke-test-kronos-integration-continuity.js",
     "smoke:kronos-integration-proof": "node scripts/smoke-test-kronos-integration-proof.js",
     "smoke:kronos-integration-boundary": "node scripts/smoke-test-kronos-integration-boundary.js",
-    "validate:kronos:offline": "node scripts/validate-kronos-offline-integration.js"
+    "validate:kronos:offline": "node scripts/validate-kronos-offline-integration.js",
+    "smoke:kronos-operator-commands": "node scripts/smoke-test-kronos-operator-commands.js",
+    "smoke:kronos-operator-authority": "node scripts/smoke-test-kronos-operator-authority.js",
+    "smoke:kronos-operator-toctou": "node scripts/smoke-test-kronos-operator-toctou.js",
+    "smoke:kronos-operator-races": "node scripts/smoke-test-kronos-operator-races.js",
+    "smoke:kronos-operator-recovery": "node scripts/smoke-test-kronos-operator-recovery.js",
+    "smoke:kronos-operator-proof": "node scripts/smoke-test-kronos-operator-proof.js",
+    "smoke:kronos-operator-boundary": "node scripts/smoke-test-kronos-operator-boundary.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0"
