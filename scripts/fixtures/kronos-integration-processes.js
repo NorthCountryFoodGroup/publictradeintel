@@ -40,6 +40,11 @@ class Worker {
     } else { this.fleet.events.push({...message, worker: this.name, role: this.role, pid: this.child.pid}); this.fleet.onEvent?.(this, message); }
   }
   call(command, payload = {}) {
+    if (this.role === "signer" && command === "issue" && !this.fleet.config.requireOperatorProcess) {
+      const fixture = require("./kronos-operator-retention-evidence"), cfg = fixture.config({binding: this.fleet.config.binding, registry: this.fleet.config.registry, identity: this.fleet.config.identity, operators: this.fleet.config.operators});
+      return this.fleet.witness.call("operator-retain", {record: fixture.record(payload.candidate, this.fleet.config.registry, cfg)}).then(() => this.call("retained-issue", payload));
+    }
+    if (command === "retained-issue") command = "issue";
     const run = () => new Promise((resolve, reject) => {
       if (this.closed) return reject(Object.assign(Error("IPC_PROCESS_LOST"), {code: "IPC_PROCESS_LOST"}));
       const id = ++this.sequence;
@@ -54,7 +59,7 @@ class Worker {
 class Fleet {
   constructor(configuration = config()) { this.root = fs.mkdtempSync(path.join(os.tmpdir(), "pti-signer-integration-")); this.config = structuredClone(configuration); this.workers = new Map(); this.events = []; this.fault = null; }
   async route(from, message) {
-    w.check((from.role === "signer" && message.to === "witness" && ["challenge", "authenticated"].includes(message.command)) || (from.role === "witness" && message.to === "vault" && ["latest", "read", "append", "epoch-state"].includes(message.command)), "IPC_ROUTE_DENIED");
+    w.check((from.role === "operator" && ((message.to === "witness" && ["operator-source", "operator-proof", "operator-append"].includes(message.command)) || (message.to === "signer" && message.command === "issuance-state"))) || (from.role === "signer" && message.to === "witness" && ["challenge", "authenticated", "operator-proof"].includes(message.command)) || (from.role === "witness" && message.to === "vault" && ["latest", "read", "append", "epoch-state", "operator-latest", "operator-read", "operator-append"].includes(message.command)), "IPC_ROUTE_DENIED");
     const target = this.workers.get(message.to); w.check(target && !target.closed, "IPC_UNAVAILABLE");
     const deliver = () => target.call(message.command, message.payload);
     return this.fault ? this.fault({from, ...message}, deliver) : deliver();
@@ -92,7 +97,7 @@ class Fleet {
     const challengeNonce = crypto.randomBytes(32).toString("hex"), bundle = await signer.call("bundle", {candidate: data, challengeNonce});
     return {bundle, requirements: {challengeNonce, minimumSequence: bundle.view.body.sequence, expectedDomain: f.t.s.role(data.attestation)}};
   }
-  async dispose() { this.fault = null; for (const role of ["signer", "verifier", "witness", "vault"]) for (const worker of this.workers.values()) if (worker.role === role) await worker.close(); for (const name of this.workers.keys()) this.recoverLocks(name); f.removeTemp(this.root); networkGuard.assertClean(); }
+  async dispose() { this.fault = null; for (const role of ["operator", "signer", "verifier", "witness", "vault"]) for (const worker of this.workers.values()) if (worker.role === role) await worker.close(); for (const name of this.workers.keys()) this.recoverLocks(name); f.removeTemp(this.root); networkGuard.assertClean(); }
 }
 function unavailable(code = "IPC_UNAVAILABLE") { throw Object.assign(Error(code), {code}); }
 module.exports = {Fleet, Worker, candidate, config, signed, privateKey, unavailable, f, ipc, w};

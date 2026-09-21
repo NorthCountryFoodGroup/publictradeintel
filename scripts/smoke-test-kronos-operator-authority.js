@@ -14,15 +14,15 @@ const guard = require("./fixtures/kronos-s3-network-guard").denyExternalNetwork(
     for (const row of x.fixture.registry.signers) {
       const fakeIdentity = {...x.config.operators[0], publicKey: row.publicKey, keyFingerprint: row.keyFingerprint};
       const provider = t.control.createFixtureAuthProvider({testOnly: true, identity: fakeIdentity, privateKey: t.n.f.t.f.keys[row.signerId].privateKey, now: () => t.n.f.t.f.time});
-      assert.throws(() => t.control.createController({store: x.store, source: x.source, provider, config: x.config, confirm: async v => v.phrase, now: () => t.n.f.t.f.time})); provider.close();
+      assert.throws(() => t.control.createController({retention: {current: x.source.retentionCurrent, retain: x.source.retentionRetain}, store: x.store, source: x.source, provider, config: x.config, confirm: async v => v.phrase, now: () => t.n.f.t.f.time})); provider.close();
     }
     // Even a caller changing both its provider and operator configuration cannot reuse another role key.
     for (const row of [...x.fixture.registry.signers, x.config.witnessIdentity]) {
       const identity = {...x.config.operators[0], publicKey: row.publicKey, keyFingerprint: row.keyFingerprint};
       const provider = t.control.createAuthProvider({identity, now: () => t.n.f.t.f.time, authenticate: async () => true, signApproval: () => { throw Error("MUST_NOT_SIGN"); }, signDecision: () => { throw Error("MUST_NOT_SIGN"); }});
       const config = {...x.config, operators: [identity]};
-      if (row.keyFingerprint === x.config.witnessIdentity.keyFingerprint) assert.throws(() => t.control.createController({store: x.store, source: x.source, provider, config, confirm: async v => v.phrase, now: () => t.n.f.t.f.time}));
-      else { const controller = t.control.createController({store: x.store, source: x.source, provider, config, confirm: async v => v.phrase, now: () => t.n.f.t.f.time}); const handle = await provider.authenticate({}); await assert.rejects(controller.execute("inspect", {requestId: x.candidate.request.requestId}, handle)); }
+      if (row.keyFingerprint === x.config.witnessIdentity.keyFingerprint) assert.throws(() => t.control.createController({retention: {current: x.source.retentionCurrent, retain: x.source.retentionRetain}, store: x.store, source: x.source, provider, config, confirm: async v => v.phrase, now: () => t.n.f.t.f.time}));
+      else { const controller = t.control.createController({retention: {current: x.source.retentionCurrent, retain: x.source.retentionRetain}, store: x.store, source: x.source, provider, config, confirm: async v => v.phrase, now: () => t.n.f.t.f.time}); const handle = await provider.authenticate({}); await assert.rejects(controller.execute("inspect", {requestId: x.candidate.request.requestId}, handle)); }
       provider.close();
     }
     const {DatabaseSync} = require("node:sqlite"), db = new DatabaseSync(require("node:path").join(root, "operator.sqlite"));
@@ -39,7 +39,7 @@ const guard = require("./fixtures/kronos-s3-network-guard").denyExternalNetwork(
     expiry = t.setup(expiryRoot); let at = t.n.f.t.f.time;
     const identity = {...expiry.config.operators[0], notAfter: new Date(at + 1000).toISOString()};
     const provider = t.control.createFixtureAuthProvider({testOnly: true, identity, privateKey: t.n.f.t.extraKey.privateKey, now: () => at});
-    const controller = t.control.createController({store: expiry.store, source: expiry.source, provider, config: {...expiry.config, operators: [identity]}, confirm: async v => v.phrase, now: () => at});
+    const controller = t.control.createController({retention: {current: expiry.source.retentionCurrent, retain: expiry.source.retentionRetain}, store: expiry.store, source: expiry.source, provider, config: {...expiry.config, operators: [identity]}, confirm: async v => v.phrase, now: () => at});
     const session = await provider.authenticate({fixtureUserPresence: true}), review = await controller.execute("inspect", {requestId: expiry.candidate.request.requestId}, session);
     at += 1000; await assert.rejects(controller.execute("approve", {requestId: expiry.candidate.request.requestId, reviewHash: review.reviewHash}, session));
     assert.equal(expiry.store.counts().attempts, 0); await assert.rejects(provider.authenticate({fixtureUserPresence: true})); provider.close();
@@ -50,7 +50,7 @@ const guard = require("./fixtures/kronos-s3-network-guard").denyExternalNetwork(
     expiredRequest = t.setup(requestRoot); let at = t.n.f.t.f.time;
     const provider = t.control.createFixtureAuthProvider({testOnly: true, identity: expiredRequest.config.operators[0], privateKey: t.n.f.t.extraKey.privateKey, now: () => at});
     const source = {...expiredRequest.source, snapshot: async (...args) => { const value = await expiredRequest.source.snapshot(...args); value.view.body.issuedAt = new Date(at).toISOString(); value.view.body.expiresAt = new Date(at + t.w.LEASE_MS).toISOString(); value.view.signature = expiredRequest.fixture.cfg.signWitness(t.w.signedBytes(value.view.body)); return value; }};
-    const controller = t.control.createController({store: expiredRequest.store, source, provider, config: expiredRequest.config, confirm: async v => v.phrase, now: () => at});
+    const controller = t.control.createController({retention: {current: expiredRequest.source.retentionCurrent, retain: expiredRequest.source.retentionRetain}, store: expiredRequest.store, source, provider, config: expiredRequest.config, confirm: async v => v.phrase, now: () => at});
     const session = await provider.authenticate({fixtureUserPresence: true}), review = await controller.execute("inspect", {requestId: expiredRequest.candidate.request.requestId}, session);
     at += 299999; const renewed = await provider.authenticate({fixtureUserPresence: true}); at++;
     await assert.rejects(controller.execute("approve", {requestId: expiredRequest.candidate.request.requestId, reviewHash: review.reviewHash}, renewed)); assert.equal(expiredRequest.store.counts().attempts, 0); provider.close();

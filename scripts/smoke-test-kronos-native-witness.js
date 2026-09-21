@@ -24,7 +24,7 @@ for (const fault of ["unavailable", "stale", "future", "key", "epoch", "store", 
     }; }});
     active = true;
     assert.throws(() => x.signer.issue(fixture.data), fault);
-    assert.equal(x.keys.metrics().signCalls, fault === "final" ? 2 : 0, fault);
+    assert.equal(x.keys.metrics().signCalls, fault === "final" ? 3 : 0, fault);
     assert.throws(() => x.signer.get(fixture.data));
   } finally { if (x) x.close(); t.remove(root); }
 }

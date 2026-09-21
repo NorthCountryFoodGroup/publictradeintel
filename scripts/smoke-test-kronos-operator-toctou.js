@@ -56,10 +56,12 @@ const guard = require("./fixtures/kronos-s3-network-guard").denyExternalNetwork(
       if (remaining > 0) await x.approve(session, review.reviewHash); else { await assert.rejects(x.approve(session, review.reviewHash)); assert.equal(x.signatures(), 0); }
     } finally { x?.close(); t.remove(root); }
   }
-  // Completion through the existing issuer after inspection closes the pending CLI opportunity.
+  // An inspected request cannot bypass retention; completed issuance cannot be inspected as pending.
   const completeRoot = t.temp(); let completed;
-  try { completed = t.setup(completeRoot); const session = await completed.session(), review = await completed.inspect(session); completed.x.signer.issue(completed.fixture.data);
-    await assert.rejects(completed.approve(session, review.reviewHash)); assert.equal(completed.signatures(), 0);
+  try { completed = t.setup(completeRoot); const session = await completed.session(), review = await completed.inspect(session);
+    assert.throws(() => completed.x.signer.issue(completed.fixture.data), /RETENTION_REQUIRED/);
+    const record = await completed.approve(session, review.reviewHash); completed.issue(record); const count = completed.signatures();
+    await assert.rejects(completed.inspect(session)); assert.equal(completed.signatures(), count);
   } finally { completed?.close(); t.remove(completeRoot); }
   guard.assertClean(); console.log("Operator TOCTOU, confirmation and expiry boundaries: PASS");
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => guard.restore());

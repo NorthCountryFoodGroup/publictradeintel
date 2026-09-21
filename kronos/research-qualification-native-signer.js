@@ -9,9 +9,10 @@ const w = require("./research-qualification-witness-contracts");
 const {openDurableJournal} = require("./research-qualification-preflight-journal");
 const {openDisk} = require("./research-qualification-witness-disk");
 const {journalEvents, createProofs, equal} = require("./research-qualification-native-proofs");
+const retention = require("./research-qualification-operator-retention");
 const providers = new WeakMap();
-const VERSION = "KRONOS_NATIVE_SIGNER_RESULT_V1", CONTROL = "KRONOS_NATIVE_SIGNER_CONTROL_V1";
-const phases = ["PRE_SIGN_ACK", "SIGN_ATTEMPT", "COMPLETION_INTENT", "FINAL_ACK", "RELEASED"];
+const VERSION = "KRONOS_NATIVE_SIGNER_RESULT_V2", CONTROL = "KRONOS_NATIVE_SIGNER_CONTROL_V2";
+const phases = ["PRE_SIGN_ACK", "SIGN_ATTEMPT", "RETENTION_BOUND", "COMPLETION_INTENT", "FINAL_ACK", "RELEASED"];
 function createFixtureKeyProvider({testOnly, keys}) {
   w.check(testOnly === true && Array.isArray(keys), "NATIVE_FIXTURE_ONLY");
   const values = new Map(), fingerprints = new Set();
@@ -49,6 +50,8 @@ function keyFor(provider, request, attestation, registry) {
 }
 function openOfflineSigner(options) {
   const {mode, journalFile, storeId, writerEpoch, provider, operatorAuthority, witnessAdapter, now = Date.now, hook = () => {}} = options;
+  const retentionConfig = require("./research-qualification-operator-retention-contracts").config(options.retentionConfig);
+  retention.assertGate(options.operatorRetention, retentionConfig);
   const binding = structuredClone(options.binding), initialRegistry = structuredClone(options.initialRegistry);
   const config = {identity: structuredClone(w.identity(options.witnessIdentity)), binding,
     registryPins: [...options.registryPins], operatorAuthority, vaultId: options.vaultId};
@@ -61,8 +64,9 @@ function openOfflineSigner(options) {
   w.check(provider.publicIdentities().every(k => k.keyFingerprint !== config.identity.keyFingerprint), "NATIVE_KEY_REUSE");
   const proofs = createProofs({config, adapter: witnessAdapter, storeId, now});
   let disk, journal, closed = false, busy = false, journalClock = null;
+  const verifiedRetention = new Set();
   const metadata = {version: CONTROL, storeId, writerEpoch, binding, identity: config.identity, vaultId: config.vaultId,
-    registryPins: config.registryPins, keys: provider.publicIdentities()};
+    registryPins: config.registryPins, retentionConfig, keys: provider.publicIdentities()};
   function controls() {
     const data = disk.read();
     w.check(data.completed === data.entries.length, "NATIVE_CONTROL_RECOVERY_REQUIRED");
@@ -75,6 +79,12 @@ function openOfflineSigner(options) {
       w.check(phases.indexOf(entry.phase) === (prior ? phases.indexOf(prior.phase) + 1 : 0) && (!prior || prior.candidateHash === entry.candidateHash), "NATIVE_CONTROL_ORDER");
       if (["PRE_SIGN_ACK", "FINAL_ACK"].includes(entry.phase)) c.shape(entry.data, "ack");
       if (entry.phase === "SIGN_ATTEMPT") { c.shape(entry.data, "preReceiptHash"); w.check(entry.data.preReceiptHash === prior.data.ack.body.receipt.receiptHash, "NATIVE_CONTROL_BINDING"); }
+      if (entry.phase === "RETENTION_BOUND") {
+        // Disk integrity and the complete entry hash are rechecked on every read.
+        // Cache only historical signature verification under this immutable pinned config.
+        const hash = w.hashValue(entry);
+        if (!verifiedRetention.has(hash)) { require("./research-qualification-operator-retention-proof").verifyConsumption(entry.data, retentionConfig, {candidateHash: entry.candidateHash}); verifiedRetention.add(hash); }
+      }
       if (entry.phase === "COMPLETION_INTENT") { c.shape(entry.data, "event,hash"); w.check(w.hashValue(entry.data.event) === entry.data.hash, "NATIVE_CONTROL_BINDING"); }
       if (entry.phase === "RELEASED") { c.shape(entry.data, "resultHash"); c.digest(entry.data.resultHash); }
       seen.set(entry.requestId, entry);
@@ -141,6 +151,7 @@ function openOfflineSigner(options) {
     w.check(witnessed?.state === "COMPLETED" && witnessed.storeId === storeId, "NATIVE_COMPLETION_UNWITNESSED");
     equal(witnessed.envelope, exact.envelope); equal(witnessed.receipt, exact.receipt); equal(witnessed.approval, value.approval);
     return w.seal({version: VERSION, ...exact, approvalHash: value.approval.approval.approvalHash,
+      operatorRetention: ctx.own.find(e => e.phase === "RETENTION_BOUND").data,
       preSignAcknowledgment: pre.data.ack, completionAcknowledgment: final.data.ack,
       simulated: true, automaticCollectionReady: false, offDiskVerified: false}, "resultHash");
   }
@@ -214,6 +225,7 @@ function openOfflineSigner(options) {
         if (journal.state(id) === "COMPLETED") return get(value);
         w.check(journal.state(id) === "ABSENT", "NATIVE_SIGNING_AMBIGUOUS");
         w.check(ctx.local.filter(e => e.event.kind === "RESERVED").every(e => ctx.entries.some(x => x.requestId === e.event.requestId && x.phase === "RELEASED")), "NATIVE_RECOVERY_REQUIRED");
+        retention.consume(options.operatorRetention, value, now());
         const grant = operatorAuthority.authorize({...value, registry: ctx.registry, at: now()});
         keyFor(provider, value.request, value.attestation, ctx.registry); hook("validated");
         journal.reserve(grant); hook("reserved");
@@ -226,6 +238,12 @@ function openOfflineSigner(options) {
         context(value);
         operatorAuthority.validate(value.approval, value.request, value.attestation, current.registry, now());
         keyFor(provider, value.request, value.attestation, current.registry);
+        const retained = retention.consume(options.operatorRetention, value, now());
+        const retentionBody = {version: "KRONOS_OPERATOR_CONSUMPTION_V1", candidateHash: w.hashValue(value), decisionHash: retained.decisionHash, proofHash: w.hashValue(retained.proof), challengeNonce: retained.challengeNonce, consumedAt: retained.consumedAt, signerId: key.signerId, keyFingerprint: key.keyFingerprint};
+        internal.signCalls++;
+        const retentionSignature = crypto.sign(null, w.signedBytes(retentionBody), key.privateKey).toString("base64");
+        record("RETENTION_BOUND", value, {body: retentionBody, signature: retentionSignature, proof: retained.proof});
+        operatorAuthority.validate(value.approval, value.request, value.attestation, current.registry, now());
         const bytes = q.signingBytes(value.attestation);
         internal.signCalls++; internal.messageBytes.push(bytes.length);
         const body = {version: s.VERSION.envelope, attestation: value.attestation, request: value.request,
@@ -233,7 +251,8 @@ function openOfflineSigner(options) {
           signature: crypto.sign(null, bytes, key.privateKey).toString("base64"), signedAt: new Date(now()).toISOString()};
         internal.signCalls++;
         const envelope = s.seal({...body, contextSignature: crypto.sign(null, s.envelopeBytes(body), key.privateKey).toString("base64")}, "envelopeHash");
-        p.verifyEnvelope(envelope, value.request, value.attestation, current.registry, now()); hook("signed");
+        p.verifyEnvelope(envelope, value.request, value.attestation, current.registry, now());
+        require("./research-qualification-operator-retention-proof").verifyConsumption({body: retentionBody, signature: retentionSignature, proof: retained.proof}, retentionConfig, {candidateHash: w.hashValue(value), signedAt: envelope.signedAt}); hook("signed");
         journal.recordEnvelope(id, envelope); hook("envelope");
         return finish(value);
       }); },

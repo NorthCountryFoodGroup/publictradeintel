@@ -8,7 +8,16 @@ const VERSION = "KRONOS_OPERATOR_DECISION_V1", REASONS = Object.freeze(["POLICY"
 const equal = (a, b) => w.check(w.hashValue(a) === w.hashValue(b), "OPERATOR_CONTEXT_CHANGED");
 function research(value, a) {
   const v = value || {modelRevision: null, forecastContractVersion: null, researchContractVersion: null, inputCutoff: null};
-  c.shape(v, "modelRevision,forecastContractVersion,researchContractVersion,inputCutoff");
+  const extended = v.version === "KRONOS_OPERATOR_RESEARCH_CONTEXT_V2";
+  c.shape(v, (extended ? "version,modelIdentifier,forecastTimestamp,runtimeRevision," : "") + "modelRevision,forecastContractVersion,researchContractVersion,inputCutoff");
+  if (extended) {
+    for (const k of ["modelIdentifier", "runtimeRevision"]) if (v[k] !== null) c.label(v[k]);
+    if (v.runtimeRevision !== null) w.check(v.runtimeRevision === a.binding.runtimeRevision, "OPERATOR_RUNTIME_REVISION");
+    if (v.forecastTimestamp !== null) {
+      w.check(s.time(v.forecastTimestamp) <= s.time(a.observedAt), "OPERATOR_FORECAST_TIME");
+      if (v.inputCutoff !== null) w.check(s.time(v.inputCutoff) <= s.time(v.forecastTimestamp), "OPERATOR_INPUT_CUTOFF");
+    }
+  }
   for (const k of ["modelRevision", "forecastContractVersion", "researchContractVersion"]) if (v[k] !== null) c.label(v[k]);
   if (v.inputCutoff !== null) w.check(s.time(v.inputCutoff) <= s.time(a.observedAt), "OPERATOR_INPUT_CUTOFF");
   q.safe(v); return structuredClone(v);

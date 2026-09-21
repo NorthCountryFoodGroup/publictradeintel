@@ -19,7 +19,7 @@ if (process.argv[2] === "crash") {
         const {root, config, metadata} = message; action = message.action;
         const store = t.storage.openStore(path.join(root, "operator.sqlite"), {mode: "open-existing", metadata});
         const provider = t.control.createFixtureAuthProvider({testOnly: true, identity: config.operators[0], privateKey: t.n.f.t.extraKey.privateKey, now: () => t.n.f.t.f.time});
-        x = {store, provider, controller: t.control.createController({store, provider, config, now: () => t.n.f.t.f.time, confirm: async v => v.phrase,
+        x = {store, provider, controller: t.control.createController({store, provider, config, retention: {current: () => call("retentionCurrent", []), retain: record => call("retentionRetain", [record])}, now: () => t.n.f.t.f.time, confirm: async v => v.phrase,
           source: {snapshot: (...args) => call("snapshot", args), pending: (...args) => call("pending", args), available: (...args) => call("available", args)}})};
         session = await provider.authenticate({fixtureUserPresence: true}); review = await x.controller.execute("inspect", {requestId: message.requestId}, session); process.send({ready: true});
       } else if (message.go) {

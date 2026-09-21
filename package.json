@@ -179,7 +179,24 @@
     "smoke:kronos-operator-races": "node scripts/smoke-test-kronos-operator-races.js",
     "smoke:kronos-operator-recovery": "node scripts/smoke-test-kronos-operator-recovery.js",
     "smoke:kronos-operator-proof": "node scripts/smoke-test-kronos-operator-proof.js",
-    "smoke:kronos-operator-boundary": "node scripts/smoke-test-kronos-operator-boundary.js"
+    "smoke:kronos-operator-boundary": "node scripts/smoke-test-kronos-operator-boundary.js",
+    "smoke:kronos-operator-retention-contracts": "node scripts/smoke-test-kronos-operator-retention.js contracts",
+    "smoke:kronos-operator-retention-approval": "node scripts/smoke-test-kronos-operator-retention.js approval",
+    "smoke:kronos-operator-retention-denial": "node scripts/smoke-test-kronos-operator-retention.js denial",
+    "smoke:kronos-operator-retention-rollback": "node scripts/smoke-test-kronos-operator-retention.js rollback",
+    "smoke:kronos-operator-retention-fork": "node scripts/smoke-test-kronos-operator-retention.js fork",
+    "smoke:kronos-operator-retention-sequence": "node scripts/smoke-test-kronos-operator-retention.js sequence",
+    "smoke:kronos-operator-retention-epoch": "node scripts/smoke-test-kronos-operator-retention.js epoch",
+    "smoke:kronos-operator-retention-process": "node scripts/smoke-test-kronos-operator-retention.js process",
+    "smoke:kronos-operator-retention-lost-response": "node scripts/smoke-test-kronos-operator-retention.js lost-response",
+    "smoke:kronos-operator-retention-crash": "node scripts/smoke-test-kronos-operator-retention.js crash",
+    "smoke:kronos-operator-retention-dual-rollback": "node scripts/smoke-test-kronos-operator-retention.js dual-rollback",
+    "smoke:kronos-operator-retention-freshness": "node scripts/smoke-test-kronos-operator-retention.js freshness",
+    "smoke:kronos-operator-retention-signer": "node scripts/smoke-test-kronos-operator-retention.js signer",
+    "smoke:kronos-operator-retention-proof": "node scripts/smoke-test-kronos-operator-retention.js proof",
+    "smoke:kronos-operator-retention-provenance": "node scripts/smoke-test-kronos-operator-retention.js provenance",
+    "smoke:kronos-operator-retention-secrets": "node scripts/smoke-test-kronos-operator-retention.js secrets",
+    "smoke:kronos-operator-retention-boundary": "node scripts/smoke-test-kronos-operator-retention.js boundary"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0"

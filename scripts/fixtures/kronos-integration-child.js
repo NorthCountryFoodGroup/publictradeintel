@@ -8,6 +8,9 @@ const p = require("../../kronos/research-qualification-preflight-contracts");
 const {openDisk, recoverOwnership} = require("../../kronos/research-qualification-witness-disk");
 const decoder = new (require("node:string_decoder").StringDecoder)("utf8");
 let buffered = "", rpcSequence = 0, role, cfg, root, witness, vault, epochDisk, signer, provider, client, transportKey, witnessKey, activeStage = null, crashStage = null, crashAppend = null, appendCount = 0, requestId = null;
+let operatorVault, operatorWitness, retentionGate, operatorStore, operatorController, operatorSession, operatorProvider;
+const retentionFixture = require("./kronos-operator-retention-evidence");
+function retentionConfig() { return retentionFixture.config({binding: cfg.binding, registry: cfg.registry, identity: cfg.identity, operators: cfg.operators}); }
 const keyRoles = [], nativeKeys = new Map();
 function send(value) { fs.writeSync(1, JSON.stringify(value) + "\n"); }
 function read() {
@@ -79,6 +82,7 @@ function init(data) {
   const mode = data.mode;
   if (role === "vault") {
     vault = require("./kronos-witness-vault").openFakeVault(path.join(root, "vault.sqlite"), {mode, vaultId: cfg.vaultId});
+    operatorVault = require("./kronos-witness-vault").openFakeVault(path.join(root, "operator-vault.sqlite"), {mode, vaultId: retentionConfig().vaultId});
     epochDisk = openDisk(path.join(root, "epochs.sqlite"), {mode, metadata: {version: ipc.V.epoch, identity: cfg.identity, operator: cfg.operators[0], active: cfg.activeWriters}});
   } else if (role === "witness") {
     witnessKey = key(102, "witness");
@@ -86,6 +90,9 @@ function init(data) {
       mode, identity: cfg.identity, binding: cfg.binding, registryPins: [cfg.registry.registryHash], operatorAuthority: authority(), vaultId: cfg.vaultId,
       vault: {latest: () => rpc("vault", "latest", {}), read: sequence => rpc("vault", "read", {sequence}), append: entry => rpc("vault", "append", {entry})},
       signWitness: bytes => crypto.sign(null, bytes, witnessKey).toString("base64"), now: at, hook});
+    operatorWitness = require("../../kronos/research-qualification-operator-retention-witness").openWitness(path.join(root, "operator-witness.sqlite"), {mode, config: retentionConfig(), now: at, hook,
+      vault: {latest: () => rpc("vault", "operator-latest", {}), read: sequence => rpc("vault", "operator-read", {sequence}), append: entry => rpc("vault", "operator-append", {entry})},
+      signWitness: bytes => crypto.sign(null, bytes, witnessKey).toString("base64")});
   } else if (role === "signer") {
     w.check(client, "IPC_CLIENT_UNKNOWN"); transportKey = key({"signer-one": 121, "signer-two": 122, "signer-independent": 123}[client.signerId], "transport-" + client.signerId);
     const domains = cfg.identity.stores.find(x => x.storeId === client.storeId).domains;
@@ -96,14 +103,28 @@ function init(data) {
     });
     const originalSign = crypto.sign;
     crypto.sign = function(algorithm, bytes, privateKey) {
-      if (nativeKeys.has(privateKey)) send({kind: "signature", requestId, signerId: nativeKeys.get(privateKey), signatureKind: Buffer.from(bytes).toString("utf8").startsWith("KRONOS_ISSUANCE_CONTEXT_V1\n") ? "context" : "attestation"});
+      if (nativeKeys.has(privateKey)) send({kind: "signature", requestId, signerId: nativeKeys.get(privateKey), signatureKind: Buffer.from(bytes).toString("utf8").startsWith("KRONOS_OPERATOR_CONSUMPTION_V1\n") ? "operator-consumption" : Buffer.from(bytes).toString("utf8").startsWith("KRONOS_ISSUANCE_CONTEXT_V1\n") ? "context" : "attestation"});
       return originalSign.call(this, algorithm, bytes, privateKey);
     };
     const native = require("../../kronos/research-qualification-native-signer");
     provider = native.createFixtureKeyProvider({testOnly: true, keys: rows});
+    retentionGate = require("../../kronos/research-qualification-operator-retention").createGate({config: retentionConfig(), adapter: {proof: challengeNonce => rpc("witness", "operator-proof", {challengeNonce})}, now: at});
     signer = native.openOfflineSigner({mode, journalFile: path.join(root, "signer.sqlite"), storeId: client.storeId, writerEpoch: client.writerEpoch,
-      provider, operatorAuthority: authority(), binding: cfg.binding, initialRegistry: cfg.registry, registryPins: [cfg.registry.registryHash], witnessIdentity: cfg.identity,
+      operatorRetention: retentionGate, retentionConfig: retentionConfig(), provider, operatorAuthority: authority(), binding: cfg.binding, initialRegistry: cfg.registry, registryPins: [cfg.registry.registryHash], witnessIdentity: cfg.identity,
       vaultId: cfg.vaultId, witnessAdapter: adapter(), now: at, hook});
+  } else if (role === "operator") {
+    const cfgRetention = retentionConfig(), control = require("../../kronos/research-qualification-operator-control");
+    operatorStore = require("../../kronos/research-qualification-operator-store").openStore(path.join(root, "operator.sqlite"), {mode, metadata: {version: "operator-retention-fixture", config: cfgRetention}});
+    const operatorKey = key(85, "operator");
+    operatorProvider = control.createAuthProvider({identity: cfg.operators[0], now: at, authenticate: input => input?.fixtureUserPresence === true,
+      signApproval(v) { send({kind: "operator-sign", type: "approval"}); return crypto.sign(null, p.approvalBytes(v), operatorKey).toString("base64"); },
+      signDecision(v) { send({kind: "operator-sign", type: "decision"}); return crypto.sign(null, require("../../kronos/research-qualification-operator-contracts").decisionBytes(v), operatorKey).toString("base64"); }});
+    const adapter = {proof: challengeNonce => rpc("witness", "operator-proof", {challengeNonce}), append: value => rpc("witness", "operator-append", {value})};
+    const retained = require("../../kronos/research-qualification-operator-retention").createClient({config: cfgRetention, adapter, store: operatorStore, writerStoreId: "ordinary-store", writerEpoch: 1, now: at, hook});
+    const candidate = {request: cfg.operatorCandidate.request, attestation: cfg.operatorCandidate.attestation};
+    const source = {pending: async () => [candidate.request.requestId], available: async () => true,
+      snapshot: async (id, challengeNonce) => ({candidate, registry: cfg.registry, research: cfg.research || null, issuanceState: rpc("signer", "issuance-state", {requestId: id}).state, ...rpc("witness", "operator-source", {challengeNonce}), signerAvailable: true})};
+    operatorController = control.createController({store: operatorStore, provider: operatorProvider, retention: retained, config: {binding: cfg.binding, registryPins: [cfg.registry.registryHash], operators: cfg.operators, witnessIdentity: cfg.identity, vaultId: cfg.vaultId, storeId: "ordinary-store", operatorStoreId: cfgRetention.ledgerId}, source, now: at, confirm: async v => v.phrase, hook});
   } else w.check(role === "verifier", "IPC_ROLE");
   return status();
 }
@@ -112,8 +133,11 @@ function dispatch(command, data) {
   if (command === "status") return status();
   if (command === "crash-at") { crashStage = data.stage; crashAppend = data.appendNumber ?? null; return true; }
   if (command === "clock") { cfg.now = data.now; return true; }
-  if (command === "close") { signer?.close(); witness?.close(); vault?.close(); epochDisk?.close(); guard.assertClean(); return status(); }
+  if (command === "close") { operatorStore?.close(); operatorProvider?.close(); signer?.close(); operatorWitness?.close(); witness?.close(); operatorVault?.close(); vault?.close(); epochDisk?.close(); guard.assertClean(); return status(); }
   if (role === "vault") {
+    if (command === "operator-latest") return operatorVault.latest();
+    if (command === "operator-read") return operatorVault.read(data.sequence);
+    if (command === "operator-append") return operatorVault.append(data.entry);
     if (command === "latest") return vault.latest();
     if (command === "read") return vault.read(data.sequence);
     if (command === "append") return vault.append(data.entry);
@@ -125,6 +149,16 @@ function dispatch(command, data) {
     }
   }
   if (role === "witness") {
+    if (command === "operator-source") return {history: history(), view: witness.freshView({storeId: "ordinary-store", challengeNonce: data.challengeNonce})};
+    if (command === "operator-append") return operatorWitness.append(data.value);
+    if (command === "operator-recover") return operatorWitness.recoverPublication({operatorRef: "explicit-fixture-recovery"});
+    if (command === "operator-proof") return operatorWitness.proof(data.challengeNonce);
+    if (command === "operator-retain") {
+      const r = require("../../kronos/research-qualification-operator-retention-contracts"), challengeNonce = "a".repeat(64), proof = operatorWitness.proof(challengeNonce);
+      const model = r.verifyProof(proof, retentionConfig(), {challengeNonce, now: at()}), old = model.requests.get(data.record.decision.context.requestId);
+      if (old) { require("../../kronos/research-qualification-operator-contracts").equal(old.append.record, data.record); return true; }
+      return operatorWitness.append(r.request(data.record, model, retentionConfig()));
+    }
     if (command === "challenge") {
       const selected = activeClient(data.signerId); w.check(typeof data.requestHash === "string" && /^[a-f0-9]{64}$/.test(data.requestHash), "IPC_REQUEST_BINDING");
       return sign({version: ipc.V.challenge, signerId: selected.signerId, witnessId: cfg.identity.witnessId, witnessEpoch: cfg.identity.epoch,
@@ -156,8 +190,20 @@ function dispatch(command, data) {
     }
     if (command === "issuance-state") return signer.status(data.requestId);
   }
+  if (role === "operator") {
+    if (command === "execute") return (async () => { if (!operatorSession) operatorSession = await operatorProvider.authenticate({fixtureUserPresence: true}); return operatorController.execute(data.command, data.args, operatorSession); })();
+    if (command === "local-decision") return operatorStore.decision(data.requestId);
+    if (command === "retained-markers") return operatorStore.retained();
+  }
+  if (role === "verifier" && command === "verify-retention") {
+    const Module = require("node:module"), load = Module._load, originalSign = crypto.sign, originalPrivate = crypto.createPrivateKey;
+    Module._load = function(name, ...args) { if (name === "node:sqlite") w.fail("VERIFIER_PRIVATE_STATE"); return load.call(this, name, ...args); };
+    crypto.sign = crypto.createPrivateKey = () => w.fail("VERIFIER_PRIVATE_KEY");
+    try { return require("../../kronos/research-qualification-operator-retention-proof").verifyDecisionProof(data.proof, retentionConfig(), data.requirements); }
+    finally { Module._load = load; crypto.sign = originalSign; crypto.createPrivateKey = originalPrivate; }
+  }
   if (role === "verifier" && command === "verify") {
-    const verifier = require("../../kronos/research-qualification-public-proof").createPublicVerifier({binding: cfg.binding, registryPins: [cfg.registry.registryHash], witnessIdentity: cfg.identity, operators: cfg.operators, vaultId: cfg.vaultId, now: at});
+    const verifier = require("../../kronos/research-qualification-public-proof").createPublicVerifier({binding: cfg.binding, registryPins: [cfg.registry.registryHash], witnessIdentity: cfg.identity, operators: cfg.operators, vaultId: cfg.vaultId, retentionConfig: retentionConfig(), now: at});
     const Module = require("node:module"), load = Module._load, signOriginal = crypto.sign, privateOriginal = crypto.createPrivateKey;
     Module._load = function(name, ...args) { if (name === "node:sqlite") w.fail("VERIFIER_PRIVATE_STATE"); return load.call(this, name, ...args); };
     crypto.sign = crypto.createPrivateKey = () => w.fail("VERIFIER_PRIVATE_KEY");
@@ -166,9 +212,11 @@ function dispatch(command, data) {
   }
   w.fail("IPC_COMMAND_DENIED");
 }
-while (true) {
+(async () => { while (true) {
   let message;
   try { message = read(); } catch { break; }
-  try { const result = dispatch(message.command, message.payload); send({kind: "result", id: message.id, result}); if (message.command === "close") break; }
+  try { const result = await dispatch(message.command, message.payload); send({kind: "result", id: message.id, result}); if (message.command === "close") break; }
   catch (error) { send({kind: "result", id: message.id, error: /^[A-Z_]+$/.test(error?.code || "") ? error.code : "IPC_FIXTURE_FAILURE"}); }
 }
+
+})().catch(() => { process.exitCode = 1; });

@@ -5,8 +5,9 @@ const SQL = ["CREATE TABLE metadata (payload TEXT NOT NULL)",
   "CREATE TABLE reviews (id TEXT PRIMARY KEY, payload TEXT NOT NULL)",
   "CREATE TABLE attempts (id TEXT PRIMARY KEY, nonce TEXT UNIQUE NOT NULL, payload TEXT NOT NULL)",
   "CREATE TABLE decisions (id TEXT PRIMARY KEY REFERENCES attempts(id), payload TEXT NOT NULL)",
+  "CREATE TABLE retained (id TEXT PRIMARY KEY REFERENCES decisions(id), payload TEXT NOT NULL)",
   "CREATE TABLE audit (sequence INTEGER PRIMARY KEY, payload TEXT NOT NULL, hash TEXT NOT NULL)"];
-for (const table of ["metadata", "reviews", "attempts", "decisions", "audit"]) for (const action of ["UPDATE", "DELETE"])
+for (const table of ["metadata", "reviews", "attempts", "decisions", "retained", "audit"]) for (const action of ["UPDATE", "DELETE"])
   SQL.push(`CREATE TRIGGER ${table}_${action} BEFORE ${action} ON ${table} BEGIN SELECT RAISE(ABORT,'immutable'); END`);
 function openStore(file, {mode, metadata}) {
   w.check(path.isAbsolute(file) && ["initialize-new", "open-existing"].includes(mode), "OPERATOR_STORE_MODE");
@@ -16,8 +17,8 @@ function openStore(file, {mode, metadata}) {
   const {DatabaseSync} = require("node:sqlite"), db = new DatabaseSync(file);
   try {
     db.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA busy_timeout=2000;");
-    if (mode === "initialize-new") { db.exec("BEGIN IMMEDIATE"); SQL.forEach(x => db.exec(x)); db.prepare("INSERT INTO metadata VALUES(?)").run(w.canonicalize(metadata)); db.exec("PRAGMA application_id=1262635603; PRAGMA user_version=1; COMMIT"); }
-    w.check(db.prepare("PRAGMA application_id").get().application_id === 1262635603 && db.prepare("PRAGMA user_version").get().user_version === 1 && db.prepare("PRAGMA integrity_check").get().integrity_check === "ok", "OPERATOR_STORE_INTEGRITY");
+    if (mode === "initialize-new") { db.exec("BEGIN IMMEDIATE"); SQL.forEach(x => db.exec(x)); db.prepare("INSERT INTO metadata VALUES(?)").run(w.canonicalize(metadata)); db.exec("PRAGMA application_id=1262635603; PRAGMA user_version=2; COMMIT"); }
+    w.check(db.prepare("PRAGMA application_id").get().application_id === 1262635603 && db.prepare("PRAGMA user_version").get().user_version === 2 && db.prepare("PRAGMA integrity_check").get().integrity_check === "ok", "OPERATOR_STORE_INTEGRITY");
     const schema = db.prepare("SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'").all().map(x => x.sql).sort();
     w.check(w.canonicalize(schema) === w.canonicalize([...SQL].sort()), "OPERATOR_STORE_SCHEMA");
     const meta = db.prepare("SELECT payload FROM metadata").all(); w.check(meta.length === 1 && meta[0].payload === w.canonicalize(metadata), "OPERATOR_STORE_IDENTITY");
@@ -29,6 +30,9 @@ function openStore(file, {mode, metadata}) {
       db.prepare("INSERT INTO audit VALUES(?,?,?)").run(sequence, w.canonicalize(payload), w.hashValue(payload));
     }
     function state(id) { return get("decisions", id)?.decision.action || (get("attempts", id) ? "RECOVERY_REQUIRED" : "PENDING"); }
+    function retainedMarker(v) {
+      const c = require("./research-backup-contracts"); c.shape(v, "requestId,decisionHash,sequence,appendHash"); c.label(v.requestId); c.digest(v.decisionHash); c.digest(v.appendHash); w.positive(v.sequence); return v;
+    }
     function readAudit() {
       let previous = null, sequence = 0;
       return db.prepare("SELECT * FROM audit ORDER BY sequence").all().map(r => { const v = JSON.parse(r.payload);
@@ -46,6 +50,10 @@ function openStore(file, {mode, metadata}) {
       complete(v, entry) { return tx(() => { const a = get("attempts", v.decision.context.requestId);
         w.check(a && !get("decisions", a.requestId) && a.nonce === v.decision.nonce && a.reviewHash === v.decision.reviewHash && a.action === v.decision.action, "OPERATOR_TRANSITION");
         db.prepare("INSERT INTO decisions VALUES(?,?)").run(a.requestId, w.canonicalize(v)); audit(entry); return v; }); },
+      retained() { return db.prepare("SELECT payload FROM retained ORDER BY id").all().map(row => retainedMarker(JSON.parse(row.payload))); },
+      markRetained(v) { retainedMarker(v); return tx(() => { const record = get("decisions", v.requestId); w.check(record && record.decision.decisionHash === v.decisionHash, "OPERATOR_RETAINED_BINDING");
+        const old = get("retained", v.requestId); if (old) w.check(w.canonicalize(old) === w.canonicalize(v), "OPERATOR_RETAINED_FORK");
+        else db.prepare("INSERT INTO retained VALUES(?,?)").run(v.requestId, w.canonicalize(v)); }); },
       audit: v => tx(() => audit(v)), readAudit,
       counts() { return {attempts: db.prepare("SELECT count(*) AS n FROM attempts").get().n, decisions: db.prepare("SELECT count(*) AS n FROM decisions").get().n}; },
       close() { db.close(); }

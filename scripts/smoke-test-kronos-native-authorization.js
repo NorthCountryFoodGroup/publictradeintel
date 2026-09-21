@@ -39,7 +39,7 @@ for (const secret of ["privateKey", "AWS_SECRET_ACCESS_KEY", "SessionToken", "OI
   try { x = t.open(root); const data = x.fixture.data; x.signer.issue(data);
     const other = structuredClone(data); other.request.requestId = "another-request"; other.request.nonce = "e".repeat(64); other.request = t.f.t.rehash(other.request, "requestHash");
     other.approval = t.f.approved(other.request, other.attestation); other.approval = t.f.signApproval({...other.approval.approval, nonce: data.approval.approval.nonce});
-    assert.throws(() => x.signer.issue(other)); assert.equal(x.keys.metrics().signCalls, 2);
+    assert.throws(() => x.signer.issue(other)); assert.equal(x.keys.metrics().signCalls, 3);
     const altered = structuredClone(data); altered.approval = t.f.signApproval({...altered.approval.approval, nonce: "f".repeat(64)});
     assert.throws(() => x.signer.get(altered));
   } finally { if (x) x.close(); t.remove(root); }

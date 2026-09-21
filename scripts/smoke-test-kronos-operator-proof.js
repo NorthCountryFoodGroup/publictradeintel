@@ -31,5 +31,5 @@ const guard = require("./fixtures/kronos-s3-network-guard").denyExternalNetwork(
   } finally { denied?.close(); t.remove(deniedRoot); }
   const f = t.n.f, limited = f.candidate("restore", false), summary = require("../kronos/research-qualification-operator-contracts").summary({request: limited.request, attestation: limited.attestation}, f.t.registry());
   assert.deepEqual(summary.coverage.missing, ["forecast", "correction", "outcome"]); assert.equal(summary.research.modelRevision, null);
-  guard.assertClean(); console.log("Public approval/denial verification after deleting source databases, original V1 compatibility, metadata binding, limited coverage and tamper rejection: PASS");
+  guard.assertClean(); console.log("Public approval/denial verification after deleting source databases, retained V2 issuance binding, metadata binding, limited coverage and tamper rejection: PASS");
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => guard.restore());

@@ -12,7 +12,7 @@ const guard = require("./fixtures/kronos-s3-network-guard").denyExternalNetwork(
       const result = await x.approve(session, review.reviewHash); assert.equal(result.approval.approval.version, "KRONOS_OPERATOR_APPROVAL_V1");
       const signatures = x.signatures(); assert.deepEqual(await x.approve(session, review.reviewHash), result); assert.equal(x.signatures(), signatures);
       await assert.rejects(x.controller.execute("result", {requestId: id}, session));
-      x.issue(result); const proof = await x.controller.execute("result", {requestId: id}, session); assert.equal(proof.issuance.version, "KRONOS_OFFLINE_PUBLIC_PROOF_V1");
+      x.issue(result); const proof = await x.controller.execute("result", {requestId: id}, session); assert.equal(proof.issuance.version, "KRONOS_OFFLINE_PUBLIC_PROOF_V2");
       assert.deepEqual(await x.approve(session, review.reviewHash), result); assert.equal(x.signatures(), signatures);
       const status = await x.controller.execute("status", {}, session); assert.equal(status.pendingCount, 0); assert.equal(status.automaticCollectionReady, false);
       const cli = require("../kronos/research-qualification-operator-cli"), output = [];

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict"), fs = require("node:fs");
 const t = require("./fixtures/kronos-integration-processes");
 const publicProof = require("../kronos/research-qualification-public-proof");
 const {POLICY} = require("../kronos/research-qualification-policy");
-function verifier(config) { return publicProof.createPublicVerifier({binding: config.binding, registryPins: [config.registry.registryHash], witnessIdentity: config.identity, operators: config.operators, vaultId: config.vaultId, now: () => config.now}); }
+function verifier(config, extra = {}) { return publicProof.createPublicVerifier({binding: config.binding, registryPins: [config.registry.registryHash], witnessIdentity: config.identity, operators: config.operators, vaultId: config.vaultId, retentionConfig: require("./fixtures/kronos-operator-retention-evidence").config({binding: config.binding, registry: config.registry, identity: config.identity, operators: config.operators}), now: () => config.now, ...extra}); }
 (async () => {
   let portable, publicConfig;
   {
@@ -32,6 +32,12 @@ function verifier(config) { return publicProof.createPublicVerifier({binding: co
         x => { x.result.privateKey = "forbidden"; },
         x => { x.Authorization = "forbidden"; }
       ];
+      const downgrade = structuredClone(portable.bundle); downgrade.version = "KRONOS_OFFLINE_PUBLIC_PROOF_V1"; delete downgrade.result.operatorRetention; downgrade.result.version = "KRONOS_NATIVE_SIGNER_RESULT_V1"; downgrade.result = t.w.seal(downgrade.result, "resultHash");
+      assert.throws(() => verify.verify(t.w.seal(downgrade, "proofHash"), portable.requirements), /RETENTION_REQUIRED/);
+      assert.equal(verifier(publicConfig, {allowHistoricalV1: true}).verify(t.w.seal(downgrade, "proofHash"), portable.requirements).operatorRetentionVerified, false);
+      for (const mutate of [x => { x.body.decisionHash = "a".repeat(64); }, x => { x.signature = Buffer.alloc(64).toString("base64"); }, x => { x.proof.view.body.challengeNonce = "b".repeat(64); }]) {
+        let bad = structuredClone(portable.bundle); mutate(bad.result.operatorRetention); bad.result = t.w.seal(bad.result, "resultHash"); bad = t.w.seal(bad, "proofHash"); assert.throws(() => verify.verify(bad, portable.requirements));
+      }
       for (const mutate of mutations) { let bad = structuredClone(portable.bundle); mutate(bad); bad = t.w.seal(bad, "proofHash"); assert.throws(() => verify.verify(bad, portable.requirements)); }
       for (const secret of ["AWS_SECRET_ACCESS_KEY", "SessionToken", "OIDC_TOKEN", "LOGIN_PIN", "ADMIN_PIN", "KRONOS_SERVICE_TOKEN", "cookies", "environment", "databasePath"]) {
         const bad = t.w.seal({...portable.bundle, [secret]: "forbidden"}, "proofHash"); assert.throws(() => verify.verify(bad, portable.requirements));

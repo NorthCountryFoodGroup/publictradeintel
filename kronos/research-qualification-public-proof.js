@@ -10,22 +10,26 @@ const {POLICY, evaluateCoverage} = require("./research-qualification-policy");
 const VERSION = "KRONOS_OFFLINE_PUBLIC_PROOF_V1";
 const equal = (a, b) => w.check(w.canonicalize(a) === w.canonicalize(b), "PUBLIC_PROOF_BINDING");
 function buildProofBundle({result, approval, registry, history, view}) {
-  return w.seal({version: VERSION, result: structuredClone(result), approval: structuredClone(approval), registry: structuredClone(registry), history: structuredClone(history), view: structuredClone(view)}, "proofHash");
+  return w.seal({version: result.version === "KRONOS_NATIVE_SIGNER_RESULT_V2" ? "KRONOS_OFFLINE_PUBLIC_PROOF_V2" : VERSION, result: structuredClone(result), approval: structuredClone(approval), registry: structuredClone(registry), history: structuredClone(history), view: structuredClone(view)}, "proofHash");
 }
 function createPublicVerifier(options) {
   const identity = structuredClone(w.identity(options.witnessIdentity)), binding = structuredClone(q.binding(options.binding));
   const registryPins = [...options.registryPins], operators = structuredClone(options.operators), vaultId = options.vaultId;
   const now = options.now || Date.now;
+  const retentionConfig = options.retentionConfig ? require("./research-qualification-operator-retention-contracts").config(options.retentionConfig) : null;
+  const allowHistoricalV1 = options.allowHistoricalV1 === true;
   const operatorAuthority = p.createOperatorAuthority({operators, binding}), witness = w.createVerifier({identity, vaultId});
   function verify(bundle, {challengeNonce, minimumSequence, expectedDomain, requiredCoverage = []}) {
     c.shape(bundle, "version,result,approval,registry,history,view,proofHash");
-    w.check(bundle.version === VERSION, "PUBLIC_PROOF_VERSION"); w.hashed(bundle, "proofHash");
+    w.check([VERSION, "KRONOS_OFFLINE_PUBLIC_PROOF_V2"].includes(bundle.version), "PUBLIC_PROOF_VERSION"); w.hashed(bundle, "proofHash");
     c.digest(challengeNonce); w.positive(minimumSequence);
     w.check(["provider", "runtime", "restore", "independent-restore"].includes(expectedDomain), "PUBLIC_PROOF_DOMAIN");
     w.check(Array.isArray(requiredCoverage) && requiredCoverage.every(v => POLICY.fullCoverage.includes(v)), "PUBLIC_PROOF_COVERAGE");
     const r = bundle.result;
-    c.shape(r, "version,envelope,receipt,approvalHash,preSignAcknowledgment,completionAcknowledgment,simulated,automaticCollectionReady,offDiskVerified,resultHash");
-    w.check(r.version === "KRONOS_NATIVE_SIGNER_RESULT_V1" && r.simulated === true && r.automaticCollectionReady === false && r.offDiskVerified === false, "PUBLIC_PROOF_READINESS"); w.hashed(r, "resultHash");
+    const retained = bundle.version === "KRONOS_OFFLINE_PUBLIC_PROOF_V2";
+    w.check(retained || allowHistoricalV1, "PUBLIC_PROOF_RETENTION_REQUIRED");
+    c.shape(r, (retained ? "operatorRetention," : "") + "version,envelope,receipt,approvalHash,preSignAcknowledgment,completionAcknowledgment,simulated,automaticCollectionReady,offDiskVerified,resultHash");
+    w.check(r.version === (retained ? "KRONOS_NATIVE_SIGNER_RESULT_V2" : "KRONOS_NATIVE_SIGNER_RESULT_V1") && r.simulated === true && r.automaticCollectionReady === false && r.offDiskVerified === false, "PUBLIC_PROOF_READINESS"); w.hashed(r, "resultHash");
     s.registry(bundle.registry); w.check(registryPins.includes(bundle.registry.registryHash), "PUBLIC_PROOF_REGISTRY");
     operatorAuthority.assertIndependent(bundle.registry);
     w.check(bundle.registry.signers.every(k => k.keyFingerprint !== identity.keyFingerprint), "PUBLIC_PROOF_KEY_SEPARATION");
@@ -39,6 +43,7 @@ function createPublicVerifier(options) {
     const model = state.replay(bundle.history.map(x => x.entry), {identity, binding, registryPins, operatorAuthority});
     equal(model.registry, bundle.registry);
     const a = r.envelope.attestation, request = r.envelope.request;
+    if (retained) require("./research-qualification-operator-retention-proof").verifyConsumption(r.operatorRetention, retentionConfig, {candidateHash: w.hashValue({request, attestation: a, approval: bundle.approval}), signedAt: r.envelope.signedAt});
     s.request(request, a); equal(a.binding, binding);
     w.check(s.role(a) === expectedDomain, "PUBLIC_PROOF_DOMAIN");
     const record = model.requests.get(request.requestId);
@@ -62,7 +67,7 @@ function createPublicVerifier(options) {
     const signer = bundle.registry.signers.find(k => k.signerId === r.envelope.signerId);
     return Object.freeze({verified: true, domain: expectedDomain, signerId: signer.signerId, issuer: signer.issuer, keyFingerprint: signer.keyFingerprint,
       runId: a.runId, proofHash: bundle.proofHash, resultHash: r.resultHash, sequence: model.sequence, coverage,
-      productionReady: false, automaticCollectionReady: false, offDiskVerified: false});
+      operatorRetentionVerified: retained, productionReady: false, automaticCollectionReady: false, offDiskVerified: false});
   }
   function verifyIndependent(normal, independent, normalOptions, independentOptions) {
     const a = verify(normal, {...normalOptions, expectedDomain: "restore", requiredCoverage: POLICY.fullCoverage});

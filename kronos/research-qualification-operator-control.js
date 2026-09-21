@@ -31,7 +31,8 @@ function authority(provider, session, expected, at) {
   w.check(grant.issuedAt <= at && at < grant.expiresAt && grant.issuedAt <= state.now() && state.now() < grant.expiresAt, "OPERATOR_AUTH_EXPIRED"); return {state, grant};
 }
 function createController(options) {
-  const {store, provider, source, now = Date.now, confirm, hook = () => {}, nonce = () => crypto.randomBytes(32).toString("hex")} = options;
+  const {store, provider, source, retention, now = Date.now, confirm, hook = () => {}, nonce = () => crypto.randomBytes(32).toString("hex")} = options;
+  w.check(retention && typeof retention.current === "function" && typeof retention.retain === "function", "OPERATOR_RETENTION_REQUIRED");
   const config = p.freeze(structuredClone(options.config)), op = config.operators.find(v => v.operatorId === provider.identity().operatorId);
   w.check(op && typeof confirm === "function", "OPERATOR_CONFIG"); contracts.equal(op, provider.identity());
   const operatorAuthority = p.createOperatorAuthority({operators: config.operators, binding: config.binding});
@@ -45,6 +46,7 @@ function createController(options) {
       signerId: ctx?.signerId || null, registryRevision: ctx?.registryRevision || null, timestamp: new Date(now()).toISOString(), result, reason};
   }
   async function snapshot(id, requirePending = false) {
+    await retention.current();
     c.label(id); const challengeNonce = nonce(); c.digest(challengeNonce);
     const v = structuredClone(await source.snapshot(id, challengeNonce));
     c.shape(v, "candidate,registry,research,issuanceState,history,view,signerAvailable");
@@ -82,7 +84,7 @@ function createController(options) {
       w.check(existing.decision.action === action && existing.decision.reviewHash === reviewHash && existing.decision.reason === reason, "OPERATOR_TERMINAL");
       contracts.verifyDecision(existing, config, existing.decision.decisionHash);
       // Exact durable response recovery only: no second signing or dispatch.
-      store.audit(audit((action === "APPROVED" ? "approve" : "deny"), id, review.context, "EXACT_PERSISTED", null)); return existing;
+      store.audit(audit((action === "APPROVED" ? "approve" : "deny"), id, review.context, "EXACT_PERSISTED", null)); return await retention.retain(existing);
     }
     const first = await snapshot(id, true); contracts.equal(first.ctx, review.context);
     w.check(!contracts.summary(first.v.candidate, first.v.registry, first.v.research).evidence.omittedInputs, "OPERATOR_FULL_REVIEW_REQUIRED");
@@ -109,7 +111,8 @@ function createController(options) {
     auth(session); const final = await snapshot(id); auth(session); contracts.equal(final.ctx, fresh.ctx); w.check(final.v.issuanceState === "ABSENT", "OPERATOR_NOT_PENDING");
     s.assess(r, a, final.v.registry, config.binding, now()); if (approval) operatorAuthority.validate(approval, r, a, final.v.registry, now());
     contracts.verifyDecision(record, config, decision.decisionHash);
-    store.complete(record, audit((action === "APPROVED" ? "approve" : "deny"), id, fresh.ctx, action, reason)); hook("after-persist"); return record;
+    hook("before-decision-commit");
+    store.complete(record, audit((action === "APPROVED" ? "approve" : "deny"), id, fresh.ctx, action, reason)); hook("after-persist"); return await retention.retain(record);
   }
   async function execute(command, args, session) {
     let id = null, ctx = null;
@@ -135,7 +138,7 @@ function createController(options) {
       const rows = [];
       for (const requestId of ids.slice(0, 25)) { c.label(requestId); const row = await snapshot(requestId); if (store.state(requestId) === "PENDING" && row.v.issuanceState === "ABSENT") rows.push({...row.ctx, state: "PENDING", issuanceState: "ABSENT"}); }
       const counts = store.counts();
-      const result = command === "pending" ? {requests: rows, limit: 25, hasMore: ids.length > 25} : {journal: "HEALTHY", witness: ids.length > 0 ? "VERIFIED" : "UNOBSERVED", freshViewValid: ids.length > 0, pendingCount: rows.length, countIsLowerBound: ids.length > 25, recoveryRequiredCount: counts.attempts - counts.decisions, operatorAuthAvailable: provider.available(), signerAvailable: (await source.available()) === true, simulated: true, automaticCollectionReady: false, offDiskVerified: false};
+      const result = command === "pending" ? {requests: rows, limit: 25, hasMore: ids.length > 25} : {journal: "HEALTHY", witness: ids.length > 0 ? "VERIFIED" : "UNOBSERVED", freshViewValid: ids.length > 0, pendingCount: rows.length, countIsLowerBound: ids.length > 25, recoveryRequiredCount: counts.attempts - store.retained().length, operatorAuthAvailable: provider.available(), signerAvailable: (await source.available()) === true, simulated: true, automaticCollectionReady: false, offDiskVerified: false};
       store.audit(audit(command, null, null, "READ", null)); return result;
     } catch (error) {
       // Never reflect arbitrary provider errors, tokens, evidence blobs or paths.

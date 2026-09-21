@@ -16,7 +16,7 @@ try {
   const root=require("node:path").resolve(__dirname,"..");
   const files=require("node:child_process").execFileSync("git",["ls-files","--cached","--others","--exclude-standard","*.js"],{cwd:root,encoding:"utf8"}).trim().split(/\r?\n/);
   for(const file of new Set(files)) {
-    if(file.startsWith("scripts/")||/^kronos\/research-qualification-(?:policy|contracts|authority|signer-contracts|signer-verifier|preflight-contracts|preflight-journal|preflight-gate|witness-contracts|witness-state|witness-disk|witness-store|native-proofs|native-signer|integration-contracts|public-proof|operator-(?:contracts|store|control|proof|cli))\.js$/.test(file))continue;
+    if(file.startsWith("scripts/")||/^kronos\/research-qualification-(?:policy|contracts|authority|signer-contracts|signer-verifier|preflight-contracts|preflight-journal|preflight-gate|witness-contracts|witness-state|witness-disk|witness-store|native-proofs|native-signer|integration-contracts|public-proof|operator-(?:contracts|store|control|proof|cli|retention|retention-contracts|retention-witness|retention-proof))\.js$/.test(file))continue;
     assert.doesNotMatch(fs.readFileSync(require("node:path").join(root,file),"utf8"),/require\s*\([^)]*research-qualification-/,file);
   }
   const server=fs.readFileSync(require.resolve("../server"),"utf8");assert.ok(!server.includes("research-qualification-authority"));

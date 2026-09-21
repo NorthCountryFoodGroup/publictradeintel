@@ -20,14 +20,14 @@ try {
     if (file.startsWith("scripts/")) continue;
     const source = fs.readFileSync(path.join(root, file), "utf8");
     if (newModules.includes(file)) assert.doesNotMatch(source, /process\.env|@aws-sdk|\bfetch\s*\(|\.sign\(|createPrivateKey|generateKeyPair|setTimeout|setInterval|node:(?:fs|sqlite|child_process|net|http|https)|require\s*\([^)]*fixtures/);
-    else if (!/^kronos\/research-qualification-operator-(?:contracts|store|control|proof|cli)\.js$/.test(file)) assert.doesNotMatch(source, /require\s*\([^)]*research-qualification-(?:integration-contracts|public-proof)/);
+    else if (!/^kronos\/research-qualification-operator-(?:contracts|store|control|proof|cli|retention|retention-contracts|retention-witness|retention-proof)\.js$/.test(file)) assert.doesNotMatch(source, /require\s*\([^)]*research-qualification-(?:integration-contracts|public-proof)/);
   }
-  const tracked = cp.execFileSync("git", ["ls-files", "kronos"], {cwd: root, encoding: "utf8"}).trim().split(/\r?\n/).filter(x => !newModules.includes(x) && !/^kronos\/research-qualification-operator-(?:contracts|store|control|proof|cli)\.js$/.test(x));
+  const tracked = cp.execFileSync("git", ["ls-files", "kronos"], {cwd: root, encoding: "utf8"}).trim().split(/\r?\n/).filter(x => x !== "kronos/research-qualification-native-signer.js" && !newModules.includes(x) && !/^kronos\/research-qualification-operator-(?:contracts|store|control|proof|cli|retention|retention-contracts|retention-witness|retention-proof)\.js$/.test(x));
   const protectedPaths = ["server.js", "app.js", "render.yaml", "config", "lib", "discovery", "decision", "kronos-service", "package-lock.json", ...tracked];
   assert.equal(cp.execFileSync("git", ["diff", "14f88bfea908cf535bd91bc69ec26a99a75f93d4", "--", ...protectedPaths], {cwd: root, encoding: "utf8"}), "");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"))), old = JSON.parse(cp.execFileSync("git", ["show", "HEAD:package.json"], {cwd: root, encoding: "utf8"}));
   for (const key of ["dependencies", "devDependencies", "engines"]) assert.deepEqual(pkg[key], old[key]);
   assert.equal(require("../kronos/research-backup-adapter").isQualifiedRealProvider(), false);
   require("./smoke-test-prediction-engine-boundary"); guard.assertClean();
-  console.log("Pure public modules, zero import capabilities, no production wiring, all prior runtime contracts unchanged, stable dependencies/Legacy fingerprint and false readiness: PASS");
+  console.log("Pure public modules, zero import capabilities, no production wiring, protected contracts unchanged with explicit offline signer/proof extensions, stable dependencies/Legacy fingerprint and false readiness: PASS");
 } finally { guard.restore(); }

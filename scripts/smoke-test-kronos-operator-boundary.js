@@ -12,7 +12,7 @@ const guard = require("./fixtures/kronos-s3-network-guard").denyExternalNetwork(
     if (name === "node:crypto") return new Proxy(value, {get: (object, key) => ["sign", "createPrivateKey", "generateKeyPair", "generateKeyPairSync", "randomBytes", "randomUUID"].includes(key) ? deny : object[key]});
     return value;
   };
-  const names = ["contracts", "store", "control", "proof", "cli"];
+  const names = ["contracts", "store", "control", "proof", "cli", "retention", "retention-contracts", "retention-witness", "retention-proof"];
   try { names.forEach(name => require("../kronos/research-qualification-operator-" + name)); require("./kronos-operator-cli-offline"); }
   finally { Module._load = original; [global.setTimeout, global.setInterval, global.setImmediate] = timers; }
   assert.equal(effects, 0); for (const id of Object.keys(require.cache)) if (!cached.has(id)) delete require.cache[id];
@@ -22,10 +22,10 @@ const guard = require("./fixtures/kronos-s3-network-guard").denyExternalNetwork(
     if (file.startsWith("scripts/")) continue;
     const source = fs.readFileSync(path.join(root, file), "utf8");
     if (modules.includes(file)) assert.doesNotMatch(source, /process\.env|@aws-sdk|\bfetch\s*\(|createPrivateKey|generateKeyPair|setTimeout|setInterval|node:(?:child_process|net|http|https)|require\s*\([^)]*fixtures/);
-    else assert.doesNotMatch(source, /require\s*\([^)]*research-qualification-operator-/);
+    else if (!["kronos/research-qualification-native-signer.js", "kronos/research-qualification-public-proof.js"].includes(file)) assert.doesNotMatch(source, /require\s*\([^)]*research-qualification-operator-/);
   }
   const protectedFiles = cp.execFileSync("git", ["ls-tree", "-r", "--name-only", "8ddaa386060702c1e47380c1ef257b6154cbd32e", "kronos"], {cwd: root, encoding: "utf8"}).trim().split(/\r?\n/);
-  assert.equal(cp.execFileSync("git", ["diff", "8ddaa386060702c1e47380c1ef257b6154cbd32e", "--", "server.js", "app.js", "render.yaml", "config", "lib", "discovery", "decision", "kronos-service", "package-lock.json", ...protectedFiles], {cwd: root, encoding: "utf8"}), "");
+  assert.equal(cp.execFileSync("git", ["diff", "8ddaa386060702c1e47380c1ef257b6154cbd32e", "--", "server.js", "app.js", "render.yaml", "config", "lib", "discovery", "decision", "kronos-service", "package-lock.json", ...protectedFiles.filter(x => !["kronos/research-qualification-native-signer.js", "kronos/research-qualification-public-proof.js"].includes(x))], {cwd: root, encoding: "utf8"}), "");
   const cli = require("../kronos/research-qualification-operator-cli"), t = require("./fixtures/kronos-operator-evidence"), temp = t.temp(); let x;
   try {
     x = t.setup(temp); const session = await x.session(), output = [];
@@ -44,5 +44,5 @@ const guard = require("./fixtures/kronos-s3-network-guard").denyExternalNetwork(
     assert.equal(refused.status, 1); assert.match(refused.stdout, /OPERATOR_REFUSED/);
   } finally { t.remove(cliRoot); }
   require("./smoke-test-prediction-engine-boundary"); guard.assertClean();
-  console.log("Operator import purity, CLI output exclusion, unchanged prior runtimes/dependencies/production/Legacy and zero network: PASS");
+  console.log("Operator import purity, CLI output exclusion, explicit offline extensions, unchanged dependencies/production/Legacy and zero network: PASS");
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => guard.restore());

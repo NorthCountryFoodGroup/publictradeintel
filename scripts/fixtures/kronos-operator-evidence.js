@@ -5,10 +5,10 @@ const control = require("../../kronos/research-qualification-operator-control"),
 const proof = require("../../kronos/research-qualification-public-proof");
 function setup(root, {mode = "initialize-new", kind = "provider", now, confirm = async v => v.phrase, hook, nonce, mutateSource = x => x, authProvider} = {}) {
   const fixture = n.setup({kind}); let at = n.f.t.f.time;
-  const clock = now || (() => at), x = n.open(root, {fixture, mode, now: clock});
+  const clock = now || (() => at), x = n.open(root, {fixture, mode, now: clock, deferRetention: true});
   const {request, attestation} = fixture.data, candidate = {request, attestation}, research = {modelRevision: null, forecastContractVersion: null, researchContractVersion: null, inputCutoff: null};
   const identity = {...n.f.operator, streamIds: [attestation.binding.streamId]};
-  const config = {binding: attestation.binding, operators: [identity], registryPins: [fixture.registry.registryHash], witnessIdentity: fixture.cfg.identity, vaultId: fixture.cfg.vaultId, storeId: fixture.storeId, operatorStoreId: "fixture-operator-store"};
+  const config = {binding: attestation.binding, operators: [identity], registryPins: [fixture.registry.registryHash], witnessIdentity: fixture.cfg.identity, vaultId: fixture.cfg.vaultId, storeId: fixture.storeId, operatorStoreId: "fixture-operator-store", retentionConfig: x.retentionConfig};
   const metadata = {storeId: config.operatorStoreId, identityHash: w.hashValue(config)};
   const store = storage.openStore(path.join(root, "operator.sqlite"), {mode, metadata});
   let signatures = 0;
@@ -21,7 +21,9 @@ function setup(root, {mode = "initialize-new", kind = "provider", now, confirm =
       issuanceState: x.signer.status(id).state, history: x.adapter.history(), view: x.adapter.view({storeId: config.storeId, challengeNonce}), signerAvailable: true}),
     result: async (id, approval, challengeNonce) => proof.buildProofBundle({result: x.signer.get({...candidate, approval}), approval, registry: fixture.registry, history: x.adapter.history(), view: x.adapter.view({storeId: config.storeId, challengeNonce})})
   };
-  const controller = control.createController({store, provider, config, source, now: clock, confirm, hook, nonce});
+  const retained = require("../../kronos/research-qualification-operator-retention").createClient({config: x.retentionConfig, adapter: x.retained.adapter, store, writerStoreId: "ordinary-store", writerEpoch: 1, now: clock, hook});
+  source.retentionCurrent = () => retained.current(); source.retentionRetain = record => retained.retain(record);
+  const controller = control.createController({store, provider, config, source, retention: retained, now: clock, confirm, hook, nonce});
   return {root, fixture, x, candidate, research, config, metadata, store, provider, source, controller, signatures: () => signatures,
     advance(ms) { at += ms; }, async session() { return provider.authenticate({fixtureUserPresence: true}); },
     async inspect(session) { return controller.execute("inspect", {requestId: request.requestId}, session); },
