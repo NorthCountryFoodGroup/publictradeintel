@@ -165,7 +165,14 @@
     "smoke:kronos-native-authorization": "node scripts/smoke-test-kronos-native-authorization.js",
     "smoke:kronos-native-witness": "node scripts/smoke-test-kronos-native-witness.js",
     "smoke:kronos-native-recovery": "node scripts/smoke-test-kronos-native-recovery.js",
-    "smoke:kronos-native-boundary": "node scripts/smoke-test-kronos-native-boundary.js"
+    "smoke:kronos-native-boundary": "node scripts/smoke-test-kronos-native-boundary.js",
+    "smoke:kronos-integration-flow": "node scripts/smoke-test-kronos-integration-flow.js",
+    "smoke:kronos-integration-transport": "node scripts/smoke-test-kronos-integration-transport.js",
+    "smoke:kronos-integration-recovery": "node scripts/smoke-test-kronos-integration-recovery.js",
+    "smoke:kronos-integration-continuity": "node scripts/smoke-test-kronos-integration-continuity.js",
+    "smoke:kronos-integration-proof": "node scripts/smoke-test-kronos-integration-proof.js",
+    "smoke:kronos-integration-boundary": "node scripts/smoke-test-kronos-integration-boundary.js",
+    "validate:kronos:offline": "node scripts/validate-kronos-offline-integration.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0"
